@@ -46,7 +46,7 @@ export const fmtPercent = (fraction: number | null): string =>
 
 /** At most `max` code points, the last one an ellipsis when cut. */
 export function clipText(s: string, max: number): string {
-  if (!Number.isFinite(max)) return ''
+  if (Number.isNaN(max)) return ''
   const chars = Array.from(s)
   if (chars.length <= max) return s
   if (max <= 0) return ''

@@ -49,5 +49,5 @@ test('units are chosen after rounding, and bad numbers never print as numbers', 
   assert.equal(fmtDuration(Number.POSITIVE_INFINITY), '–')
   assert.equal(fmtAge(Number.NaN), '–')
   assert.equal(clipText('abc', Number.NaN), '')
-  assert.equal(clipText('abc', Number.POSITIVE_INFINITY), '')
+  assert.equal(clipText('abc', Number.POSITIVE_INFINITY), 'abc')
 })
