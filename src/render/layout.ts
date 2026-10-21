@@ -1,0 +1,160 @@
+/** Where each agent sits on the graph canvas, by topology: a tree, a ring, or a hub with spokes. Pure. */
+import type { Topology } from '../core/events.ts'
+import { LEAD, type AgentState, type SwarmState } from '../core/fold.ts'
+import { RASTER_MAX } from './tokens.ts'
+import type { Point } from './types.ts'
+
+export type Edge = { from: string; to: string }
+
+/** Pixels kept clear at the canvas edges: room for a node's glow above it and its label row below it. */
+export const MARGIN = { x: 6, top: 6, bottom: 8 } as const
+
+type Box = { x0: number; x1: number; y0: number; y1: number }
+
+const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+const rank = (a: AgentState): number => (a.id === LEAD ? 0 : a.placeholder ? 2 : 1)
+
+function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key)
+  if (list === undefined) map.set(key, [value])
+  else list.push(value)
+}
+
+export function orderAgents(state: SwarmState): AgentState[] {
+  return Object.values(state.agents).sort((a, b) => rank(a) - rank(b) || a.startedAt - b.startedAt || byId(a.id, b.id))
+}
+
+/**
+ * Each agent's parent within the swarm, or null for a root. The log is untrusted, so parents can loop: every agent on
+ * a loop hangs off the lead instead (or becomes a root when there is no lead). Agents below a loop keep their parent.
+ */
+export function parentsOf(state: SwarmState): Map<string, string | null> {
+  const ids = new Set(Object.keys(state.agents))
+  const root = ids.has(LEAD) ? LEAD : null
+  const direct = (id: string): string | null => {
+    if (id === LEAD) return null
+    const p = state.agents[id]?.parent ?? ''
+    return p !== '' && p !== id && ids.has(p) ? p : root
+  }
+  const looped = new Set<string>()
+  for (const id of ids) {
+    const seen = new Set<string>()
+    let cur = direct(id)
+    while (cur !== null && !seen.has(cur)) {
+      if (cur === id) {
+        looped.add(id)
+        break
+      }
+      seen.add(cur)
+      cur = direct(cur)
+    }
+  }
+  const out = new Map<string, string | null>()
+  for (const id of ids) out.set(id, looped.has(id) ? (id === root ? null : root) : direct(id))
+  return out
+}
+
+/** Steps from each agent up to its root. Bounded, so a loop that slipped through still ends. */
+export function depthsOf(parents: Map<string, string | null>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const id of parents.keys()) {
+    let d = 0
+    let cur = parents.get(id) ?? null
+    const seen = new Set<string>([id])
+    while (cur !== null && !seen.has(cur)) {
+      seen.add(cur)
+      d++
+      cur = parents.get(cur) ?? null
+    }
+    out.set(id, d)
+  }
+  return out
+}
+
+function treeLayout(state: SwarmState, agents: readonly AgentState[], box: Box): Record<string, Point> {
+  const parents = parentsOf(state)
+  const depths = depthsOf(parents)
+  const kids = new Map<string, string[]>()
+  const roots: string[] = []
+  for (const a of agents) {
+    const p = parents.get(a.id) ?? null
+    if (p === null) roots.push(a.id)
+    else push(kids, p, a.id)
+  }
+  const order: string[] = []
+  const seen = new Set<string>()
+  const walk = (id: string): void => {
+    if (seen.has(id)) return
+    seen.add(id)
+    order.push(id)
+    for (const k of kids.get(id) ?? []) walk(k)
+  }
+  for (const r of roots) walk(r)
+  for (const a of agents) walk(a.id)
+  const layers = new Map<number, string[]>()
+  for (const id of order) push(layers, depths.get(id) ?? 0, id)
+  const maxDepth = Math.max(0, ...layers.keys())
+  const out: Record<string, Point> = {}
+  for (const [d, ids] of layers) {
+    ids.forEach((id, i) => {
+      out[id] = {
+        x: box.x0 + ((i + 1) / (ids.length + 1)) * (box.x1 - box.x0),
+        y: maxDepth === 0 ? (box.y0 + box.y1) / 2 : box.y0 + (d / maxDepth) * (box.y1 - box.y0),
+      }
+    })
+  }
+  return out
+}
+
+function ringLayout(agents: readonly AgentState[], box: Box, out: Record<string, Point> = {}): Record<string, Point> {
+  const cx = (box.x0 + box.x1) / 2
+  const cy = (box.y0 + box.y1) / 2
+  const rx = (box.x1 - box.x0) / 2
+  const ry = (box.y1 - box.y0) / 2
+  if (agents.length === 1) out[agents[0]!.id] = { x: cx, y: cy }
+  else {
+    agents.forEach((a, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / agents.length
+      out[a.id] = { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) }
+    })
+  }
+  return out
+}
+
+/**
+ * Node centres in canvas pixels for a canvas `width` x `height` pixels. A pixel is one cell wide and half a cell tall,
+ * so the canvas is held to the Raster limit of 512 columns by 2 x 256 rows.
+ */
+export function layoutNodes(state: SwarmState, topology: Topology, width: number, height: number): Record<string, Point> {
+  const agents = orderAgents(state)
+  if (agents.length === 0) return {}
+  const w = Math.min(RASTER_MAX.columns, width)
+  const h = Math.min(RASTER_MAX.rows * 2, height)
+  const box: Box = { x0: MARGIN.x, x1: Math.max(MARGIN.x, w - MARGIN.x), y0: MARGIN.top, y1: Math.max(MARGIN.top, h - MARGIN.bottom) }
+  if (topology === 'hierarchical') return treeLayout(state, agents, box)
+  if (topology === 'star' && agents.length > 1) {
+    const out: Record<string, Point> = { [agents[0]!.id]: { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 } }
+    return ringLayout(agents.slice(1), box, out)
+  }
+  return ringLayout(agents, box)
+}
+
+/** The faint lines that show the swarm's shape: parent links in a tree, spokes in a star, none in a mesh. */
+export function structuralEdges(state: SwarmState, topology: Topology): Edge[] {
+  const agents = orderAgents(state)
+  if (topology === 'mesh' || agents.length < 2) return []
+  if (topology === 'star') return agents.slice(1).map(a => ({ from: agents[0]!.id, to: a.id }))
+  const parents = parentsOf(state)
+  const edges: Edge[] = []
+  for (const a of agents) {
+    const p = parents.get(a.id) ?? null
+    if (p !== null) edges.push({ from: p, to: a.id })
+  }
+  return edges
+}
+
+/** Changes exactly when the node set, their order or the tree's shape changes: the pane glides nodes when it does. */
+export function nodesKey(state: SwarmState): string {
+  const parents = parentsOf(state)
+  return `${state.swarm.topology}|${orderAgents(state).map(a => `${a.id}<${parents.get(a.id) ?? ''}`).join(',')}`
+}
