@@ -83,10 +83,12 @@ export function makeEvent<K extends EventType>(input: {
   return event as SwarmEvent<K>
 }
 
+const encoder = new TextEncoder()
+
 /** One log line, newline included. Throws RangeError past LIMITS.line bytes. */
 export function serialise(event: SwarmEvent): string {
   const line = `${JSON.stringify(event)}\n`
-  const bytes = Buffer.byteLength(line)
+  const bytes = encoder.encode(line).length
   if (bytes > LIMITS.line) throw new RangeError(`event line is ${bytes} bytes, the limit is ${LIMITS.line}`)
   return line
 }
