@@ -7,7 +7,9 @@ import type { FeedReply } from '../core/feed-reply.ts'
 import { LEAD, fold, type SwarmState } from '../core/fold.ts'
 import type { Pulse } from '../render/types.ts'
 
-export type PaneModel = { swarm: string | null; offset: number; state: SwarmState | null; pulses: Pulse[]; lagMs: number }
+/** Why the last read failed, for the renderer to show; null when the last read was good. */
+export type Degraded = 'too-large' | 'unreadable'
+export type PaneModel = { swarm: string | null; offset: number; state: SwarmState | null; pulses: Pulse[]; lagMs: number; degraded: Degraded | null }
 
 /** Pulses older than this have finished flickering. */
 export const PULSE_KEEP_MS = 2_000
@@ -15,7 +17,7 @@ export const MAX_PULSES = 64
 /** A newest event older than this on arrival is history (a fresh load), not lag. */
 export const MAX_LAG_MS = 1_000
 
-export const emptyModel = (): PaneModel => ({ swarm: null, offset: 0, state: null, pulses: [], lagMs: 0 })
+export const emptyModel = (): PaneModel => ({ swarm: null, offset: 0, state: null, pulses: [], lagMs: 0, degraded: null })
 
 /**
  * The arguments of the next omnis_feed pull. No swarm is named on the first pull, so the server picks the session's own.
@@ -42,12 +44,25 @@ export const prunePulses = (pulses: readonly Pulse[], now: number): Pulse[] =>
 
 export type Applied = { model: PaneModel; changed: boolean; swarmChanged: boolean }
 
-export function applyReply(m: PaneModel, reply: FeedReply, arrivedAt: number): Applied {
+/** A failed read (a reply that would not parse, or one the server said was too large): keep the last good state and flag it. */
+export function markDegraded(m: PaneModel, why: Degraded): Applied {
+  return { model: { ...m, degraded: why }, changed: m.degraded !== why, swarmChanged: false }
+}
+
+/** Applies one reply; a null `reply` is one that failed to parse. A good reply clears any degraded flag. */
+export function applyReply(m: PaneModel, reply: FeedReply | null, arrivedAt: number): Applied {
+  if (reply === null) return markDegraded(m, 'unreadable')
+  if (reply.kind === 'too-large') return markDegraded(m, 'too-large')
+  const out = applyGood(m, reply, arrivedAt)
+  return m.degraded === null ? out : { ...out, model: { ...out.model, degraded: null }, changed: true }
+}
+
+function applyGood(m: PaneModel, reply: Exclude<FeedReply, { kind: 'too-large' }>, arrivedAt: number): Applied {
   if (reply.kind === 'none') return { model: m, changed: false, swarmChanged: false }
   if (reply.kind === 'state') {
     const swarmChanged = reply.swarm !== m.swarm
     return {
-      model: { swarm: reply.swarm, offset: reply.offset, state: reply.state, pulses: swarmChanged ? [] : prunePulses(m.pulses, arrivedAt), lagMs: swarmChanged ? 0 : m.lagMs },
+      model: { swarm: reply.swarm, offset: reply.offset, state: reply.state, pulses: swarmChanged ? [] : prunePulses(m.pulses, arrivedAt), lagMs: swarmChanged ? 0 : m.lagMs, degraded: null },
       changed: true,
       swarmChanged,
     }
@@ -69,7 +84,7 @@ export function applyReply(m: PaneModel, reply: FeedReply, arrivedAt: number): A
   const sample = arrivedAt - newest
   const lagMs = Number.isFinite(sample) && sample >= 0 && sample <= MAX_LAG_MS ? Math.round(m.lagMs * 0.8 + sample * 0.2) : m.lagMs
   return {
-    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs },
+    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs, degraded: null },
     changed: reply.events.length > 0 || reply.bad > 0,
     swarmChanged: false,
   }

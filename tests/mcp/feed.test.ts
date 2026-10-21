@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { appendEvent, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
-import { parseFeedReply, type FeedReply } from '../../src/core/feed-reply.ts'
+import { FEED_REPLY_MAX, parseFeedReply, type FeedReply } from '../../src/core/feed-reply.ts'
 import { loadState } from '../../src/core/snapshot.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createFeedTools } from '../../src/mcp/tools/feed.ts'
@@ -93,8 +93,9 @@ test('more than 500 waiting events answers a fresh state', () => {
   assert.ok(first.kind === 'state')
   for (let i = 0; i < 501; i++) appendEvent(root, started(1 + i / 1000, `a${i}`))
   const r = pull({ since: first.offset, swarm: 'feed' })
-  assert.ok(r.kind === 'state')
-  assert.ok(Object.keys(r.state.agents).length >= 501)
+  // 501 agents cannot fit in one reply even trimmed, so the fresh answer is the too-large notice.
+  assert.ok(r.kind === 'too-large')
+  assert.ok(r.agents >= 501)
 })
 
 test('a replaced, shorter log answers a fresh state', () => {
@@ -147,4 +148,47 @@ test('hinting at several old swarms keeps at most one of them held', () => {
   assert.deepEqual(loads, ['old1', 'old2', 'old3'])
   pull({ swarm: 'old1' })
   assert.deepEqual(loads, ['old1', 'old2', 'old3', 'old1'])
+})
+
+test('a backlog too big for one reply is paged: every event once, in order, until the end', () => {
+  const { root, feed, call, pull } = setup()
+  call('omnis_swarm_init', { name: 'Feed', topology: 'mesh' })
+  const first = pull()
+  assert.ok(first.kind === 'state')
+  // About 400 characters an event, 300 events: far past FEED_REPLY_MAX in one reply.
+  for (let i = 0; i < 300; i++) {
+    appendEvent(root, ev('agent.started', { name: `n${i}`, role: 'coder', description: 'd'.repeat(110), parent: 'lead' }, { swarm: 'feed', agent: `a${i}`, atSec: 1 + i / 100 }))
+  }
+  const seen: string[] = []
+  let offset = first.offset
+  let pages = 0
+  const end = statSync(swarmLogPath(root, 'feed')).size
+  while (offset < end) {
+    const text = feed.handler({ since: offset, swarm: 'feed' }).text
+    assert.ok(text.length <= FEED_REPLY_MAX, `${text.length}`)
+    const r = parseFeedReply(text)
+    assert.ok(r !== null && r.kind === 'events')
+    assert.ok(r.events.length > 0 && r.offset > offset)
+    seen.push(...r.events.map(e => e.agent ?? ''))
+    offset = r.offset
+    pages++
+  }
+  assert.ok(pages > 1)
+  assert.equal(offset, end)
+  assert.deepEqual(seen, Array.from({ length: 300 }, (_, i) => `a${i}`))
+})
+
+test('a fresh state too big for one reply is trimmed under the cap', () => {
+  const { root, call, feed } = setup()
+  call('omnis_swarm_init', { name: 'Feed', topology: 'mesh' })
+  for (let i = 0; i < 30; i++) {
+    appendEvent(root, ev('agent.started', { name: `n${i}`, role: 'coder', description: 'd', parent: 'lead' }, { swarm: 'feed', agent: `a${i}`, atSec: 1 + i }))
+    for (let f = 0; f < 120; f++) {
+      appendEvent(root, ev('agent.tool', { phase: 'start', tool: 'Read', kind: 'read', subject: `src/area${i}/module-number-${f}.ts`, isError: false }, { swarm: 'feed', agent: `a${i}`, atSec: 1 + i + f / 1000 }))
+    }
+  }
+  const text = feed.handler({}).text
+  assert.ok(text.length <= FEED_REPLY_MAX, `${text.length}`)
+  const r = parseFeedReply(text)
+  assert.ok(r !== null && r.kind === 'state' && r.trimmed === true)
 })

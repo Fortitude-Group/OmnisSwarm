@@ -79,3 +79,24 @@ test('pulses come from tool starts and failed tool ends, and old ones are droppe
   const many = Array.from({ length: 100 }, (_, i) => ({ agent: 'x', kind: 'bash' as const, at: FIVE_T0 + i, isError: false }))
   assert.equal(prunePulses(many, FIVE_T0 + 100).length, MAX_PULSES)
 })
+
+test('an unparseable or too-large reply keeps the last good state, flags it, and a good reply clears it', () => {
+  const state = foldAll(FIVE_SWARM, events.slice(0, 10))
+  const good = applyReply(emptyModel(), { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 10, state }, FIVE_T0).model
+  assert.equal(good.degraded, null)
+  const a = applyReply(good, null, FIVE_T0)
+  assert.deepEqual([a.model.degraded, a.model.state === state, a.model.offset, a.changed], ['unreadable', true, 10, true])
+  assert.deepEqual(feedArgs(a.model), { since: 10, swarm: FIVE_SWARM })
+  const b = applyReply(a.model, { v: 1, kind: 'too-large', agents: 900 }, FIVE_T0)
+  assert.deepEqual([b.model.degraded, b.model.state === state], ['too-large', true])
+  const c = applyReply(b.model, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 20, events: events.slice(10, 12), bad: 0 }, FIVE_T0)
+  assert.equal(c.model.degraded, null)
+  assert.equal(c.model.offset, 20)
+  assert.equal(applyReply(a.model, { v: 1, kind: 'none' }, FIVE_T0).model.degraded, null)
+})
+
+test('a too-large reply before any state leaves the model empty but flagged', () => {
+  const r = applyReply(emptyModel(), { v: 1, kind: 'too-large', agents: 500 }, FIVE_T0)
+  assert.deepEqual([r.model.state, r.model.degraded], [null, 'too-large'])
+  assert.deepEqual(feedArgs(r.model), { since: 0 })
+})
