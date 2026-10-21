@@ -127,3 +127,18 @@ test('a chain ten thousand deep lays out without overflowing the stack', () => {
   const events = [leadUse(), ...Array.from({ length: 10000 }, (_, i) => start(`n${i}`, i === 0 ? 'lead' : `n${i - 1}`, i + 1))]
   assert.equal(Object.keys(layoutNodes(state(...events), 'hierarchical', 200, 60)).length, 10001)
 })
+
+test('a 50,000-deep chain resolves parents and depths in well under two seconds', () => {
+  const parents = new Map<string, string | null>([['lead', null]])
+  for (let i = 0; i < 50000; i++) parents.set(`n${i}`, i === 0 ? 'lead' : `n${i - 1}`)
+  const t0 = performance.now()
+  const depths = depthsOf(parents)
+  assert.equal(depths.get('n49999'), 50000)
+  assert.ok(performance.now() - t0 < 2000)
+  const events = [leadUse(), ...Array.from({ length: 50000 }, (_, i) => start(`n${i}`, i === 0 ? 'lead' : `n${i - 1}`, i + 1))]
+  const s = state(...events)
+  const t1 = performance.now()
+  const p = parentsOf(s)
+  assert.equal(p.get('n49999'), 'n49998')
+  assert.ok(performance.now() - t1 < 2000)
+})

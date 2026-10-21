@@ -15,6 +15,7 @@ You find root causes. Follow the systematic-debugging skill.
 
 ## House rules (every OmnisSwarm role)
 
+- NEVER kill processes by name or image (no `taskkill /IM`, `pkill`, `killall`, `Stop-Process -Name`). This machine runs other Claude sessions and servers. Stop only a process you started, by its own PID, and prefer timeouts (e.g. `node --test --test-timeout=60000`) so nothing hangs in the first place.
 - Windows dev machine: commands must work in Git Bash and PowerShell. Node >= 24 runs `.ts` directly.
 - Gate: `npm run check` (typecheck + all tests) must be green before any commit.
 - Commits: author `Fortitude Omnis <dev@fortitude-omnis.group>`, plain developer English, no

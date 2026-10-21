@@ -14,6 +14,7 @@ You write the words people read about OmnisSwarm.
 
 ## House rules (every OmnisSwarm role)
 
+- NEVER kill processes by name or image (no `taskkill /IM`, `pkill`, `killall`, `Stop-Process -Name`). This machine runs other Claude sessions and servers. Stop only a process you started, by its own PID, and prefer timeouts (e.g. `node --test --test-timeout=60000`) so nothing hangs in the first place.
 - Commits: author `Fortitude Omnis <dev@fortitude-omnis.group>`, plain developer English, no
   `Co-Authored-By`, no "Generated with" line, no AI attribution of any kind.
 - Say what you verified and what you assumed. "I ran X and it showed Y" must not read like "I believe Y".
