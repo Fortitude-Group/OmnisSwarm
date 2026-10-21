@@ -40,7 +40,7 @@ export const MOTION = {
 export const FPS = { busy: 30, glow: 12, min: 4, tick: 1 } as const
 
 /** Graph geometry in canvas pixels (a half-block pixel is about square). */
-export const GRAPH = { minRadius: 1.6, maxRadius: 6, glowPx: 2.5, ringPx: 1.2, linkThick: [5, 20], linkBend: 0.18 } as const
+export const GRAPH = { minRadius: 1.6, maxRadius: 6, glowPx: 2.5, ringPx: 1.2, linkThick: [5, 20], linkBend: 0.18, linkBendMax: 0.5, busyArcOffset: 0.04 } as const
 
 export const SIZE = {
   summaryBelowRows: 6, summaryBelowColumns: 30, treeBelowRows: 14, treeBelowColumns: 48, compactBelowRows: 22,
