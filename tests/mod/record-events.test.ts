@@ -179,3 +179,12 @@ test('lone surrogates are stripped and unsafe agent ids refused', () => {
   assert.equal(cleanText('a\uD800b', 10), 'a b')
   assert.equal(agentStarted({}, '__proto__'), null)
 })
+
+test('redact does not backtrack badly on long scheme-like runs', () => {
+  const dots = 'a.'.repeat(2048)
+  const start = Date.now()
+  assert.equal(redact(dots), dots)
+  assert.equal(redact('a'.repeat(4096)), '[redacted]')
+  assert.ok(Date.now() - start < 500)
+  assert.equal(redact('https://admin:hunter2@host/x'), 'https://[redacted]@host/x')
+})

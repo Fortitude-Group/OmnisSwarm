@@ -50,7 +50,7 @@ export function cleanPath(x: unknown, max: number): string {
 
 /** The same rule as memory previews in src/mcp/tools.ts (which a mod can't import), plus URL credentials and key=value pairs. */
 const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
-const URL_CREDS = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi
+const URL_CREDS = /\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@:]+:[^\s/@]+@/gi
 const KEY_VALUE = /(token|key|secret|password|passwd|pwd)=[^\s&"']+/gi
 const DASH_P = /(\s-p)\S+/g
 const REDACT_ROOM = 4096
