@@ -68,3 +68,22 @@ test('parseLine rejects an invalid swarm id and an over-long agent name', () => 
   assert.deepEqual(parseLine(JSON.stringify({ ...ok, agent: 'a'.repeat(65) })), { ok: false, reason: 'shape' })
   assert.equal(parseLine(JSON.stringify({ ...ok, agent: 'a'.repeat(64) })).ok, true)
 })
+
+const withSummary = (summary: string) => makeEvent({ type: 'message.sent', swarm: 's1', src: 'recorder', data: { to: 'b', summary }, now })
+const byteLen = (s: string) => new TextEncoder().encode(s).length
+
+test('serialise accepts a line of exactly the limit and rejects one byte more', () => {
+  const base = byteLen(serialise(withSummary('')))
+  const exact = serialise(withSummary('x'.repeat(LIMITS.line - base)))
+  assert.equal(byteLen(exact), LIMITS.line)
+  assert.throws(() => serialise(withSummary('x'.repeat(LIMITS.line - base + 1))), RangeError)
+})
+
+test('serialise counts a multi-byte character as its UTF-8 byte length', () => {
+  const base = byteLen(serialise(withSummary('')))
+  // 'é' is 2 bytes: half the room in 'é' fills the limit exactly, one more 'é' overshoots by 2
+  const room = LIMITS.line - base
+  const fits = serialise(withSummary('é'.repeat(room / 2) + (room % 2 ? 'x' : '')))
+  assert.equal(byteLen(fits), LIMITS.line)
+  assert.throws(() => serialise(withSummary('é'.repeat(Math.floor(room / 2) + 1))), RangeError)
+})
