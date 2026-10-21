@@ -48,6 +48,13 @@ export function clip(text: string, max: number): string {
   return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`
 }
 
+const SWARM_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
+const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/
+
+/** Swarm ids become file names: lowercase, safe characters, no `..`, no Windows device names, no trailing dot. */
+export const isValidSwarmId = (id: string): boolean =>
+  SWARM_ID.test(id) && !id.includes('..') && !id.endsWith('.') && !RESERVED.test(id)
+
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 /** True for a string that is safe to use as a plain-object key. */
@@ -100,10 +107,10 @@ export function parseLine(line: string): ParseResult {
   if (raw.v > SCHEMA_VERSION) return { ok: false, reason: 'version' }
   const shapeOk =
     typeof raw.ts === 'string' && !Number.isNaN(Date.parse(raw.ts)) &&
-    typeof raw.swarm === 'string' &&
+    typeof raw.swarm === 'string' && isValidSwarmId(raw.swarm) &&
     isOneOf(SOURCES, raw.src) &&
     isOneOf(EVENT_TYPES, raw.type) &&
     isObj(raw.data) &&
-    (raw.agent === undefined || typeof raw.agent === 'string')
+    (raw.agent === undefined || (typeof raw.agent === 'string' && raw.agent.length <= 64))
   return shapeOk ? { ok: true, event: raw as SwarmEvent } : { ok: false, reason: 'shape' }
 }
