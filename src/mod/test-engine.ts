@@ -36,12 +36,13 @@ export type Seen = {
   topBlit: { cells: string; columns: number; rows: number; at: number } | null
   /** Blits that carried exactly the cells the last blit of the same Raster did. */
   repeats: number
-  /** How many of the next blits the engine refuses; and every blit in order, refused or not. */
+  /** How many of the next blits the engine refuses; and every blit in order, refused or not, stamped from `seq`. */
   refuse: number
-  blitLog: Array<{ key: string; cells: string; ok: boolean }>
+  blitLog: Array<{ key: string; cells: string; ok: boolean; at: number }>
   redrawnAt: number
-  /** When (by count, as redrawnAt) omnis_feed last answered with news. */
+  /** When (by count, as redrawnAt) omnis_feed last answered with news, and every such answer. */
   newsAt: number
+  news: number[]
   seq: number
 }
 /** Faults beneath session.start: ui.panes or command.register that never answer. */
@@ -51,7 +52,7 @@ export const never = <T>(): Promise<T> => new Promise<T>(() => {})
 /** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
 export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults = {}): Seen {
   const seen: Seen = { calls: [], opens: 0, blits: 0, invalidates: 0, panes: 0, connects: 0, shown: true, feed: 'ok', connectOk: true,
-    topBlit: null, repeats: 0, refuse: 0, blitLog: [], redrawnAt: 0, newsAt: 0, seq: 0, late: () => Promise.resolve() }
+    topBlit: null, repeats: 0, refuse: 0, blitLog: [], redrawnAt: 0, newsAt: 0, news: [], seq: 0, late: () => Promise.resolve() }
   const lastCells = new Map<string, string>()
   const state = foldAll(FIVE_SWARM, fiveAgentEvents())
   let open = false
@@ -75,10 +76,10 @@ export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: F
   on('ui.blit', (_, e) => {
     if (seen.refuse > 0 && 'cells' in e) {
       seen.refuse--
-      seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: false })
+      seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: false, at: ++seen.seq })
       throw new Error('blit refused')
     }
-    if ('cells' in e) seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: true })
+    if ('cells' in e) seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: true, at: ++seen.seq })
     seen.blits++
     if ('cells' in e) {
       if (lastCells.get(e.key) === String(e.cells)) seen.repeats++
@@ -106,6 +107,7 @@ export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: F
     if (seen.feed === 'garbage') return { value: { content: [{ type: 'text', text: 'Output too large (61.2KB), saved to a file.' }], isError: false } }
     const text = JSON.stringify({ v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 100, state })
     seen.newsAt = ++seen.seq
+    seen.news.push(seen.newsAt)
     return { value: { content: [{ type: 'text', text }], isError: false } }
   })
   on('session.id', () => ({ value: 'test-session' }))
