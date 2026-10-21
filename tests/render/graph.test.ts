@@ -208,3 +208,25 @@ test('an infinite or oversized area is clamped to the grid', { timeout: 10_000 }
     drawGraph(g, area, { state: s, stats, positions, clashes, view: emptyView(), now: FIVE_AT.mid, tEff: FIVE_AT.mid })
   }
 })
+
+test('radiusCap is fast when every node shares one column', { timeout: 10_000 }, () => {
+  const points = Array.from({ length: 10_000 }, (_, i) => ({ x: 50, y: i * 0.01 }))
+  const t0 = performance.now()
+  assert.equal(radiusCap(points, rect(0, 0, 120, 24)), GRAPH.minRadius)
+  assert.ok(performance.now() - t0 < 1000)
+  const roomy = Array.from({ length: 200 }, (_, i) => ({ x: 50, y: i * 40 }))
+  assert.equal(radiusCap(roomy, rect(0, 0, 120, 24)), GRAPH.maxRadius)
+})
+
+test('a negative area origin clips the graph instead of shifting it right', { timeout: 10_000 }, () => {
+  const s = one()
+  const { stats, clashes } = statsOf(s, T1)
+  const at = (areaX: number, nodeX: number) => {
+    const g = new Grid(40, 12, CANVAS)
+    drawGraph(g, rect(areaX, 0, 40, 12), { state: s, stats, positions: { solo: { x: nodeX, y: 12 } }, clashes, view: emptyView(), now: T1, tEff: T1 })
+    return gridText(g).map(r => r.indexOf('solo')).find(i => i >= 0) ?? -1
+  }
+  const home = at(0, 20)
+  assert.ok(home >= 0)
+  assert.equal(at(-5, 25), home)
+})

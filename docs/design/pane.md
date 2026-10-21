@@ -125,7 +125,9 @@ is used for words or numbers and must reach 4.5:1. "Signal" means it marks somet
 | `GRAPH.glowPx` | 2.5 | Halo width beyond the ring, pixels | — |
 | `GRAPH.ringPx` | 1.2 | Context ring width, pixels (drawn only when radius ≥ 2.2) | — |
 | `GRAPH.linkThick` | [5, 20] | At 5 messages a link is drawn as a double arc; at 20 it also gets a soft pixel arc beneath | — |
-| `GRAPH.linkBend` | 0.18 | Each message link bows to the left of its direction by this share of its length | — |
+| `GRAPH.linkBend` | 0.18 | Smallest bend: each message link bows to the left of its direction by this share of its length | — |
+| `GRAPH.linkBendMax` | 0.5 | Largest bend: a link raises its bend up to this so its arc clears any node it passes over | — |
+| `GRAPH.busyArcOffset` | 0.04 | A busy link's second arc bows this much more than the first | — |
 | `SIZE.summaryBelowRows` / `summaryBelowColumns` | 6 / 30 | Below either, the one-line summary | — |
 | `SIZE.treeBelowRows` / `treeBelowColumns` | 14 / 48 | Below either, the indented tree | — |
 | `SIZE.compactBelowRows` | 22 | Below this, the spotlight becomes one row | — |
@@ -309,14 +311,20 @@ spokes, lead to each agent.
               (T)            (?ghost)
 ```
 
+**Node size in a crowd.** A node's radius is capped at about 0.4 times the gap to its nearest neighbour (never
+below `minRadius`, never above `maxRadius` or a seventh of the graph height), so dense layers shrink and roomy ones
+keep full-size nodes. It is also capped by edge room: the node and its ring stay inside the canvas at the top,
+bottom and sides, and the label row sits below the ring rather than over it.
+
 **Links over every layout.**
 - Structural edges (tree: parent to child; star: the spokes; mesh: none) are always straight, faint and dotted,
   and stop one pixel short of each node's edge.
-- A message link is a quadratic arc bowed `linkBend` (0.18) of its length to the left of travel. A→B and B→A
+- A message link is a quadratic arc bowed `linkBend` (0.18) of its length to the left of travel, raised up to
+  `linkBendMax` (0.5) until its peak clears every node between its ends (radius + ring + 1 px). A→B and B→A
   curve opposite ways, so both show. A link never lies on its parent edge, and a same-row link arcs over the
   nodes between.
 - A link brightens from `LINK.idle` to `LINK.active` when a message passes and decays over `linkFadeMs`.
-- At `linkThick[0]` (5) messages it gets a second arc at bend 0.22. At `linkThick[1]` (20) it also gets a soft pixel
+- At `linkThick[0]` (5) messages it gets a second arc `busyArcOffset` (0.04) further out. At `linkThick[1]` (20) it also gets a soft pixel
   arc beneath (pixels blended 45% toward the link colour), so busy links read as thicker.
 - Comets run along the arc with the trail behind.
 - A file clash draws a dashed braille line (dash 3) in `LINK.clash` between the agents involved, for as long as the

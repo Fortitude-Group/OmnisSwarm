@@ -56,6 +56,8 @@ export function radiusCap(points: readonly Point[], area: Rect): number {
   const sorted = [...points].sort((p, q) => p.x - q.x || p.y - q.y)
   let nearest = Number.POSITIVE_INFINITY
   for (let i = 0; i < sorted.length; i++) {
+    // Once the gap is below this the cap sits at its floor, so the exact value no longer matters.
+    if (nearest <= GRAPH.minRadius / 0.4) break
     for (let j = i + 1; j < sorted.length && sorted[j]!.x - sorted[i]!.x < nearest; j++) {
       nearest = Math.min(nearest, Math.hypot(sorted[j]!.x - sorted[i]!.x, sorted[j]!.y - sorted[i]!.y))
     }
@@ -98,9 +100,10 @@ export function lastEditAt(state: SwarmState, path: string): number {
 export const clashActive = (state: SwarmState, clash: Clash, now: number): boolean =>
   flash(lastEditAt(state, clash.path), now, MOTION.clashFlashMs) > 0
 
-function posOf(positions: Readonly<Record<string, Point>>, id: string): Point | null {
+/** The node's centre moved by (-cx, -cy) pixels, for an area whose top left was clipped off. */
+function posOf(positions: Readonly<Record<string, Point>>, id: string, cx: number, cy: number): Point | null {
   const p = Object.hasOwn(positions, id) ? positions[id] : undefined
-  return p !== undefined && Math.abs(p.x) <= FAR && Math.abs(p.y) <= FAR ? p : null
+  return p !== undefined && Math.abs(p.x) <= FAR && Math.abs(p.y) <= FAR ? { x: p.x - cx, y: p.y - cy } : null
 }
 
 /** The segment from a to b with `ra` and `rb` cut off the ends, so lines stop at node edges; null when they overlap. */
@@ -192,19 +195,23 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
 export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const { state, stats, positions, clashes, view, now, tEff } = input
   if (![full.x, full.y, full.w, full.h].every(v => !Number.isNaN(v))) return
-  const x = Math.max(0, Math.floor(full.x))
-  const y = Math.max(0, Math.floor(full.y))
+  // A negative origin clips the area; the positions move left and up by what was cut off.
+  const x = Math.floor(full.x)
+  const y = Math.floor(full.y)
+  const cutX = Math.max(0, -x)
+  const cutY = Math.max(0, -y)
   const area: Rect = {
-    x, y,
-    w: Math.floor(Math.min(full.w, grid.columns - x, RASTER_MAX.columns)),
-    h: Math.floor(Math.min(full.h, grid.rows - y, RASTER_MAX.rows)),
+    x: Math.max(0, x),
+    y: Math.max(0, y),
+    w: Math.floor(Math.min(full.w - cutX, grid.columns - Math.max(0, x), RASTER_MAX.columns)),
+    h: Math.floor(Math.min(full.h - cutY, grid.rows - Math.max(0, y), RASTER_MAX.rows)),
   }
   if (area.w < 1 || area.h < 1) return
   const px = new Pixels(area.w, area.h * 2, CANVAS)
   const dots = new Dots(area.w, area.h)
   const placed: { a: AgentState; p: Point; s: AgentStats }[] = []
   for (const a of orderAgents(state)) {
-    const p = posOf(positions, a.id)
+    const p = posOf(positions, a.id, cutX, cutY * 2)
     const s = Object.hasOwn(stats, a.id) ? stats[a.id]! : null
     if (p !== null && s !== null) placed.push({ a, p, s })
   }
@@ -220,15 +227,13 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     const b = nodes.get(to)
     return a === undefined || b === undefined ? null : trimmed(a.p, b.p, a.r + gap, b.r + gap)
   }
+  const obstacles = [...nodes.values()].map(n => ({ id: n.id, p: n.p, reach: n.r + GRAPH.ringPx + 1 }))
   const bends = new Map<string, number>()
   const bendOf = (from: string, to: string, seg: [Point, Point]): number => {
     const key = `${from} ${to}`
     const known = bends.get(key)
     if (known !== undefined) return known
-    const obstacles = [...nodes.values()]
-      .filter(n => n.id !== from && n.id !== to)
-      .map(n => ({ p: n.p, reach: n.r + GRAPH.ringPx + 1 }))
-    const bend = bendFor(seg[0], seg[1], obstacles)
+    const bend = bendFor(seg[0], seg[1], obstacles.filter(o => o.id !== from && o.id !== to))
     bends.set(key, bend)
     return bend
   }
