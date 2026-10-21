@@ -5,6 +5,15 @@
   "author": { "name": "Fortitude Omnis" },
   "license": "UNLICENSED",
   "types": "./types/index.d.ts",
+  "userConfig": {
+    "panel": {
+      "type": "string",
+      "title": "Swarm pane",
+      "description": "command (the default): the pane opens only with /omnis pane or /omnis-swarm:watch. auto: it also opens when a swarm starts. off: it never opens.",
+      "default": "command",
+      "options": ["command", "auto", "off"]
+    }
+  },
   "mcpServers": {
     "omnis-swarm": {
       "command": "node",

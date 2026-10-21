@@ -59,7 +59,7 @@ test('the server speaks MCP over stdio and writes the swarm log', async () => {
 
     const list = await s.call(2, 'tools/list')
     assert.deepEqual(list.result.tools.map((t: { name: string }) => t.name).sort(), [
-      'omnis_memory_get', 'omnis_memory_list', 'omnis_memory_put', 'omnis_record', 'omnis_swarm_end',
+      'omnis_feed', 'omnis_memory_get', 'omnis_memory_list', 'omnis_memory_put', 'omnis_record', 'omnis_swarm_end',
       'omnis_swarm_init', 'omnis_swarm_status', 'omnis_task_create', 'omnis_task_update',
     ])
 
