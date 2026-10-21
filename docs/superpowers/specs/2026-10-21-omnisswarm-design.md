@@ -108,7 +108,7 @@ All tools are prefixed `omnis_` so they never clash with RuFlo or anything else.
 | `omnis_swarm_end` | `outcome?` | `swarm.ended` |
 | `omnis_swarm_status` | none | Returns folded state as compact text (agents, tasks, totals) |
 | `omnis_memory_put` | `key`, `value` (≤ 4 KB), `agent?` | `memory.put` |
-| `omnis_memory_get` | `key` | Returns value from folded state |
+| `omnis_memory_get` | `key` | Returns the stored value (from the memory value file, section 8) |
 | `omnis_memory_list` | `prefix?` | Returns keys with writer and time |
 | `omnis_task_create` | `title`, `assignee?`, `dependsOn?` | `task.created`, returns task id |
 | `omnis_task_update` | `id`, `state` (`pending` \| `active` \| `done` \| `failed`), `assignee?`, `note?` | `task.updated` |
@@ -122,7 +122,11 @@ Inputs are validated at the boundary: lengths capped, enums checked, keys limite
 **Implicit session swarm.** If agents start with no current swarm, the recorder writes a
 `swarm.started` with `topology: hierarchical`, `name: session-<first 8 of session id>`,
 `implicit: true`. A later `omnis_swarm_init` in the same session renames and retypes that swarm
-instead of starting a second one.
+instead of starting a second one. If the MCP server needs a swarm first (say `omnis_memory_put`
+before any agent has started), it creates the implicit swarm itself as
+`session-<yyyymmdd-hhmmss>`. Whichever writer gets there first sets `current`, and the other uses it.
+Calling `omnis_swarm_init` while an explicit swarm is still running ends that one
+(`outcome: "replaced"`) and starts the new one.
 
 ## 6. Recorder
 
@@ -242,7 +246,8 @@ Per-agent stats and how each is worked out:
 
 Swarm totals: tokens, cost ≈, burn rate ($/min over the last 5 minutes), session context %
 (from Claude Code's `session.measure`, the official figure), busiest link, most expensive agent,
-and task counts by state.
+and task counts by state. Session context % is recorded by the recorder in phase 2. Its event
+type is settled once the mod API spike shows what `session.measure` carries.
 
 Every ≈ figure is labelled ≈ in the pane. `prices.ts` is one table (model, rates per token
 class, context window), so it's easy to update.
