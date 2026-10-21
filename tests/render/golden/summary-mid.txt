@@ -1,0 +1,11 @@
+# summary-mid: hierarchical at +30000 ms in 40x5; step summary, fps 20, spotlight a-cod1
+## top 40x1 pairs 2 sha 693db98fa30f056f
+### glyphs
+ ◆ auth refactor · 6 agents 4▶ · ≈$0.57+
+### colours
+abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+### legend
+a fg #131a26 bg #131a26 x1
+b fg #e6edf3 bg #131a26 x39
+## bottom none
+## chips

@@ -21,7 +21,13 @@ is the rule.
 ## Envelope
 
 Each line is one JSON object, then `\n`, at most 2048 bytes. Within one session the server is the
-only writer to the file: it stamps `v`, `swarm` and `src`.
+only writer to the file: it stamps `v`, `swarm` and `src`. The recorder mod can't write files (a mod
+has no Node), so it hands each event to the server's internal `omnis_record` tool, which checks it
+and appends it with `src: "recorder"`.
+
+The server can't tell whether the recorder mod is installed, so it always offers `omnis_record`. When
+mods are off the internal tools are unguarded. That is accepted: the log is a display record, and the
+same user could edit `.omnis-swarm` directly.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -37,7 +43,7 @@ only writer to the file: it stamps `v`, `swarm` and `src`.
 
 | Type | Writer | `data` |
 |---|---|---|
-| `swarm.started` | mcp, recorder | `name`, `topology` (`hierarchical`\|`mesh`\|`star`), `goal?`, `implicit` (bool). A second one for the same swarm renames it |
+| `swarm.started` | mcp | `name`, `topology` (`hierarchical`\|`mesh`\|`star`), `goal?`, `implicit` (bool), `session?` (the sessionKey of the session that started it: the first 16 hex characters of sha256 of the Claude Code session id, never the raw id). A second one for the same swarm renames it. The first one's `session` says which session owns the swarm, so a restarted server can tell its own swarm from another session's |
 | `swarm.ended` | mcp | `outcome?` |
 | `agent.started` | recorder | `name`, `role`, `description` (≤120), `parent` (agent id or `lead`) |
 | `agent.finished` | recorder | `outcome` (`answer`\|`aborted`\|`failed`), `reason?` (≤80) |
@@ -64,6 +70,9 @@ only writer to the file: it stamps `v`, `swarm` and `src`.
 7. An agent that has finished runs again on a later `agent.started` or `agent.tool` with phase
    `start`. Its outcome clears and its run count goes up. A later `agent.usage` adds its tokens and
    cost but leaves it finished.
+8. A `recorder` event may carry `data.dropped`: how many events the recorder dropped since its last
+   call that reached the server (too many in flight, or the server was restarting). Add it to the gap
+   count. It is not part of the event's own data.
 
 ## What is never in the log
 

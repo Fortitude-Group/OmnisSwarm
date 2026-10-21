@@ -1,0 +1,47 @@
+# tree-mid: hierarchical at +30000 ms in 60x13; step tree, fps 20, spotlight a-cod1
+## top 60x13 pairs 14 sha b236ef798c86f9fd
+### glyphs
+ ◆ auth refactor · 6 agents 4▶ · ≈$0.57+ · ctx 34%          
+ ▶ lead  32k tok · ≈$0.17                                   
+   ▶ architect  93k tok · ≈$0.28                            
+     ▶ coder-1  65k tok · ≈$0.08                            
+     ✓ coder-2  62k tok · ≈$0.05                            
+   ▶ tester  6.1k tok · ≈$0.001                             
+   ✕ reviewer  1.3k tok · –                                 
+   ? ghost  – tok · –                                       
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+### colours
+abbcccccccccccccdddcccccccceeedddcccccccdddfffffffaaaaaaaaaa
+ghhiiiijjjjjjjjjjjjjjjjjjggggggggggggggggggggggggggggggggggg
+gjjhhiiiiiiiiijjjjjjjjjjjjjjjjjjgggggggggggggggggggggggggggg
+gjjjjhhkkkkkkkjjjjjjjjjjjjjjjjjjgggggggggggggggggggggggggggg
+gjjjjllkkkkkkkjjjjjjjjjjjjjjjjjjgggggggggggggggggggggggggggg
+gjjhhmmmmmmjjjjjjjjjjjjjjjjjjjjggggggggggggggggggggggggggggg
+gjjnnnnnnnnnnjjjjjjjjjjjjjjggggggggggggggggggggggggggggggggg
+gjjhhjjjjjjjjjjjjjjjjggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+### legend
+a fg #131a26 bg #131a26 x11
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x28
+d fg #5c6679 bg #131a26 x9
+e fg #7ee787 bg #131a26 x3
+f fg #9aa4b2 bg #131a26 x7
+g fg #e6edf3 bg #0b0f17 x527
+h fg #7ee787 bg #0b0f17 x10
+i fg #4d8dff bg #0b0f17 x13
+j fg #9aa4b2 bg #0b0f17 x138
+k fg #4cd07a bg #0b0f17 x14
+l fg #8b98a9 bg #0b0f17 x2
+m fg #f0e442 bg #0b0f17 x6
+n fg #f85149 bg #0b0f17 x10
+## bottom none
+## chips

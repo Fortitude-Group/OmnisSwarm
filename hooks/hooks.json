@@ -1,0 +1,4 @@
+{
+  "description": "The OmnisSwarm recorder: watches spawns, tool calls, model steps, messages and turn ends and hands each to the plugin's MCP server for the swarm log. Without function hooks only the MCP tools load.",
+  "modules": ["../src/mod/register.ts"]
+}

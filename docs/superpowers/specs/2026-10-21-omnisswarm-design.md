@@ -99,7 +99,7 @@ Units, each with one job and a typed interface:
 | `core` | Event types, append, follow, pure `fold(events) → SwarmState`, price table | nothing |
 | `mcp` | The only writer. `omnis_*` tools; writes swarm, memory and task events; appends the events the recorder sends (`omnis_record`); keeps the folded state and snapshots; answers the pane (`omnis_feed`) | core |
 | `recorder` | Mod handlers; turns Claude Code events (including `turn.step` usage) into log events and sends them to `mcp` | core (Node-free parts), mod API |
-| `render` | Pure `render(state, view, nowMs, size) → Grid`; layout, glow, particles | core |
+| `render` | Pure `render(state, view, nowMs, size) → Frame` (two grids, one per `Raster`, plus the pin chips); layout, glow, particles | core |
 | `pane` | Mod pane: opens, gets swarm state through `mcp` (not by reading the log file), calls `render`, handles pin chips | core (Node-free parts), render, mod API |
 
 Repository layout (`Fortitude-Group/OmnisSwarm`, which is also its own plugin marketplace):
@@ -154,7 +154,8 @@ Inputs are validated at the boundary: lengths capped, enums checked, keys limite
 Every recorder call carries the session id and a `ts` the mod stamped at hook time (`Date.now()`,
 as an ISO string). The server stamps `v`, `swarm` and `src` itself. When an event arrives and there
 is no current swarm, the server first writes a `swarm.started` with `topology: hierarchical`,
-`name: session-<first 8 of session id>`, `implicit: true`, and sets `current`. An `omnis_*` tool
+`name: session-<first 8 of the sessionKey>`, `implicit: true`, and sets `current`. The sessionKey is
+the first 16 hex characters of sha256(session id) (`src/mcp/session.ts`), so the raw id never reaches the log. An `omnis_*` tool
 call that needs a swarm before any recorder event has arrived does the same (the server reads the
 session id from its own first recorder call, or names the swarm `session-<yyyymmdd-hhmmss>` if
 none has come). A later `omnis_swarm_init` in the same session renames and retypes the implicit
@@ -163,8 +164,11 @@ still running ends that one (`outcome: "replaced"`) and starts the new one. The 
 state it can't rebuild from `.omnis-swarm/`: Claude Code restarts a dead server on the next call,
 with a fresh process.
 
-Until phase 2 stamps the session id on the swarm, which swarm a server owns is held in memory only: a
-restarted server owns nothing and adopts `current` as another session's swarm (accepted).
+A session with a known id only ever uses its own swarm, found from the `session` (sessionKey) on the
+log's `swarm.started`. It never adopts `current` when `current` is another session's swarm, and if
+another session's live swarm holds `current` it starts its own implicit swarm and leaves `current`
+alone. Only a session with no known id (no recorder) may adopt `current`. After `/clear` or a resume,
+when a second session id arrives in the same process, the session still never adopts a foreign swarm.
 
 ## 6. Recorder
 
@@ -196,8 +200,10 @@ is skipped), so the recorder's `tool.call` handler ignores the internal tools `o
 recording its own traffic. The model's calls to the public `omnis_*` tools (`omnis_swarm_init`,
 `omnis_memory_put` and the rest) are still recorded as `agent.tool` like any other tool. Every recorder
 event and every pane pull runs every installed mod's `tool.call` and `tool.check` hooks, ours
-included; phase 2 checks whether `$.mcp.call` also raises classic `PreToolUse` command hooks (a
-process spawn per call would be too slow at this rate) and, if it does, says so in the README. A killed server answers in-flight calls with `isError` ("Connection
+included. `$.mcp.call` also raises classic `PreToolUse` command hooks, once per call (verified in
+phase 2, [docs/spikes/2026-10-21-recorder-live.md](../../spikes/2026-10-21-recorder-live.md) item 3),
+so anyone with a catch-all `PreToolUse` hook starts a process per recorded event and per pane pull. Phase 4's README says
+so and gives a matcher that excludes us. A killed server answers in-flight calls with `isError` ("Connection
 closed"), and Claude Code restarts it on the next call. That call's event and any in flight are lost.
 
 **Guard (security).** The internal tools are listed by the server, so the model can find them with
@@ -383,7 +389,13 @@ class, context window), so it's easy to update.
 ## 10. Pane
 
 Opened with `/omnis pane` (alias `/omnis-swarm:watch`). User config `panel`: `command`
-(default), `auto` (open when a swarm starts), `off`.
+(default), `auto` (open when `omnis_swarm_init` is called or on any Agent tool call, fired in the
+background so the tool call never waits), `off`. The pane's `session.start` handler matches only
+`{ isInteractive: true }`, so it does nothing in a headless session.
+
+The pane shows only the session's own swarm: the server answers with the session's swarm (section 5),
+then its own hinted swarm, then `current` only when no session id is known. The look, motion, colours
+and frame budget are set in [docs/design/pane.md](../../design/pane.md), which this section defers to.
 
 Layout, top to bottom:
 
@@ -407,8 +419,8 @@ Layout, top to bottom:
 Size steps, as the pane shrinks: drop the timeline, then reduce the spotlight to one line, then
 replace the graph with an indented tree, and finally show a one-line summary.
 
-Rendering: `render` draws into a cell grid (glyph plus 24-bit foreground and background per
-cell). It uses half-block glyphs for two true-colour pixels per cell, and braille for fine
+Rendering: `render` returns a `Frame`: two cell grids (glyph plus 24-bit foreground and background
+per cell), each painted as its own `Raster`, plus the pin chips. It uses half-block glyphs for two true-colour pixels per cell, and braille for fine
 lines and particles. Fades are done by blending each colour toward the background. The terminal's
 `Raster` paints at most 1024 distinct foreground/background pairs at once (the rest snap to the
 nearest), so glow and fade ramps are quantised to a fixed palette that keeps a frame under that.
@@ -419,18 +431,30 @@ a layout change. Values the drawing reads live in `$.state`, since a hot reload 
 variables. The pane gets swarm state from the MCP server, not by reading the log file: `$.fs.read`
 stops at 4 MiB and can't read from an offset. It pulls with the internal tool
 `omnis_feed({ since })`: `since: 0` answers the folded `SwarmState` plus the offset it reflects;
-`since: N` answers the events appended after offset N (at most 500, with the new offset and a flag
-when more are waiting) or a fresh state when N is too old. Pulls run on a `$.clock.every` timer at
-most 4 times a second, only while the pane is placed and shown (`$.ui.open` answered `isPlaced`
-and no `ui.close` since), and stop when it closes. One pull is in flight at a time (an awaited call
-measured 33-88 ms, spike A1). `omnis_feed` is guarded like `omnis_record` (section 6). The
-frame loop runs only while something is animating, lowers its rate if a frame takes too long, and
-stops when nothing moves.
+`since: N` answers the events appended after offset N (at most 500) with the new offset. Past 500
+events, or when N is too old, it answers a fresh `state` instead, with no "more waiting" flag.
+Claude Code caps MCP tool output near 50,000 characters, so every reply is kept under 40,000 bytes
+(`src/core/feed-reply.ts`, `src/mcp/tools/feed.ts`): event replies are paged under that cap, and a
+state reply is trimmed in a fixed order (oldest feed items, then per-agent detail, then finished
+agents past the 20 most recent, which the pane hides and counts as "+N finished"). Running and
+waiting agents are never left out, so the ceiling is about 60 running agents. Past that the server
+answers `too-large` and the pane says the swarm is too large to draw.
+
+Pulls run on a `$.clock.every` timer at most 4 times a second (every 250 ms), only while the pane is
+placed and shown (`$.ui.open` answered `isPlaced` and no `ui.close` since), and stop when it closes.
+After 8 empty replies they slow to every 1.5 s, and return to 250 ms on news, a resize, a re-render
+or a pin press. While replies are unreadable they back off, doubling up to 5 s. One pull is in flight at a time
+(an awaited call measured 33-88 ms, spike A1). `omnis_feed` is guarded like `omnis_record`
+(section 6). The frame loop doesn't stop when nothing moves: while the pane is shown it drops to
+`FPS.tick` (1 fps) so clock-driven text (ages, live timeline bars) keeps updating, and it stops only
+when the pane is hidden or closed. The rates and the budget (at most 10% of the main thread) are in
+[pane.md](../../design/pane.md) sections 6 and 11.
 
 What is verified about `Raster`: the 512 x 256 bounds (the engine refuses 513 columns and 257
 rows) and the cell encoding. From the docs only: the 1024-pair palette, the blit rates and how it
 looks in a real terminal. Phase 3 checks those in an interactive session first. On a surface that offers `Svg` instead of `Raster` (the desktop app),
-the same grid is converted to a static SVG redrawn on each render.
+the same frame is converted to a static SVG redrawn on each render (the `Svg` path is used only off
+the terminal).
 
 The chips are the only interactive element. They change what the pane shows and nothing else.
 
@@ -452,7 +476,9 @@ The rule: OmnisSwarm never breaks or slows the session. Failures make it show le
 | No usage for an agent yet (no `turn.step` with usage) | That agent's tokens and cost show "–" |
 | Unknown model | Tokens shown; cost and context fill show "–" |
 | Pane too small | Size steps from section 10 |
-| Slow frames | Frame rate drops; animation stops when idle |
+| Slow frames | Frame rate drops to stay within the 10% main-thread budget; when idle it runs at `FPS.tick` (1 fps) while shown, and stops when hidden or closed |
+| Swarm too large for one `omnis_feed` reply (about 60 running agents) | Server answers `too-large`; the pane keeps the last good state and shows "⚠ Swarm too large to draw (n agents)" |
+| `omnis_feed` reply unreadable (fails to parse, or Claude Code saved it to a file) | Pane keeps the last good state, shows "⚠ Waiting for the swarm…", and pulls back off to every 5 s |
 | Large log | Snapshot plus replay of the tail |
 | MCP bad input | Tool error returned; nothing written |
 

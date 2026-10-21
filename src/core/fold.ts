@@ -162,6 +162,8 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
   if (at > state.lastAt) state.lastAt = at
   if (state.swarm.startedAt === null) state.swarm.startedAt = at
   const who = e.agent !== undefined && isSafeKey(e.agent) ? e.agent : LEAD
+  // Events the recorder had to drop since its last call that got through ride on its next event (spec section 6).
+  if (e.src === 'recorder') state.gaps += num((e.data as { dropped?: unknown }).dropped)
 
   switch (e.type) {
     case 'swarm.started': {

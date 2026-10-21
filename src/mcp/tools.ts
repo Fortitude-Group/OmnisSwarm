@@ -35,8 +35,8 @@ function statusText(state: SwarmState, nowMs: number): string {
   return lines.join('\n')
 }
 
-/** Token-shaped runs are blanked before a value preview reaches the log. */
-const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
+/** Token-shaped runs are blanked before a value preview reaches the log. The recorder keeps a copy (record-events.ts); a test keeps them equal. */
+export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
 const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
 
 export const MAX_TASKS = 500
@@ -75,7 +75,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const topology = reqEnum(args, 'topology', TOPOLOGIES)
         const goal = optText(args, 'goal', 200)
         const now = clock()
-        const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false }
+        const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false, ...(session.sessionKey !== null && { session: session.sessionKey }) }
         const existing = session.mySwarm(false) // init never takes over a swarm it didn't start
         let replaced: string | null = null
         if (existing !== null && session.owned) {
