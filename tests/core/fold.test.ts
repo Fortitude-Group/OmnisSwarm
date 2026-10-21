@@ -20,6 +20,21 @@ test('an agent starts and finishes', () => {
   assert.deepEqual(s.feed.map(f => f.text), ['coder started', 'coder finished'])
 })
 
+test('an agent spawned without a name is labelled by its description, not its id', () => {
+  const s = run([ev('agent.started', { name: '', role: 'general-purpose', description: 'architect', parent: LEAD }, { agent: 'aeb86a983571fd5ff', atSec: 1 })])
+  const a = s.agents.aeb86a983571fd5ff!
+  assert.equal(a.name, 'architect')
+  assert.equal(a.description, 'architect')
+  // a description isn't an address: SendMessage can't reach it, so it isn't registered as a name
+  assert.equal(Object.hasOwn(s.byName, 'architect'), false)
+  assert.deepEqual(s.feed.map(f => f.text), ['architect started'])
+})
+
+test('an agent with neither a name nor a description keeps its id as its label', () => {
+  const s = run([ev('agent.started', { name: '', role: 'general-purpose', description: '', parent: LEAD }, { agent: 'a9', atSec: 1 })])
+  assert.equal(s.agents.a9!.name, 'a9')
+})
+
 test('usage adds up tokens, sets the model and prices the call', () => {
   const s = run([
     coder,

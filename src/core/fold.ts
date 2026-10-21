@@ -184,14 +184,18 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const d = e.data
       const a = agentOf(state, who, at)
       revive(a, at)
-      a.name = text(d.name, 64) || a.name
+      const name = text(d.name, 64)
       a.role = text(d.role, 64) || a.role
       a.description = text(d.description, 120)
+      // An agent spawned without a name is labelled by its description (Agent's short task title),
+      // never by its hex id. Only a real name is an address SendMessage can use, so only it goes in byName.
+      if (name !== '') a.name = name
+      else if (a.name === a.id && a.description !== '') a.name = text(d.description, 64)
       a.parent = text(d.parent, 64) || LEAD
       if (a.parent === a.id) a.parent = a.id === LEAD ? '' : LEAD
       a.placeholder = false
       a.lastActivity = at
-      if (isSafeKey(a.name)) state.byName[a.name] = a.id
+      if (name !== '' && isSafeKey(name)) state.byName[name] = a.id
       feed(state, { at, kind: 'agent', agent: a.id, text: `${a.name} started` })
       break
     }
