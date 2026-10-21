@@ -50,7 +50,11 @@ function engine(on: On, opts: Options = {}): Sent[] {
     }
     return { value: { content: [{ type: 'text', text: 'ok' }], isError: false } }
   })
-  on('agent.list', () => ({ value: opts.agents ?? [] }))
+  listed = 0
+  on('agent.list', () => {
+    listed++
+    return { value: opts.agents ?? [] }
+  })
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }))
   on('tool.call', () => ({ result: { stdout: 'ok' } as never }))
   on('turn.complete', () => ({ text: '' }))
@@ -65,23 +69,39 @@ function engine(on: On, opts: Options = {}): Sent[] {
   return sent
 }
 
-/** The recorder starts in the background and sends its end events off the hot path; this lets both finish. */
+/** Yields one microtask at a time until the condition holds; the recorder works in the background, so tests wait for what they expect. */
+async function until(cond: () => boolean, max = 20000): Promise<void> {
+  for (let i = 0; i < max; i++) {
+    if (cond()) return
+    await Promise.resolve()
+  }
+  throw new Error(`until: the condition still did not hold after ${max} microtask yields`)
+}
+
+/** A fixed wait, for assertions that nothing (more) was sent. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 2000; i++) await Promise.resolve()
 }
 
+/** Counts agent.list answers: the last await of the recorder's start, so recording is on once it is up. */
+let listed = 0
+
+/** Starts the session and waits for the recorder to be up. */
 async function start($: Engine) {
+  const result = await $.session.start({ cwd: '/project', surface: null, isInteractive: false })
+  await until(() => listed > 0)
+  return result
+}
+
+/** For a session where the recorder never comes up. */
+async function startQuiet($: Engine) {
   const result = await $.session.start({ cwd: '/project', surface: null, isInteractive: false })
   await settle()
   return result
 }
 
 type ToolCall = Parameters<Engine['tool']['call']>[0]
-async function call($: Engine, input: ToolCall) {
-  const result = await $.tool.call(input)
-  await settle()
-  return result
-}
+const call = ($: Engine, input: ToolCall) => $.tool.call(input)
 
 async function spawnWorker($: Engine): Promise<void> {
   await $.agent.spawn({
@@ -107,6 +127,7 @@ test('a lead tool call is recorded at start and end, stamped with the session an
   const sent = engine(on)
   await start($)
   await call($, { tool: 'Bash', command: 'npm test' })
+  await until(() => sent.length === 2)
   expect(sent).toEqual([
     { sessionId: SID, ts: expect.any(String), type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false } },
     { sessionId: SID, ts: expect.any(String), type: 'agent.tool', agent: 'lead', data: { phase: 'end', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false } },
@@ -121,6 +142,8 @@ test('a spawned agent is started once, and only agents seen spawning are recorde
   await spawnWorker($)
   await call($, fromAgent({ tool: 'Read', file_path: '/project/README.md' }, 'a1'))
   await call($, fromAgent({ tool: 'Read', file_path: '/project/other.md' }, 'fork-unknown'))
+  await until(() => sent.length === 3)
+  await settle()
   expect(sent.filter(s => s.type === 'agent.started')).toEqual([
     { sessionId: SID, ts: expect.any(String), type: 'agent.started', agent: 'a1', data: { name: 'probe-worker', role: 'general-purpose', description: 'Find the docs', parent: 'lead' } },
   ])
@@ -167,6 +190,8 @@ test('a protocol SendMessage is recorded from the tool call, without its free te
   await start($)
   await call($, { tool: 'SendMessage', to: 'probe-worker', message: { type: 'shutdown_response', request_id: 'r1', approve: false, reason: 'still busy' } })
   await call($, { tool: 'SendMessage', to: 'probe-worker', message: 'plain text', summary: 'hi' })
+  await until(() => sent.length === 5)
+  await settle()
   expect(sent.filter(s => s.type === 'message.sent').map(s => s.data)).toEqual([{ to: 'probe-worker', summary: '[shutdown_response] approve: no' }])
   expect(JSON.stringify(sent)).not.toContain('still busy')
 })
@@ -186,6 +211,7 @@ test("the recorder's own internal tool calls are not recorded", async ($, on) =>
   await start($)
   await call($, { tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record', sessionId: SID })
   await call($, { tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed', since: 0 })
+  await settle()
   expect(sent).toEqual([])
 })
 
@@ -195,6 +221,7 @@ test('results pass through unchanged when the server fails, and the loss rides o
   const first = await call($, { tool: 'Bash', command: 'ls' })
   const second = await call($, { tool: 'Bash', command: 'pwd' })
   await call($, { tool: 'Bash', command: 'whoami' })
+  await until(() => sent.length >= 6)
   expect(first.result).toEqual({ stdout: 'ok' })
   expect(second.result).toEqual({ stdout: 'ok' })
   // A call's end waits for its start to settle, so the first loss rides on that end, which then fails too;
@@ -212,14 +239,14 @@ test('a server that rejects outright changes nothing for the session', async ($,
 
 test('with no server connection or no session id nothing is sent and the session is untouched', async ($, on) => {
   const sent = engine(on, { connected: false })
-  expect((await start($)).cwd).toBe('/project')
+  expect((await startQuiet($)).cwd).toBe('/project')
   await call($, { tool: 'Bash', command: 'ls' })
   expect(sent).toEqual([])
 })
 
 test('a failing session id lookup leaves session.start unchanged and recording off', async ($, on) => {
   const sent = engine(on, { noSessionId: true })
-  expect((await start($)).cwd).toBe('/project')
+  expect((await startQuiet($)).cwd).toBe('/project')
   await call($, { tool: 'Bash', command: 'ls' })
   expect(sent).toEqual([])
 })
@@ -228,10 +255,12 @@ test('a second session.start sends nothing new, and agents running before it are
   const sent = engine(on, { agents: [{ id: 'a7', description: 'Earlier task', type: 'Explore', status: 'running', name: 'scout' }] })
   await start($)
   await start($)
+  await until(() => sent.length === 1)
   expect(sent.filter(s => s.type === 'agent.started').map(s => [s.agent, s.data])).toEqual([
     ['a7', { name: 'scout', role: 'Explore', description: 'Earlier task', parent: 'lead' }],
   ])
   await call($, fromAgent({ tool: 'Grep', pattern: 'TODO' }, 'a7'))
+  await until(() => sent.length === 3)
   expect(sent.filter(s => s.type === 'agent.tool').map(s => s.agent)).toEqual(['a7', 'a7'])
 })
 
@@ -274,9 +303,11 @@ test('a tool end is sent only after its start call has settled', async ($, on) =
   await start($)
   const result = await call($, { tool: 'Bash', command: 'ls' })
   expect(result.result).toEqual({ stdout: 'ok' })
+  await until(() => sent.length === 1)
+  await settle()
   expect(sent.map(s => (s.data as { phase?: string }).phase)).toEqual(['start'])
   release()
-  await settle()
+  await until(() => sent.length === 2)
   expect(sent.map(s => (s.data as { phase?: string }).phase)).toEqual(['start', 'end'])
 })
 
@@ -287,13 +318,13 @@ test('with 64 calls in flight the next are dropped, and the count rides on the f
   await start($)
   const measure = () => $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
   for (let i = 0; i < 100; i++) await measure()
+  await until(() => sent.length === 64)
   await settle()
   expect(sent.length).toBe(64)
   release()
   await settle()
   await measure()
-  await settle()
-  expect(sent.length).toBe(65)
+  await until(() => sent.length === 65)
   expect(sent[64]!.dropped).toBe(36)
   expect(sent.slice(0, 64).some(s => s.dropped !== undefined)).toBe(false)
 })
@@ -305,9 +336,11 @@ test('a burst of drops costs one state save in flight and one more, not one each
   engine(on, { gate: new Promise(() => {}), stateGate, writes })
   await start($)
   for (let i = 0; i < 100; i++) await $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
+  await until(() => writes.some(w => w.key === 'dropped'))
   await settle()
   expect(writes.filter(w => w.key === 'dropped').length).toBe(1)
   release()
+  await until(() => writes.filter(w => w.key === 'dropped').length === 2)
   await settle()
   const dropped = writes.filter(w => w.key === 'dropped')
   expect(dropped.length).toBe(2)
@@ -321,7 +354,22 @@ test('after a reload the seen agents and the drop count come back from state, on
   })
   await start($)
   await start($)
+  await settle()
   expect(sent.filter(s => s.type === 'agent.started')).toEqual([])
   await call($, fromAgent({ tool: 'Grep', pattern: 'TODO' }, 'a7'))
+  await until(() => sent.length === 2)
   expect(sent.map(s => [s.agent, s.dropped])).toEqual([['a7', 3], ['a7', undefined]])
+})
+
+test('two session.starts in quick succession carry the stored drop count exactly once', async ($, on) => {
+  const sent = engine(on, { stored: { dropped: 3 } })
+  await Promise.all([
+    $.session.start({ cwd: '/project', surface: null, isInteractive: false }),
+    $.session.start({ cwd: '/project', surface: null, isInteractive: false }),
+  ])
+  await until(() => listed > 1)
+  await settle()
+  await call($, { tool: 'Bash', command: 'ls' })
+  await until(() => sent.length === 2)
+  expect(sent.map(s => s.dropped)).toEqual([3, undefined])
 })

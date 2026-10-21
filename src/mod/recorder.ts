@@ -22,8 +22,8 @@ const rec = {
   server: null as string | null,
   seen: new Set<string>(),
   outbox: new Outbox(),
-  /** True once the seen set and drop count were read back from $.state; a later session.start must not read them again. */
-  restored: false,
+  /** The one read-back of the seen set and drop count from $.state, set before its first await so a second session.start shares it. */
+  restoring: null as Promise<void> | null,
   /** One drop-count save in flight at a time; drops that land meanwhile cost one more save, not one each. */
   saving: false,
   dirty: false,
@@ -58,7 +58,7 @@ function remember($: EngineInterface, id: string): void {
  * Fire and forget: never throws, and the hooks never await it. Arguments are plain data and the time is the hook's own.
  * The promise settles once the call has (or at once when nothing was sent), so a later event can be chained behind it.
  */
-function send($: EngineInterface, body: RecordBody | null): Promise<void> {
+function send($: EngineInterface, body: RecordBody | null, ts = new Date(Date.now()).toISOString()): Promise<void> {
   if (body === null) return Promise.resolve()
   const { sessionId, server } = rec
   if (sessionId === null || server === null) return Promise.resolve()
@@ -67,7 +67,7 @@ function send($: EngineInterface, body: RecordBody | null): Promise<void> {
     saveDropped($)
     return Promise.resolve()
   }
-  const args = { sessionId, ts: new Date(Date.now()).toISOString(), ...body, ...(carried > 0 && { dropped: carried }) }
+  const args = { sessionId, ts, ...body, ...(carried > 0 && { dropped: carried }) }
   if (carried > 0) saveDropped($)
   const failed = (): void => {
     rec.outbox.settle(false, carried)
@@ -91,15 +91,23 @@ function safely($: EngineInterface, work: () => void): void {
   }
 }
 
+async function restore($: EngineInterface): Promise<void> {
+  const stored = await read($, droppedAtom)
+  for (const id of await read($, seenAtom)) rec.seen.add(id)
+  rec.outbox.dropped += stored
+}
+
 async function start($: EngineInterface): Promise<void> {
+  // Restored before the session id and server are set, so no send can run (and fail) ahead of the stored count.
+  rec.restoring ??= restore($)
+  try {
+    await rec.restoring
+  } catch (error) {
+    rec.restoring = null
+    throw error
+  }
   rec.sessionId = await $.session.id()
   rec.server = await connectServer($)
-  if (!rec.restored) {
-    const stored = await read($, droppedAtom)
-    for (const id of await read($, seenAtom)) rec.seen.add(id)
-    rec.outbox.dropped += stored
-    rec.restored = true
-  }
   // Agents started before a reload (or before the plugin loaded) still get their agent.started, once.
   for (const agent of await $.agent.list()) {
     if (rec.seen.has(agent.id)) continue
@@ -144,13 +152,21 @@ export function registerRecorder(on: On): void {
     const result = await next(e)
     const who: string | null = agent
     if (who !== null) {
+      // Built now, so the wait below holds only these small bodies and the time the tool finished, not its input or result.
+      let end: RecordBody | null = null
+      let message: RecordBody | null = null
+      const ts = new Date(Date.now()).toISOString()
+      safely($, () => {
+        const failed = result.isError === true || result.deny !== undefined
+        end = toolEvent('end', tool, args, who, failed)
+        // Plain-text SendMessage is recorded from session.send; protocol payloads raise none, so they come from here.
+        if (tool === 'SendMessage' && !failed) message = protocolMessage(args, who)
+      })
       // The end goes out once the start's call has settled, so it can't overtake it. Not awaited: the result returns now.
       void started.then(() =>
         safely($, () => {
-          const failed = result.isError === true || result.deny !== undefined
-          void send($, toolEvent('end', tool, args, who, failed))
-          // Plain-text SendMessage is recorded from session.send; protocol payloads raise none, so they come from here.
-          if (tool === 'SendMessage' && !failed) void send($, protocolMessage(args, who))
+          void send($, end, ts)
+          void send($, message, ts)
         }),
       )
     }
