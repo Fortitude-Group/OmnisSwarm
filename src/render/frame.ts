@@ -74,14 +74,31 @@ const BUDGET_FACTOR = 10
 export const budgetFps = (renderMs: number): number =>
   Number.isFinite(renderMs) && renderMs > 0 ? 1000 / (BUDGET_FACTOR * renderMs) : Number.POSITIVE_INFINITY
 
+/** The longest frame interval: one freak frame (a long GC pause, a suspended laptop) must not freeze the clock text. */
+export const MAX_INTERVAL_MS = 10_000
+
 /**
  * The next frame interval in ms: the target rate's, but at least 10 x the last frame's render time, so render never
- * takes more than 100 ms of a second. A frame under the cap falls straight back to the target rate. 0 means stop.
+ * takes more than 100 ms of a second, and never over MAX_INTERVAL_MS. A frame under the cap falls straight back to
+ * the target rate. 0 means stop.
  */
 export function frameInterval(fps: number, renderMs: number): number {
   if (!(fps > 0)) return 0
   const spent = Number.isFinite(renderMs) && renderMs > 0 ? renderMs : 0
-  return Math.max(Math.round(1000 / fps), Math.ceil(BUDGET_FACTOR * spent))
+  return Math.min(MAX_INTERVAL_MS, Math.max(Math.round(1000 / fps), Math.ceil(BUDGET_FACTOR * spent)))
+}
+
+/** How much each new render time moves the average the motion cap is set from. */
+const RENDER_EWMA = 0.3
+
+/**
+ * The render time the motion cap follows: a moving average, so one slow frame does not drop a motion and the mode
+ * does not flip frame to frame near a threshold. The frame interval still follows the last frame alone.
+ */
+export function smoothRenderMs(averageMs: number, sampleMs: number): number {
+  const sample = Number.isFinite(sampleMs) && sampleMs > 0 ? sampleMs : 0
+  const average = Number.isFinite(averageMs) && averageMs > 0 ? averageMs : 0
+  return average + RENDER_EWMA * (sample - average)
 }
 
 /**

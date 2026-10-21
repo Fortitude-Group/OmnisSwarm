@@ -8,11 +8,11 @@ import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, On, PluginOptions, RenderElement, Timer } from 'claude-code'
 import type { SwarmState } from '../core/fold.ts'
 import { hex } from '../render/color.ts'
-import { budgetFps, frameInterval, render } from '../render/frame.ts'
+import { budgetFps, frameInterval, render, smoothRenderMs } from '../render/frame.ts'
 import { sameCells, type Grid } from '../render/grid.ts'
 import { chooseSpotlight } from '../render/spotlight.ts'
 import { CELL_W, SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
-import { GLYPH } from '../render/tokens.ts'
+import { FPS, GLYPH } from '../render/tokens.ts'
 import type { Frame, Size, Spot, Tween, View } from '../render/types.ts'
 import { emptyModel, prunePulses } from './pane-model.ts'
 import { PANE_ID, resume, startPulling, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
@@ -32,9 +32,9 @@ type BlitArgs = Parameters<EngineInterface['ui']['blit']>[0]
  * What the timers and blits need from the engine. The engine refuses a module that keeps `$` itself, so session.start
  * binds this from its `$` (as RuFlo's pane does) and the module keeps the closures.
  */
-type Host = PullHost & { blit: (args: BlitArgs) => void }
+type Host = PullHost & { blit: (args: BlitArgs) => Promise<void> }
 
-/** Binds a Host from `$`, each member spelled `$.noun.event(...)`. A refused redraw or blit is not a crashed timer. */
+/** Binds a Host from `$`, each member spelled `$.noun.event(...)`. A refused redraw is not a crashed timer; a refused blit rejects, for blitFrame to see. */
 function hostOf($: EngineInterface): Host {
   return {
     every: (ms, fn) => $.clock.every(ms, fn),
@@ -47,7 +47,11 @@ function hostOf($: EngineInterface): Host {
       }
     },
     blit: args => {
-      void $.ui.blit(args).catch(() => undefined)
+      try {
+        return $.ui.blit(args).then(() => undefined)
+      } catch (err) {
+        return Promise.reject(err)
+      }
     },
     panes: () => $.ui.panes(),
     connect: () => connectServer($),
@@ -59,8 +63,13 @@ type Runtime = PullState & {
   panel: Panel
   host: Host | null
   closedByPerson: boolean
-  /** The frame loop, its period, and how long the last frame took to draw and hand over on any path (it sets the budget cap). */
-  frameTimer: Timer | null; frameMs: number; renderMs: number
+  /**
+   * The frame loop and its period; how long the last frame took to draw and hand over on any path (it spaces the next
+   * frame), and the moving average of that (it sets the motion cap).
+   */
+  frameTimer: Timer | null; frameMs: number; renderMs: number; renderAvgMs: number
+  /** Off the terminal: when the pane last asked for a redraw, and the redraw held back by the budget, if one is. */
+  drawnAt: number; redrawWait: Timer | null
   spot: Spot | null
   tween: Tween | null
   pinned: string | null
@@ -72,14 +81,16 @@ type Runtime = PullState & {
    * one with the same cells would change nothing, so none is sent either.
    */
   onScreen: { top: Grid | null; bottom: Grid | null }
+  /** Per Raster: the last blit sent, and whether the engine refused it, so the next frame sends its cells again. */
+  blitId: { top: number; bottom: number }; refused: { top: boolean; bottom: boolean }
 }
 
 const panelOf = (x: unknown): Panel => (x === 'auto' || x === 'off' ? x : 'command')
 const fresh = (panel: Panel): Runtime => ({
   panel, host: null, open: false, shown: false, closedByPerson: false, server: null, model: emptyModel(), pulling: false, pullSeq: 0, stalledMs: 0, stallMarked: false,
   pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0,
-  frameTimer: null, frameMs: 0, renderMs: 0, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
-  onScreen: { top: null, bottom: null },
+  frameTimer: null, frameMs: 0, renderMs: 0, renderAvgMs: 0, drawnAt: 0, redrawWait: null, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
+  onScreen: { top: null, bottom: null }, blitId: { top: 0, bottom: 0 }, refused: { top: false, bottom: false },
 })
 
 /** Module state. A hot reload starts it over and the pane pulls a fresh state within one PULL_MS; the pin is in $.state. */
@@ -105,19 +116,62 @@ function frameAt(now: number): Frame | null {
   const pinned = pinOf(state)
   rt.spot = chooseSpotlight(rt.spot, pinned, state, rt.model.pulses, now)
   const { degraded, degradedAgents, hiddenFinished } = rt.model
-  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished }, budgetFps(rt.renderMs))
+  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished }, budgetFps(rt.renderAvgMs))
   if (rt.last !== null && frame.nodesKey !== rt.last.nodesKey) rt.tween = { from: rt.last.positions, at: now }
   return frame
 }
 
+/** A frame's time to draw and hand over: it spaces the next frame, and moves the average the motion cap follows. */
+function spent(ms: number): void {
+  rt.renderMs = ms
+  rt.renderAvgMs = smoothRenderMs(rt.renderAvgMs, ms)
+}
+
+/** Sends each grid whose cells differ from what its Raster shows, or whose last blit the engine refused. */
 function blitFrame(host: Host, frame: Frame): void {
   for (const key of ['top', 'bottom'] as const) {
     const grid = frame[key]
     const shown = rt.onScreen[key]
-    if (grid === null || shown === null || sizeKey(shown) !== sizeKey(grid) || sameCells(shown, grid)) continue
-    host.blit({ requestId: PANE_ID, key, cells: grid.encode(), columns: grid.columns, rows: grid.rows })
+    if (grid === null || shown === null || sizeKey(shown) !== sizeKey(grid)) continue
+    if (!rt.refused[key] && sameCells(shown, grid)) continue
+    const id = ++rt.blitId[key]
     rt.onScreen[key] = grid
+    rt.refused[key] = false
+    const runtime = rt
+    host.blit({ requestId: PANE_ID, key, cells: grid.encode(), columns: grid.columns, rows: grid.rows }).catch(() => {
+      // Refused: the screen may still show older cells, so the next frame sends its own even if they match these.
+      if (runtime.blitId[key] === id) runtime.refused[key] = true
+    })
   }
+}
+
+/** What each Raster shows after a mount (nothing when there is none), with no blit refused. */
+function mounted(top: Grid | null, bottom: Grid | null): void {
+  rt.onScreen = { top, bottom }
+  rt.refused = { top: false, bottom: false }
+}
+
+/**
+ * Asks for a redraw. Off the terminal each one renders the whole Svg, so they are held to the budget: no sooner than
+ * frameInterval(FPS.tick, renderMs) after the last, with one held back until then so the latest news still lands.
+ */
+function redraw(host: Host): void {
+  if (rt.surface === null || rt.surface === 'terminal') {
+    host.invalidate()
+    return
+  }
+  if (rt.redrawWait !== null) return
+  const wait = frameInterval(FPS.tick, rt.renderMs) - (Date.now() - rt.drawnAt)
+  if (wait <= 0) {
+    rt.drawnAt = Date.now()
+    host.invalidate()
+    return
+  }
+  rt.redrawWait = host.after(wait, () => {
+    rt.redrawWait = null
+    rt.drawnAt = Date.now()
+    host.invalidate()
+  })
 }
 
 function stopFrames(): void {
@@ -153,12 +207,17 @@ function tick(host: Host): void {
   }
   blitFrame(host, frame)
   rt.last = frame
-  rt.renderMs = Date.now() - started
+  spent(Date.now() - started)
   animate(host, frame.fps)
 }
 
 /** After news: blit when the element tree still fits, otherwise ask for a redraw. */
 function show(host: Host, now: number): void {
+  if (rt.surface !== null && rt.surface !== 'terminal') {
+    // Off the terminal the news is drawn by the next ui.render, whenever the budget lets it come.
+    redraw(host)
+    return
+  }
   const started = Date.now()
   const frame = frameAt(now)
   if (frame === null || rt.last === null || rt.surface !== 'terminal' || frame.treeKey !== rt.last.treeKey) {
@@ -167,7 +226,7 @@ function show(host: Host, now: number): void {
   }
   blitFrame(host, frame)
   rt.last = frame
-  rt.renderMs = Date.now() - started
+  spent(Date.now() - started)
   animate(host, frame.fps)
 }
 
@@ -177,6 +236,8 @@ function stopAll(): void {
   rt.pullMs = 0
   rt.connectWait?.cancel()
   rt.connectWait = null
+  rt.redrawWait?.cancel()
+  rt.redrawWait = null
   stopFrames()
 }
 
@@ -186,7 +247,7 @@ function closed(byPerson: boolean): void {
   rt.closedByPerson = rt.closedByPerson || byPerson
   stopAll()
   rt.last = null
-  rt.onScreen = { top: null, bottom: null }
+  mounted(null, null)
 }
 
 /** What the pulls (pane-pull.ts) see of the pane. */
@@ -317,10 +378,10 @@ export function registerPane(on: On, options: PluginOptions): void {
     if (e.surface === 'terminal') {
       const { Box, Text, Button, Raster } = $.ui.resolve(e)
       if (frame === null) {
-        rt.onScreen = { top: null, bottom: null }
+        mounted(null, null)
         return Text({ dimColor: true, children: waitingText() })
       }
-      rt.onScreen = { top: frame.top, bottom: frame.bottom }
+      mounted(frame.top, frame.bottom)
       const tree = Box({
         flexDirection: 'column',
         children: [
@@ -329,22 +390,26 @@ export function registerPane(on: On, options: PluginOptions): void {
           ...(frame.bottom === null ? [] : [Raster(frame.bottom.toRaster('bottom'))]),
         ],
       })
-      rt.renderMs = Date.now() - started
+      spent(Date.now() - started)
       if (rt.host !== null) animate(rt.host, frame.fps)
       return tree
     }
     const { Box, Text, Button, Svg } = $.ui.resolve(e)
-    rt.onScreen = { top: null, bottom: null }
+    mounted(null, null)
     stopFrames()
+    rt.drawnAt = started
     if (frame === null) return Text({ dimColor: true, children: waitingText() })
     const picture = (grid: Grid, key: string): RenderElement => {
       const source = svgSource(grid, frame.alt, typeof Svg === 'function')
       return source === null ? Text({ children: frame.alt }) : Box({ key: `svg-${key}`, children: [Svg({ source, alt: frame.alt, width: grid.columns * CELL_W })] })
     }
-    return Box({
+    const tree = Box({
       flexDirection: 'column',
       children: [picture(frame.top, 'top'), ...chipRow($, { Box, Text, Button }, frame, rt.size.columns), ...(frame.bottom === null ? [] : [picture(frame.bottom, 'bottom')])],
     })
+    // The Svg's frame and source count against the budget too: they space the redraws that news asks for.
+    spent(Date.now() - started)
+    return tree
   })
 
   on('ui.close', async ($, e, next) => {

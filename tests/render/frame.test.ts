@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fold, foldAll } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.ts'
 import { contrast, hex, luminance } from '../../src/render/color.ts'
-import { budgetFps, chipColor, frameInterval, render, targetFps } from '../../src/render/frame.ts'
+import { MAX_INTERVAL_MS, budgetFps, chipColor, frameInterval, render, smoothRenderMs, targetFps } from '../../src/render/frame.ts'
 import { FULL_MOTION, motionFor } from '../../src/render/fx.ts'
 import { pulsesFrom } from '../../src/mod/pane-model.ts'
 import { gridText, pairCount, safeGlyph, type Grid } from '../../src/render/grid.ts'
@@ -114,6 +114,27 @@ test('pane.md section 11: each interval is at least 10x the last render, so rend
     }
   }
   assert.equal(frameInterval(20, Number.NaN), 50)
+})
+
+test('one freak frame never stretches the interval past 10 s', () => {
+  assert.equal(MAX_INTERVAL_MS, 10_000)
+  assert.equal(frameInterval(FPS.tick, 999), 9990)
+  assert.equal(frameInterval(FPS.tick, 5_000), 10_000)
+  assert.equal(frameInterval(FPS.busy, Number.MAX_VALUE), 10_000)
+})
+
+test('the motion cap follows an average of render times: one slow frame alone drops no motion', () => {
+  // Steady at 8 ms (cap 12.5 fps, every motion on), then one 14 ms frame: on its own it would cap at 7.1 fps.
+  let avg = 0
+  for (let i = 0; i < 40; i++) avg = smoothRenderMs(avg, 8)
+  assert.ok(Math.abs(avg - 8) < 0.01)
+  assert.equal(motionFor(budgetFps(14)).fadeIn, false)
+  avg = smoothRenderMs(avg, 14)
+  assert.equal(motionFor(budgetFps(avg)).fadeIn, true)
+  // Frames that stay slow do bring the cap down within a few frames.
+  for (let i = 0; i < 6; i++) avg = smoothRenderMs(avg, 14)
+  assert.equal(motionFor(budgetFps(avg)).fadeIn, false)
+  assert.equal(smoothRenderMs(Number.NaN, Number.NaN), 0)
 })
 
 test('the budget cap is 1000 / (10 x renderMs) frames a second', () => {

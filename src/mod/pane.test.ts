@@ -33,7 +33,12 @@ type Seen = {
   topBlit: { cells: string; columns: number; rows: number; at: number } | null
   /** Blits that carried exactly the cells the last blit of the same Raster did. */
   repeats: number
+  /** How many of the next blits the engine refuses; and every blit in order, refused or not. */
+  refuse: number
+  blitLog: Array<{ key: string; cells: string; ok: boolean }>
   redrawnAt: number
+  /** When (by count, as redrawnAt) omnis_feed last answered with news. */
+  newsAt: number
   seq: number
 }
 /** Faults beneath session.start: ui.panes or command.register that never answer. */
@@ -43,7 +48,7 @@ const never = <T>(): Promise<T> => new Promise<T>(() => {})
 /** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
 function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults = {}): Seen {
   const seen: Seen = { calls: [], opens: 0, blits: 0, invalidates: 0, panes: 0, connects: 0, shown: true, feed: 'ok', connectOk: true,
-    topBlit: null, repeats: 0, redrawnAt: 0, seq: 0, late: () => Promise.resolve() }
+    topBlit: null, repeats: 0, refuse: 0, blitLog: [], redrawnAt: 0, newsAt: 0, seq: 0, late: () => Promise.resolve() }
   const lastCells = new Map<string, string>()
   const state = foldAll(FIVE_SWARM, fiveAgentEvents())
   let open = false
@@ -65,6 +70,12 @@ function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults =
     return { value: open ? [{ id: 'omnis-swarm', title: 'Swarm', isShown: seen.shown, isFocused: false, isPlaced: true }] : [] }
   })
   on('ui.blit', (_, e) => {
+    if (seen.refuse > 0 && 'cells' in e) {
+      seen.refuse--
+      seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: false })
+      throw new Error('blit refused')
+    }
+    if ('cells' in e) seen.blitLog.push({ key: e.key, cells: String(e.cells), ok: true })
     seen.blits++
     if ('cells' in e) {
       if (lastCells.get(e.key) === String(e.cells)) seen.repeats++
@@ -91,6 +102,7 @@ function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults =
     // Past the MCP output cap the engine hands back a notice in place of the reply.
     if (seen.feed === 'garbage') return { value: { content: [{ type: 'text', text: 'Output too large (61.2KB), saved to a file.' }], isError: false } }
     const text = JSON.stringify({ v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 100, state })
+    seen.newsAt = ++seen.seq
     return { value: { content: [{ type: 'text', text }], isError: false } }
   })
   on('session.id', () => ({ value: 'test-session' }))
@@ -292,9 +304,12 @@ async function opened($: Parameters<TestBody>[0], on: On, small = false) {
 }
 
 /**
- * The pane draws each frame at the real time while the test's clock is mocked, and blits only cells that changed, so
- * a blit comes once enough real time has passed for the picture to move. The render budget spaces frames by their real
- * cost, so how many land in a mocked second depends on the machine: move the clock on until one has.
+ * Why tests wait for a blit rather than count on one a second: the pane reads Date.now(), which the kit does not mock,
+ * so it draws each frame at the real time while timers run on the test's mocked clock. It blits only cells that
+ * changed, and frames a few real milliseconds apart are the same picture, so a blit comes only once enough real time
+ * has passed for the picture to move. And the render budget spaces frames by their real cost (a cold first frame takes
+ * tens of real ms, so the next comes hundreds of mocked ms later). How many blits land in a mocked second therefore
+ * depends on the machine. Move the clock on until one has, up to 100 mocked seconds.
  */
 async function untilBlit(seen: Seen, clock: MockClock): Promise<void> {
   for (let i = 0; i < 400 && seen.blits === 0; i++) await clock.advance(250)
@@ -328,6 +343,49 @@ test('a Raster whose cells have not changed is not blitted again', async ($, on)
   await clock.advance(3000)
   expect(seen.blits).toBeGreaterThan(0)
   expect(seen.repeats).toBe(0)
+  await ui.unmount()
+})
+
+test('a refused blit is sent again by the next frame, even when its cells have not changed', async ($, on) => {
+  const { seen, clock, ui } = await opened($, on)
+  await untilBlit(seen, clock)
+  seen.refuse = 1
+  for (let i = 0; i < 400 && seen.blitLog.filter(b => !b.ok).length === 0; i++) await clock.advance(250)
+  const refused = seen.blitLog.find(b => !b.ok)
+  expect(refused).toBeDefined()
+  const at = seen.blitLog.indexOf(refused!)
+  // The next blit of that Raster carries the refused cells again: the frame after a refusal is usually the same picture.
+  const sameRaster = () => seen.blitLog.slice(at + 1).filter(b => b.key === refused!.key)
+  for (let i = 0; i < 400 && sameRaster().length === 0; i++) await clock.advance(50)
+  expect(sameRaster()[0]?.cells).toBe(refused!.cells)
+  expect(sameRaster()[0]?.ok).toBe(true)
+  await ui.unmount()
+})
+
+test('off the terminal, news redraws the Svg no faster than the budget allows, and the latest news is drawn', async ($, on) => {
+  const seen = engine(on)
+  const clock = mock.clock(on, { now: FIVE_AT.mid })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // Every pull answers a whole state, which counts as news: about 4 a second.
+  const before = seen.invalidates
+  const pulls = feedCalls(seen).length
+  await clock.advance(3000)
+  expect(feedCalls(seen).length - pulls).toBeGreaterThanOrEqual(8)
+  // At most one redraw a second (the tick rate, or slower when the Svg is slow), plus one held back to the end.
+  expect(seen.invalidates - before).toBeGreaterThanOrEqual(1)
+  expect(seen.invalidates - before).toBeLessThanOrEqual(4)
+  // The news stops (the next pull never answers). The redraw held back for the last news still comes, after it.
+  // (The kit does not draw the mount again on a redraw, so this checks the order of the asks, not the picture.)
+  seen.feed = 'late'
+  seen.late = never
+  const lastNews = seen.newsAt
+  // The Svg is dear to draw (often over 100 ms real in the engine), so the held redraw can be a few seconds off.
+  await clock.advance(8000)
+  expect(seen.newsAt).toBe(lastNews)
+  expect(seen.redrawnAt).toBeGreaterThan(lastNews)
   await ui.unmount()
 })
 
