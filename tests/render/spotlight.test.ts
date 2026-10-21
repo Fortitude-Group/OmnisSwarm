@@ -4,7 +4,7 @@ import { foldAll } from '../../src/core/fold.ts'
 import { agentStats } from '../../src/core/stats.ts'
 import { Grid, gridText } from '../../src/render/grid.ts'
 import { busiest, chooseSpotlight, drawSpotlight, sparkline } from '../../src/render/spotlight.ts'
-import { CANVAS, SPOTLIGHT_HOLD_MS } from '../../src/render/tokens.ts'
+import { CANVAS, MODEL, STATUS, TEXT, SPOTLIGHT_HOLD_MS } from '../../src/render/tokens.ts'
 import { rect, type Pulse } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 
@@ -77,4 +77,61 @@ test('a stuck agent says so, and the compact card is one line', () => {
   const c = new Grid(90, 1, CANVAS)
   drawSpotlight(c, rect(0, 0, 90, 1), agentStats(s, 'a-cod1', mid)!, s.agents['a-cod1']!, mid, true)
   assert.match(gridText(c)[0]!, /coder-1 ▶ running · 25s · .* tok · ≈\$.* · ctx /)
+})
+
+test('the 10 s pulse window includes a pulse exactly 10 s old and drops one 1 ms older', () => {
+  const s = state()
+  const burst = (age: number): Pulse[] => Array.from({ length: 100 }, () => ({ agent: 'a-test', kind: 'bash', at: mid - age, isError: false }))
+  assert.equal(busiest(s, burst(10_000), mid), 'a-test')
+  assert.equal(busiest(s, burst(10_001), mid), 'a-cod1')
+})
+
+const colAt = (rows: string[], y: number, needle: string, offset = 0): number => {
+  const i = rows[y]!.indexOf(needle)
+  assert.ok(i >= 0, `${needle} not on row ${y}`)
+  return i + offset
+}
+
+test('the card colours the model name and dims zero counts', () => {
+  const s = state()
+  const stats = agentStats(s, 'a-cod1', mid)!
+  const g = new Grid(110, 6, CANVAS)
+  drawSpotlight(g, rect(0, 0, 110, 6), stats, s.agents['a-cod1']!, mid, false)
+  const rows = gridText(g)
+  assert.equal(g.fg(colAt(rows, 0, 'claude-sonnet-5-5'), 0), MODEL.sonnet)
+  assert.equal(g.fg(colAt(rows, 0, 'coder-1'), 0), TEXT.primary)
+  assert.equal(g.fg(colAt(rows, 4, 'r 0', 2), 4), TEXT.dim)
+  assert.equal(g.fg(colAt(rows, 4, 'e 2', 2), 4), TEXT.primary)
+  assert.equal(g.fg(colAt(rows, 4, 'errors 0', 7), 4), TEXT.dim)
+  const h = new Grid(110, 6, CANVAS)
+  drawSpotlight(h, rect(0, 0, 110, 6), { ...stats, errors: 3 }, s.agents['a-cod1']!, mid, false)
+  assert.equal(h.fg(colAt(gridText(h), 4, 'errors 3', 7), 4), STATUS.failed)
+})
+
+test('an unknown model shows a dim dash for cost, a known one shows it in primary', () => {
+  const s = state()
+  const stats = agentStats(s, 'a-cod1', mid)!
+  const g = new Grid(110, 6, CANVAS)
+  drawSpotlight(g, rect(0, 0, 110, 6), stats, s.agents['a-cod1']!, mid, false)
+  assert.equal(g.fg(colAt(gridText(g), 1, '≈$'), 1), TEXT.primary)
+  const h = new Grid(110, 6, CANVAS)
+  drawSpotlight(h, rect(0, 0, 110, 6), { ...stats, model: null }, s.agents['a-cod1']!, mid, false)
+  const rows = gridText(h)
+  assert.match(rows[1]!, /–\s*$/)
+  assert.equal(h.fg(rows[1]!.trimEnd().length - 1, 1), TEXT.dim)
+})
+
+test('on a narrow card the right-hand text never overwrites the left', () => {
+  const s = state()
+  const stats = agentStats(s, 'a-cod1', mid)!
+  const g = new Grid(44, 6, CANVAS)
+  drawSpotlight(g, rect(0, 0, 44, 6), stats, s.agents['a-cod1']!, mid, false)
+  const rows = gridText(g)
+  assert.match(rows[0]!, /▶ running · 25s $/)
+  assert.match(rows[0]!, /^ ● coder-1/)
+  assert.match(rows[0]!, / {2}▶ running/)
+  assert.match(rows[1]!, / {2}≈\$[\d.]+ $/)
+  const t = new Grid(60, 6, CANVAS)
+  drawSpotlight(t, rect(0, 0, 60, 6), stats, s.agents['a-cod1']!, mid, false)
+  assert.match(gridText(t)[5]!, /^ files 2 {2}\S.* msgs ↓2/)
 })

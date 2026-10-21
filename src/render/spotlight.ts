@@ -74,11 +74,13 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   const noUsage = s.model === null
   const tok = (n: number): string => (noUsage ? '–' : fmtTokens(n))
   const usd = noUsage ? '–' : fmtUsd(s.costUsd)
+  const usdColor = noUsage ? TEXT.dim : TEXT.primary
+  const width = (parts: readonly Part[]): number => parts.reduce((n, [text]) => n + [...text].length, 0)
 
   if (compact) {
     writeParts(grid, x, area.y, [
       [`${GLYPH.dot} `, color], [clipText(s.name, 24), TEXT.primary], [' ', TEXT.dim], ...status, SEP,
-      [`${tok(s.tokens.total)} tok`, TEXT.dim], SEP, [usd, TEXT.primary], [' · ctx ', TEXT.faint], fillPart,
+      [`${tok(s.tokens.total)} tok`, TEXT.dim], SEP, [usd, usdColor], [' · ctx ', TEXT.faint], fillPart,
     ], maxX, bg)
     return
   }
@@ -86,19 +88,21 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   const row = (i: number) => area.y + i
   const rows = area.h
   // 0: who
+  const leftMax0 = Math.max(x, maxX - width(status) - 2)
   writeParts(grid, x, row(0), [
     [`${GLYPH.dot} `, color], [clipText(s.name, 32), TEXT.primary], SEP, [clipText(s.role, 24), TEXT.dim], SEP, [s.model ?? 'model –', s.model === null ? TEXT.dim : color],
-  ], maxX, bg)
+  ], leftMax0, bg)
   writeRight(grid, row(0), status, x, maxX, bg)
   // 1: tokens and cost
   if (rows > 1) {
     const t = s.tokens
+    const leftMax1 = Math.max(x, maxX - width([[usd, usdColor]]) - 2)
     writeParts(grid, x, row(1), [
       ['tokens ', TEXT.dim], [`in ${tok(t.input)}`, TEXT.primary], ['  ', TEXT.dim], [`out ${tok(t.output)}`, TEXT.primary],
       ['  cache ', TEXT.dim], [`r ${tok(t.cacheRead)} w ${tok(t.cacheWrite5m + t.cacheWrite1h)}`, TEXT.primary],
       ['  = ', TEXT.dim], [tok(t.total), TEXT.primary],
-    ], maxX, bg)
-    writeRight(grid, row(1), [[usd, TEXT.primary]], x, maxX, bg)
+    ], leftMax1, bg)
+    writeRight(grid, row(1), [[usd, usdColor]], x, maxX, bg)
   }
   // 2: context bar and cache hit rate
   if (rows > 2) {
@@ -130,11 +134,12 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   }
   // 5: files, messages, clashes
   if (rows > 5) {
-    const files: Part[] = [['files ', TEXT.dim], [String(s.files.length), TEXT.primary]]
-    if (s.files.length > 0) files.push(['  ', TEXT.dim], [clipText(s.files.slice(-2).join(', '), 48), TEXT.dim])
     const right: Part[] = [[`msgs ↓${s.messagesIn} ↑${s.messagesOut}`, TEXT.dim]]
     if (s.clashes.length > 0) right.push(['  ', TEXT.dim], [`${GLYPH.clash} clash ${clipText(s.clashes[0]!, 32)}`, STATUS.failed])
     const start = writeRight(grid, row(5), right, x, maxX, bg)
-    writeParts(grid, x, row(5), files, Math.max(x, start - 1), bg)
+    const limit = Math.max(x, start - 1)
+    const cx = writeParts(grid, x, row(5), [['files ', TEXT.dim], [String(s.files.length), TEXT.primary]], limit, bg)
+    const room = limit - (cx + 2)
+    if (s.files.length > 0 && room > 0) writeParts(grid, cx, row(5), [['  ', TEXT.dim], [clipText(s.files.slice(-2).join(', '), room), TEXT.dim]], limit, bg)
   }
 }
