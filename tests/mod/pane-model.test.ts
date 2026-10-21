@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { FeedReply } from '../../src/core/feed-reply.ts'
 import { emptyState, foldAll } from '../../src/core/fold.ts'
-import { COALESCE_MS, MAX_PULSES, applyReply, emptyModel, feedArgs, prunePulses, pulsesFrom } from '../../src/mod/pane-model.ts'
+import { COALESCE_MS, MAX_PULSES, applyReply, markPulses, emptyModel, feedArgs, prunePulses, pulsesFrom } from '../../src/mod/pane-model.ts'
 import { ev } from '../helpers.ts'
 import { FIVE_SWARM, FIVE_T0, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 
@@ -153,4 +153,24 @@ test('a steady tool cadence flickers on a stable schedule once per 600 ms or mor
       assert.ok(gap >= COALESCE_MS && gap < COALESCE_MS + cadence, `cadence ${cadence}: gap ${gap}`)
     }
   }
+})
+
+test('coalescing treats any agent id alike, including __proto__ and constructor', () => {
+  for (const agent of ['__proto__', 'constructor', 'toString']) {
+    const p = (at: number) => ({ agent, kind: 'bash' as const, at, isError: false })
+    const { pulses, lastFlicker } = markPulses([p(1000), p(1300), p(1700)], Object.create(null))
+    assert.deepEqual(pulses.map(x => x.coalesced === true), [false, true, false], agent)
+    assert.equal(Object.hasOwn(lastFlicker, agent), true)
+    // And from an ordinary object carried in as the previous record.
+    assert.equal(markPulses([p(5000)], {}).pulses[0]!.coalesced, undefined)
+  }
+})
+
+test('the last-flicker entry of a long-gone agent is dropped, a recent one is kept', () => {
+  const p = (agent: string, at: number) => ({ agent, kind: 'bash' as const, at, isError: false })
+  const first = markPulses([p('old', 1000), p('recent', 9700)], {})
+  assert.deepEqual(Object.keys(first.lastFlicker), ['recent'])
+  const next = markPulses([p('busy', 10_000)], first.lastFlicker)
+  assert.deepEqual(Object.keys(next.lastFlicker).sort(), ['busy', 'recent'])
+  assert.deepEqual(Object.keys(markPulses([], next.lastFlicker).lastFlicker).sort(), ['busy', 'recent'])
 })

@@ -48,10 +48,11 @@ export function pulsesFrom(events: readonly SwarmEvent[]): Pulse[] {
  * draw time, keeps the choice stable as old pulses are pruned.
  */
 export function markPulses(fresh: readonly Pulse[], last: Readonly<Record<string, number>>): { pulses: Pulse[]; lastFlicker: Record<string, number> } {
-  const lastFlicker = { ...last }
+  // No prototype, so an agent id like '__proto__' or 'constructor' is an ordinary key.
+  const lastFlicker: Record<string, number> = Object.assign(Object.create(null) as Record<string, number>, last)
   const pulses: Pulse[] = []
   for (const p of [...fresh].filter(p => Number.isFinite(p.at)).sort((a, b) => a.at - b.at)) {
-    const prev = lastFlicker[p.agent]
+    const prev = Object.hasOwn(lastFlicker, p.agent) ? lastFlicker[p.agent] : undefined
     if (!p.isError && prev !== undefined && p.at - prev < COALESCE_MS) {
       pulses.push({ ...p, coalesced: true })
       continue
@@ -59,6 +60,9 @@ export function markPulses(fresh: readonly Pulse[], last: Readonly<Record<string
     lastFlicker[p.agent] = p.at
     pulses.push(p)
   }
+  // An entry older than the newest start by COALESCE_MS or more cannot change any later decision.
+  const newest = pulses.length > 0 ? pulses[pulses.length - 1]!.at : Number.NEGATIVE_INFINITY
+  for (const id of Object.keys(lastFlicker)) if (lastFlicker[id]! < newest - COALESCE_MS) delete lastFlicker[id]
   return { pulses, lastFlicker }
 }
 
