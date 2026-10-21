@@ -45,18 +45,22 @@ const usage = (x: unknown): boolean =>
 
 const agent = (x: unknown): boolean =>
   exact(x, [
-    'id', 'name', 'role', 'description', 'parent', 'placeholder', 'startedAt', 'finishedAt', 'outcome', 'reason', 'model',
+    'id', 'name', 'role', 'description', 'parent', 'placeholder', 'startedAt', 'finishedAt', 'runs', 'activeMs', 'outcome', 'reason', 'model',
     'tokens', 'costUsd', 'costKnown', 'calls', 'lastPrompt', 'samples', 'tools', 'openTools', 'errors', 'errorsInRow',
     'files', 'messagesIn', 'messagesOut', 'lastActivity',
   ]) &&
   str(x.id, 130) && str(x.name, 64) && str(x.role, 64) && str(x.description, 120) && str(x.parent, 64) &&
-  typeof x.placeholder === 'boolean' && num(x.startedAt) && nnum(x.finishedAt) &&
+  typeof x.placeholder === 'boolean' && num(x.startedAt) && nnum(x.finishedAt) && num(x.runs) && x.runs >= 1 && num(x.activeMs) &&
   (x.outcome === null || isOneOf(AGENT_OUTCOMES, x.outcome)) && nstr(x.reason, 80) && nstr(x.model, 80) &&
   usage(x.tokens) && num(x.costUsd) && typeof x.costKnown === 'boolean' && num(x.calls) && num(x.lastPrompt) &&
   list(x.samples, MAX_SAMPLES, s => exact(s, ['at', 'output', 'gapMs']) && Object.values(s).every(num)) &&
   exact(x.tools, TOOL_KINDS) && Object.values(x.tools).every(num) &&
   num(x.openTools) && num(x.errors) && num(x.errorsInRow) &&
   list(x.files, MAX_FILES, f => str(f, 80)) && num(x.messagesIn) && num(x.messagesOut) && num(x.lastActivity)
+
+const session = (x: unknown): x is Rec =>
+  exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&
+  (x.contextPercent === null || (x.contextPercent as number) <= 100)
 
 const link = (x: unknown): boolean =>
   exact(x, ['from', 'to', 'count', 'lastAt', 'recent']) && str(x.from, 130) && str(x.to, 130) &&
@@ -83,8 +87,9 @@ const info = (x: unknown, id: string): boolean =>
   typeof x.implicit === 'boolean' && nnum(x.startedAt) && nnum(x.endedAt) && nstr(x.outcome, 200)
 
 export function isSwarmState(x: unknown, id: string): x is SwarmState {
-  return exact(x, ['swarm', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps']) &&
+  return exact(x, ['swarm', 'session', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps']) &&
     info(x.swarm, id) &&
+    session(x.session) &&
     record(x.agents, agent) &&
     record(x.byName, v => str(v, 130)) &&
     record(x.links, link) &&

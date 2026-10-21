@@ -28,12 +28,14 @@ export type EventData = {
   'memory.put': { key: string; bytes: number; preview: string }
   'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[] }
   'task.updated': { id: string; state: TaskState; assignee?: string; note?: string }
+  'session.measure': { contextTokens?: number; contextWindow: number; contextPercent?: number; costUsd?: number }
 }
 export type EventType = keyof EventData
 
 export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
+  'session.measure',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {

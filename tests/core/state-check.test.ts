@@ -49,3 +49,13 @@ test('control and format characters are rejected, and so are over-long strings',
   const key = clone(); key.memory['k\u001b'] = key.memory['k/1']; delete key.memory['k/1']
   for (const bad of [esc, bidi, long, key]) assert.ok(!isSwarmState(bad, 's1'))
 })
+
+test('the session and run fields are required and checked', () => {
+  const old = clone(); delete old.session
+  const noRuns = clone(); delete noRuns.agents.a1.runs
+  const zeroRuns = clone(); zeroRuns.agents.a1.runs = 0
+  const badPercent = clone(); badPercent.session.contextPercent = 101
+  const badCost = clone(); badCost.session.costUsd = 'x'
+  const extra = clone(); extra.session.more = 1
+  for (const bad of [old, noRuns, zeroRuns, badPercent, badCost, extra]) assert.ok(!isSwarmState(bad, 's1'))
+})
