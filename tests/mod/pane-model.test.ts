@@ -50,10 +50,16 @@ test('events for another swarm reset the model so the next pull asks for everyth
 test('an events reply that does not continue from the held offset is not folded and asks for everything again', () => {
   const start = applyReply(emptyModel(), { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 100, state: foldAll(FIVE_SWARM, events.slice(0, 17)) }, FIVE_T0).model
   const back = applyReply(start, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 50, events: events.slice(17, 27), bad: 0 }, FIVE_T0)
-  assert.deepEqual(feedArgs(back.model), { since: 0 })
+  assert.deepEqual(feedArgs(back.model), { since: 0, swarm: FIVE_SWARM })
+  assert.notEqual(back.model.state, null)
+  assert.equal(back.changed, false)
   assert.equal(back.swarmChanged, false)
   const stuck = applyReply(start, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 100, events: events.slice(17, 27), bad: 0 }, FIVE_T0)
-  assert.deepEqual(feedArgs(stuck.model), { since: 0 })
+  assert.deepEqual(feedArgs(stuck.model), { since: 0, swarm: FIVE_SWARM })
+  assert.notEqual(stuck.model.state, null)
+  const bad = applyReply(start, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 100, events: [], bad: 2 }, FIVE_T0)
+  assert.deepEqual(feedArgs(bad.model), { since: 0, swarm: FIVE_SWARM })
+  assert.notEqual(bad.model.state, null)
   assert.equal(start.state !== null && Object.hasOwn(start.state.agents, 'a-test'), false)
 })
 

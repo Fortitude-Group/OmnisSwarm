@@ -54,9 +54,9 @@ export function applyReply(m: PaneModel, reply: FeedReply, arrivedAt: number): A
   }
   if (reply.swarm !== m.swarm || m.state === null) return { model: emptyModel(), changed: false, swarmChanged: m.swarm !== null }
   // Events must continue from what is held: the offset moves forward, and never with events but no progress.
-  // Anything else cannot be trusted to line up, so forget the state and pull a fresh one.
+  // Anything else cannot be trusted to line up: keep the last good frame and ask from 0 for a fresh state.
   if (reply.offset < m.offset || (reply.offset === m.offset && (reply.events.length > 0 || reply.bad > 0))) {
-    return { model: emptyModel(), changed: false, swarmChanged: false }
+    return { model: { ...m, offset: 0 }, changed: false, swarmChanged: false }
   }
   const state = m.state
   let newest = Number.NEGATIVE_INFINITY
