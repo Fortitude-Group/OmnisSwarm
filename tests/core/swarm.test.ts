@@ -134,3 +134,14 @@ test('a name whose numbered id hit the cap still finds a free gap', () => {
   writeFileSync(swarmLogPath(root, 'auth-10001'), '')
   assert.equal(uniqueSwarmId(root, 'auth'), 'auth-2')
 })
+
+test('one poisoned number does not slow later claims', () => {
+  const root = tmpRoot()
+  assert.equal(uniqueSwarmId(root, 'auth'), 'auth')
+  writeFileSync(swarmLogPath(root, 'auth-10001'), '')
+  const start = Date.now()
+  const ids: string[] = []
+  for (let i = 0; i < 50; i++) ids.push(uniqueSwarmId(root, 'auth'))
+  assert.deepEqual(ids, Array.from({ length: 50 }, (_, i) => `auth-${i + 2}`))
+  assert.ok(Date.now() - start < 2000, `took ${Date.now() - start} ms`)
+})

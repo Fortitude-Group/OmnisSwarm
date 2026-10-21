@@ -166,7 +166,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       description: 'Summarise the running swarm: agents with status, tokens and approximate cost, task counts and memory keys.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       handler: () => {
-        const id = readCurrent(root)
+        const id = mySwarm()
         if (id === null) return { text: 'No swarm is running.' }
         return { text: statusText(loadState(root, id).state, clock().getTime()) }
       },

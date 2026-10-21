@@ -357,3 +357,11 @@ test('losing the race to publish current means adopting the winner without ownin
   assert.equal(readCurrent(root), 'winner')
   assert.equal(call('omnis_swarm_status').text.includes('winner'), true)
 })
+
+test('status shows this session swarm, not the shared current', () => {
+  const { a, b } = twoSessions()
+  a('omnis_swarm_init', { name: 'First', topology: 'mesh' })
+  b('omnis_swarm_init', { name: 'Second', topology: 'mesh' })
+  assert.match(a('omnis_swarm_status').text, /First \[first\]/)
+  assert.match(b('omnis_swarm_status').text, /Second \[second\]/)
+})

@@ -34,24 +34,20 @@ export function uniqueSwarmId(root: string, base: string): string {
   if (!isValidSwarmId(id)) id = 'swarm'
   if (claim(root, id)) return id
   const suffixed = (n: number): string => `${id.slice(0, 63 - String(n).length).replace(/[.-]+$/, '')}-${n}`
-  // One directory listing finds the highest number already used, so old swarms of one name don't slow us down.
-  let highest = 1
+  // One directory listing gives the numbers in use; we take the lowest free one and only move on if the claim loses a race.
+  const used = new Set<number>()
   try {
     for (const file of readdirSync(logPaths(root).swarms)) {
       if (!file.endsWith('.jsonl')) continue
       const name = file.slice(0, -6)
       const m = /-(\d{1,5})$/.exec(name)
-      if (m !== null && suffixed(Number(m[1])) === name) highest = Math.max(highest, Number(m[1]))
+      if (m !== null && suffixed(Number(m[1])) === name) used.add(Number(m[1]))
     }
   } catch {
-    // fall back to counting up from 2
+    // no listing: the claims below still say what is taken
   }
-  // Past the highest number first; if that runs out of room, take the first free gap from 2.
-  const order = (function* () {
-    for (let n = highest + 1; n <= 10_001; n++) yield n
-    for (let n = 2; n <= highest; n++) yield n
-  })()
-  for (const n of order) {
+  for (let n = 2; n <= 10_001; n++) {
+    if (used.has(n)) continue
     const candidate = suffixed(n)
     if (isValidSwarmId(candidate) && claim(root, candidate)) return candidate
   }
