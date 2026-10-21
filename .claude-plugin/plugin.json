@@ -7,7 +7,8 @@
   "mcpServers": {
     "omnis-swarm": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.ts"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.ts"],
+      "env": { "OMNIS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}" }
     }
   }
 }

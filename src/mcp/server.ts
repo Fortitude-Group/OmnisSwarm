@@ -1,15 +1,15 @@
 /** OmnisSwarm MCP server: `node src/mcp/server.ts`. Logs only to stderr; stdout carries the protocol. */
+import './stdio-guard.ts' // must stay the first import
+import { resolve } from 'node:path'
 import { runStdio } from './protocol.ts'
 import { toolFactories } from './registry.ts'
 
-// First thing: a stray console.log must not corrupt the protocol stream.
-for (const level of ['log', 'info', 'debug', 'warn'] as const) console[level] = console.error
-// Claude Code closing the pipe is a normal shutdown, not a crash.
-process.stdout.on('error', () => process.exit(0))
+/** First non-empty candidate that isn't an unexpanded `${...}` placeholder. */
+const pick = (...candidates: Array<string | undefined>): string | undefined =>
+  candidates.find(c => c !== undefined && c.trim() !== '' && !c.includes('${'))
 
-const root = process.env.OMNIS_PROJECT_DIR ?? process.env.OMNIS_SWARM_ROOT ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd()
-
-if (process.env.OMNIS_TEST_STARTUP_LOG === '1') console.log('omnis-test-startup-log')
+const root = resolve(pick(process.env.OMNIS_PROJECT_DIR, process.env.CLAUDE_PROJECT_DIR) ?? process.cwd())
+process.stderr.write(`omnis: project root ${root}\n`)
 
 const tools = toolFactories.flatMap(factory => factory({ root }))
 void runStdio(tools, { name: 'omnis-swarm', version: '0.1.0' })
