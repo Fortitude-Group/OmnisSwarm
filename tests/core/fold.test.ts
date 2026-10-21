@@ -219,3 +219,11 @@ test('goal, note, assignee and dependsOn are cleaned of terminal escapes', () =>
   assert.equal(s.tasks.t2!.note, '[31mred')
   assert.ok(!/[\p{Cc}\p{Cf}]/u.test(JSON.stringify(s)))
 })
+
+test('an assignee that is empty after cleaning becomes null on update', () => {
+  const s = run([
+    ev('task.created', { id: 't1', title: 'a', assignee: 'coder' }, { atSec: 1, src: 'mcp' }),
+    ev('task.updated', { id: 't1', state: 'active', assignee: '\u0007' }, { atSec: 2, src: 'mcp' }),
+  ])
+  assert.equal(s.tasks.t1!.assignee, null)
+})

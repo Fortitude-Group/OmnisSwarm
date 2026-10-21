@@ -279,7 +279,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const task = isSafeKey(id) && Object.hasOwn(state.tasks, id) ? state.tasks[id] : undefined
       if (task === undefined) break
       if (isOneOf(TASK_STATES, d.state)) task.state = d.state
-      if (typeof d.assignee === 'string') task.assignee = text(d.assignee, 64)
+      if (typeof d.assignee === 'string') task.assignee = text(d.assignee, 64) || null
       if (typeof d.note === 'string') task.note = text(d.note, 200)
       task.updatedAt = at
       feed(state, { at, kind: 'task', agent: who, text: `task ${id} → ${task.state}` })
