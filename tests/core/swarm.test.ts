@@ -127,3 +127,10 @@ test('300 same-name claims are quick and numbered in order', () => {
   assert.equal(last, 'busy-300')
   assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`)
 })
+
+test('a name whose numbered id hit the cap still finds a free gap', () => {
+  const root = tmpRoot()
+  assert.equal(uniqueSwarmId(root, 'auth'), 'auth')
+  writeFileSync(swarmLogPath(root, 'auth-10001'), '')
+  assert.equal(uniqueSwarmId(root, 'auth'), 'auth-2')
+})

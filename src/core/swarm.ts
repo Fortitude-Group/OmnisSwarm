@@ -46,7 +46,12 @@ export function uniqueSwarmId(root: string, base: string): string {
   } catch {
     // fall back to counting up from 2
   }
-  for (let n = highest + 1; n <= 10_001; n++) {
+  // Past the highest number first; if that runs out of room, take the first free gap from 2.
+  const order = (function* () {
+    for (let n = highest + 1; n <= 10_001; n++) yield n
+    for (let n = 2; n <= highest; n++) yield n
+  })()
+  for (const n of order) {
     const candidate = suffixed(n)
     if (isValidSwarmId(candidate) && claim(root, candidate)) return candidate
   }

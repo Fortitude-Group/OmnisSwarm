@@ -3,7 +3,7 @@ import { TASK_STATES, TOPOLOGIES, clip, isSafeKey, makeEvent, type SwarmEvent } 
 import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/log.ts'
 import { loadState } from '../core/snapshot.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
-import { ensureSwarm, uniqueSwarmId } from '../core/swarm.ts'
+import { announceSwarm, ensureSwarm, uniqueSwarmId } from '../core/swarm.ts'
 import { MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
@@ -38,7 +38,7 @@ function statusText(state: SwarmState, nowMs: number): string {
 }
 
 /** Token-shaped runs are blanked before a value preview reaches the log. */
-const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|[A-Za-z0-9+/=_-]{32,}/g
+const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
 const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
 
 export const MAX_TASKS = 500
@@ -49,6 +49,8 @@ export function createTools(ctx: ToolContext): ToolDef[] {
   const clock = ctx.now ?? (() => new Date())
   /** The swarm this server started or adopted. Other sessions in the same project may share `current`. */
   let mine: string | null = null
+  /** True only when this server started `mine`. An adopted swarm belongs to another session and is never ended or renamed here. */
+  let owned = false
 
   const emit = (event: SwarmEvent): void => {
     if (!appendEvent(root, event)) throw new Error('Could not write to the swarm log in .omnis-swarm/')
@@ -56,17 +58,34 @@ export function createTools(ctx: ToolContext): ToolDef[] {
   const hasEnded = (id: string): boolean => loadState(root, id).state.swarm.endedAt !== null
   /** My live swarm, adopting `current` while I have none. */
   const mySwarm = (adopt = true): string | null => {
-    if (mine !== null && hasEnded(mine)) mine = null
+    if (mine !== null && hasEnded(mine)) {
+      mine = null
+      owned = false
+    }
     if (mine === null && adopt) {
       const c = readCurrent(root)
-      if (c !== null && !hasEnded(c)) mine = c
+      if (c !== null && !hasEnded(c)) {
+        mine = c
+        owned = false
+      }
     }
     return mine
   }
   const swarmOrCreate = (now: Date): string => {
     const id = mySwarm()
     if (id !== null) return id
-    mine = ensureSwarm(root, { idHint: `session-${stamp(now)}`, src: 'mcp', now })
+    const idHint = `session-${stamp(now)}`
+    const current = readCurrent(root)
+    if (current !== null) {
+      // current names an ended swarm (mySwarm skipped it): start a fresh one and replace it
+      const id = uniqueSwarmId(root, idHint)
+      announceSwarm(root, id, { src: 'mcp', now })
+      writeCurrent(root, id)
+      mine = id
+    } else {
+      mine = ensureSwarm(root, { idHint, src: 'mcp', now })
+    }
+    owned = true
     return mine
   }
   const runningSwarm = (): string => {
@@ -102,7 +121,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false }
         const existing = mySwarm(false) // init never takes over a swarm it didn't start
         let replaced: string | null = null
-        if (existing !== null) {
+        if (existing !== null && owned) {
           const { state } = loadState(root, existing)
           if (state.swarm.implicit) {
             emit(makeEvent({ type: 'swarm.started', swarm: existing, src: 'mcp', data, now }))
@@ -114,6 +133,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         if (replaced !== null) emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
         writeCurrent(root, id)
         mine = id
+        owned = true
         emit(makeEvent({ type: 'swarm.started', swarm: id, src: 'mcp', data, now }))
         return { text: `Swarm "${name}" started as ${id} (${topology}).` }
       },
@@ -129,9 +149,14 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       handler: args => {
         const id = runningSwarm()
         const outcome = optText(args, 'outcome', 200)
+        if (!owned) {
+          mine = null
+          return { text: `Swarm ${id} belongs to another session and is still running; this session has let go of it.` }
+        }
         emit(makeEvent({ type: 'swarm.ended', swarm: id, src: 'mcp', data: outcome === undefined ? {} : { outcome }, now: clock() }))
         if (readCurrent(root) === id) clearCurrent(root)
         mine = null
+        owned = false
         return { text: `Swarm ${id} ended.` }
       },
     },

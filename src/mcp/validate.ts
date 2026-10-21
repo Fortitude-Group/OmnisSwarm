@@ -41,7 +41,7 @@ export function optStringList(args: Args, key: string, maxItems: number, maxLen:
   return value as string[]
 }
 
-const CONTROL = /[\p{Cc}\p{Cf}]/u
+const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 
 /** Like reqString, for free text that ends up in the log and pane: no control or formatting characters. */
 export function reqText(args: Args, key: string, max: number): string {

@@ -295,3 +295,47 @@ test('schemas carry the length hints', () => {
   assert.equal(props('omnis_task_create').title?.minLength, 1)
   assert.equal(props('omnis_memory_put').value?.maxLength, 4096)
 })
+
+// Fix round 2
+
+test('adopting another session swarm does not let init end it', () => {
+  const { root, a, b } = twoSessions()
+  a('omnis_swarm_init', { name: 'First', topology: 'mesh' })
+  b('omnis_memory_put', { key: 'k', value: 'v' }) // B adopts 'first'
+  b('omnis_swarm_init', { name: 'Second', topology: 'mesh' })
+  assert.equal(readEvents(swarmLogPath(root, 'first')).events.some(e => e.type === 'swarm.ended'), false)
+  assert.equal(readCurrent(root), 'second')
+})
+
+test('swarm_end on an adopted swarm lets go without ending it', () => {
+  const { root, a, b } = twoSessions()
+  a('omnis_swarm_init', { name: 'First', topology: 'mesh' })
+  b('omnis_memory_get', { key: 'k' })
+  assert.match(b('omnis_swarm_end').text, /another session/)
+  assert.equal(readEvents(swarmLogPath(root, 'first')).events.some(e => e.type === 'swarm.ended'), false)
+  assert.equal(readCurrent(root), 'first')
+})
+
+test('an ended current is replaced by a new swarm, not written into', () => {
+  const { root, call, events } = setup()
+  call('omnis_swarm_init', { name: 'Done', topology: 'mesh' })
+  appendEvent(root, ev('swarm.ended', {}, { swarm: 'done', src: 'mcp' }))
+  call('omnis_task_create', { title: 'x' })
+  const id = readCurrent(root)!
+  assert.notEqual(id, 'done')
+  assert.equal(events('done').some(e => e.type === 'task.created'), false)
+  assert.equal(events(id).some(e => e.type === 'task.created'), true)
+})
+
+test('JWT-shaped values are redacted in the log preview', () => {
+  const { root, call } = setup()
+  call('omnis_swarm_init', { name: 'Jwt', topology: 'mesh' })
+  call('omnis_memory_put', { key: 'k', value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIx.sig' })
+  assert.equal(readFileSync(swarmLogPath(root, 'jwt'), 'utf8').includes('eyJhbGciOiJI'), false)
+})
+
+test('line and paragraph separators are refused in free text', () => {
+  const { call } = setup()
+  assert.throws(() => call('omnis_swarm_init', { name: 'a b', topology: 'mesh' }), InputError)
+  assert.throws(() => call('omnis_swarm_init', { name: 'a b', topology: 'mesh' }), InputError)
+})
