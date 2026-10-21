@@ -160,6 +160,8 @@ function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; col
   const x0 = Math.max(0, Math.floor(n.p.x - reach))
   const x1 = Math.min(px.width - 1, Math.ceil(n.p.x + reach))
   const shade = [0, 1, 2, 3].map(q => mix(n.fill, WHITE, (q / 3) * 0.28))
+  // The halo's five levels (quantise(t, 5) is q / 4) laid over bare canvas, which is where nearly all of it falls.
+  const halo = [0, 1, 2, 3, 4].map(q => add(CANVAS, n.fill, (q / 4) * glowK * 0.8))
   const dimRing = mix(CANVAS, TEXT.faint, 0.35)
   const data = px.data
   for (let y = y0; y <= y1; y++) {
@@ -179,8 +181,9 @@ function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; col
         data[i] = angle / (2 * Math.PI) <= ring.fill ? ring.color : dimRing
       } else if (d <= outer) {
         if (glowK > 0) {
-          const k = quantise(1 - (d - r) / (GRAPH.ringPx + GRAPH.glowPx), 5) * glowK
-          data[i] = add(data[i]!, n.fill, k * 0.8)
+          const q = Math.round(clamp01(1 - (d - r) / (GRAPH.ringPx + GRAPH.glowPx)) * 4)
+          const under = data[i]!
+          data[i] = under === CANVAS ? halo[q]! : add(under, n.fill, (q / 4) * glowK * 0.8)
         }
         // One pixel band outside the ring, so a flicker the same hue as the node still shows.
         if (flare && d > ringOut && d <= band) data[i] = add(data[i]!, rim.color, 0.6 * rim.k)
