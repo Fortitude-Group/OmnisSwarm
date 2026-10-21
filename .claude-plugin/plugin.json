@@ -1,0 +1,14 @@
+{
+  "name": "omnis-swarm",
+  "version": "0.1.0",
+  "description": "Swarm coordination for Claude Code agents: topology, shared memory and a task board, recorded to an event log for a live read-only swarm pane.",
+  "author": { "name": "Fortitude Omnis" },
+  "license": "UNLICENSED",
+  "mcpServers": {
+    "omnis-swarm": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.ts"],
+      "env": { "OMNIS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}" }
+    }
+  }
+}

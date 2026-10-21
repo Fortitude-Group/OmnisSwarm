@@ -1,0 +1,11 @@
+{
+  "name": "omnis-swarm",
+  "owner": { "name": "Fortitude Omnis" },
+  "plugins": [
+    {
+      "name": "omnis-swarm",
+      "source": "./",
+      "description": "Swarm coordination and a live read-only swarm pane for Claude Code."
+    }
+  ]
+}
