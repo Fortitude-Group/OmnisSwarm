@@ -1,4 +1,4 @@
-# compact-mid: hierarchical at +30000 ms in 80x21; step compactSpotlight, fps 30, spotlight a-cod1
+# compact-mid: hierarchical at +30000 ms in 80x21; step compactSpotlight, fps 20, spotlight a-cod1
 ## top 80x14 pairs 15 sha fd8c279fa1457429
 ### glyphs
  ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok    

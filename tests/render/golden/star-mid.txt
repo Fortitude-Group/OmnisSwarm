@@ -1,5 +1,5 @@
-# star-mid: star at +30000 ms in 120x44; step full, fps 30, spotlight a-cod1
-## top 120x26 pairs 148 sha f673ba09c654ccab
+# star-mid: star at +30000 ms in 120x44; step full, fps 20, spotlight a-cod1
+## top 120x26 pairs 148 sha bf264d31720d8cdc
 ### glyphs
  ◆ auth refactor · star · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0.11/min · cc $1.20                            
  tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash                   move sessions to signed tokens 
@@ -63,49 +63,49 @@ e fg #9aa4b2 bg #131a26 x81
 f fg #7ee787 bg #131a26 x11
 g fg #f85149 bg #131a26 x9
 h fg #0b0f17 bg #0b0f17 x2262
-i fg #0b0f17 bg #131d31 x11
-j fg #131d31 bg #131d31 x10
-k fg #131d31 bg #1a2b4a x8
-l fg #131d31 bg #223964 x2
-m fg #1a2b4a bg #272d39 x6
-n fg #1a2b4a bg #9aa4b2 x1
+i fg #0b0f17 bg #1a2b4a x11
+j fg #1a2b4a bg #1a2b4a x10
+k fg #1a2b4a bg #2a477d x8
+l fg #1a2b4a bg #3964b0 x2
+m fg #2a477d bg #272d39 x6
+n fg #2a477d bg #9aa4b2 x1
 o fg #272d39 bg #272d39 x29
 p fg #272d39 bg #4d8dff x4
 q fg #272d39 bg #5e98ff x1
 r fg #9aa4b2 bg #5e98ff x1
 s fg #9ecbff bg #0b0f17 x38
-t fg #223964 bg #272d39 x4
+t fg #3964b0 bg #272d39 x4
 u fg #4d8dff bg #5e98ff x6
 v fg #5e98ff bg #6ea2ff x2
 w fg #6ea2ff bg #6ea2ff x6
-x fg #9ecbff bg #0f1624 x1
-y fg #9ecbff bg #17243e x1
-z fg #f5fbff bg #40577b x1
+x fg #9ecbff bg #131d31 x1
+y fg #9ecbff bg #223964 x1
+z fg #f5fbff bg #4c6ca1 x1
 A fg #5e98ff bg #4d8dff x6
 B fg #6ea2ff bg #5e98ff x2
-C fg #0b0f17 bg #25334f x1
-D fg #799cc5 bg #17243e x1
-E fg #799cc5 bg #0f1624 x1
-F fg #1a2b4a bg #131d31 x6
-G fg #272d39 bg #1a2b4a x5
+C fg #0b0f17 bg #304975 x1
+D fg #799cc5 bg #223964 x1
+E fg #799cc5 bg #131d31 x1
+F fg #2a477d bg #1a2b4a x6
+G fg #272d39 bg #2a477d x5
 H fg #4d8dff bg #272d39 x4
 I fg #5e98ff bg #272d39 x2
 J fg #3c4e64 bg #0b0f17 x2
 K fg #799cc5 bg #0b0f17 x30
-L fg #0b0f17 bg #132423 x6
-M fg #132423 bg #1a392f x6
+L fg #0b0f17 bg #1a392f x6
+M fg #1a392f bg #296248 x6
 N fg #0b0f17 bg #10141e x3
 O fg #10141e bg #141924 x6
-P fg #131d31 bg #0b0f17 x4
-Q fg #223964 bg #131d31 x2
-R fg #3c4352 bg #212c42 x1
+P fg #1a2b4a bg #0b0f17 x4
+Q fg #3964b0 bg #1a2b4a x2
+R fg #3c4352 bg #293a5b x1
 S fg #6d8cb2 bg #0b0f17 x2
-T fg #1a392f bg #272d39 x2
-U fg #224d3c bg #272d39 x1
+T fg #296248 bg #272d39 x2
+U fg #398c60 bg #272d39 x1
 V fg #272d39 bg #4cd07a x2
 W fg #9aa4b2 bg #4cd07a x1
-X fg #1a392f bg #1a392f x4
-Y fg #132423 bg #132423 x5
+X fg #296248 bg #296248 x4
+Y fg #1a392f bg #1a392f x5
 Z fg #141924 bg #191f2b x2
 0 fg #191f2b bg #1d2431 x2
 1 fg #191f2b bg #424753 x1
@@ -114,9 +114,9 @@ Z fg #141924 bg #191f2b x2
 4 fg #9ecbff bg #10141e x1
 5 fg #7ee787 bg #0b0f17 x6
 6 fg #e6edf3 bg #0b0f17 x30
-7 fg #e6edf3 bg #0f1624 x3
-8 fg #799cc5 bg #172f29 x1
-9 fg #799cc5 bg #213334 x1
+7 fg #e6edf3 bg #131d31 x3
+8 fg #799cc5 bg #224e3c x1
+9 fg #799cc5 bg #284841 x1
 ! fg #4cd07a bg #5dd486 x1
 $ fg #5dd486 bg #6dd993 x3
 % fg #5dd486 bg #5dd486 x3
@@ -133,8 +133,8 @@ $ fg #5dd486 bg #6dd993 x3
 ? fg #3c4352 bg #0b0f17 x146
 @ fg #f5fbff bg #273344 x2
 ^ fg #f5fbff bg #0b0f17 x1
-_ fg #799cc5 bg #132423 x1
-~ fg #3c4352 bg #1a392f x1
+_ fg #799cc5 bg #1a392f x1
+~ fg #3c4352 bg #296248 x1
 . 68 more pairs
 ## bottom 120x17 pairs 31 sha fd9f6a1cff615b50
 ### glyphs

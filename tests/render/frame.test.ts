@@ -69,6 +69,28 @@ test('the frame rate: busy while things move, slow while only glows move, a tick
   assert.equal(fps(quiet, { ...emptyView(), pulses: [{ agent: 'a-arch', kind: 'read', at: FIVE_AT.idle - 100, isError: false }] }, FIVE_AT.idle), FPS.busy)
 })
 
+test('the frame rate matches the design tokens: busy 20, glow 5, floor 4, tick 1', () => {
+  assert.deepEqual({ ...FPS }, { busy: 20, glow: 5, min: 4, tick: 1 })
+})
+
+test('ghost fades, link fades and the clash blink run at the glow rate, not busy', () => {
+  const quietAt = (mutate: (s: ReturnType<typeof five>) => void) => {
+    const s = foldAll(FIVE_SWARM, quietEvents())
+    mutate(s)
+    return fps(s, emptyView(), FIVE_AT.idle)
+  }
+  // A finished agent fading to its ghost.
+  assert.equal(quietAt(s => fold(s, ev('agent.finished', { outcome: 'answer', reason: 'answer' }, { agent: 'a-arch', atSec: 399.5, swarm: FIVE_SWARM }))), FPS.glow)
+  // A link two seconds after its last message: the comet has landed, the link is still fading.
+  assert.equal(quietAt(s => { for (const l of Object.values(s.links)) l.lastAt = FIVE_AT.idle - 2000 }), FPS.glow)
+  // Once the fade window has passed, only the tick is left.
+  assert.equal(quietAt(s => { for (const l of Object.values(s.links)) l.lastAt = FIVE_AT.idle - 3500 }), FPS.tick)
+  // Two agents edited the same file a second ago: the rims blink.
+  assert.equal(quietAt(s => { s.edits['x.ts'] = [{ agent: 'lead', at: FIVE_AT.idle - 1000 }, { agent: 'a-arch', at: FIVE_AT.idle - 900 }] }), FPS.glow)
+  // A fade-in is still busy.
+  assert.equal(quietAt(s => fold(s, ev('agent.started', { name: 'new', role: 'r', description: '', parent: 'lead' }, { agent: 'a-new', atSec: 399.8, swarm: FIVE_SWARM }))), FPS.busy)
+})
+
 test('the frame interval backs off when frames are slow and recovers when they are fast', () => {
   assert.equal(frameInterval(30, 0, 0), 33)
   assert.equal(frameInterval(30, 33, 25), 66)

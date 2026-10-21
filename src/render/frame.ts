@@ -46,20 +46,20 @@ export function chipColor(c: number): number {
 }
 
 /**
- * FPS.busy while comets, fades, pulses, a glide or a clash flash are live; FPS.glow while only glows move; otherwise
- * FPS.tick, because ages and live bars follow the clock. The pane stops its loop itself when it is hidden.
+ * pane.md section 6. FPS.busy while a comet, fade-in, pulse or glide is live; FPS.glow while a glow, stuck rim, ghost
+ * fade, link fade or clash blink is; otherwise FPS.tick, because ages and live bars follow the clock. The pane stops
+ * its loop itself when it is hidden.
  */
 export function targetFps(state: SwarmState, view: View, nowMs: number, stats: Readonly<Record<string, AgentStats>>, clashes: readonly Clash[]): number {
   const t = nowMs - lagOf(view)
   for (const item of state.feed) if (item.kind === 'message' && t >= item.at && t - item.at <= MOTION.cometMs + MOTION.trailMs) return FPS.busy
-  for (const a of Object.values(state.agents)) {
-    if (nowMs >= a.startedAt && nowMs - a.startedAt < MOTION.fadeInMs) return FPS.busy
-    if (a.finishedAt !== null && nowMs >= a.finishedAt && nowMs - a.finishedAt < MOTION.ghostMs) return FPS.busy
-  }
+  for (const a of Object.values(state.agents)) if (nowMs >= a.startedAt && nowMs - a.startedAt < MOTION.fadeInMs) return FPS.busy
   for (const p of view.pulses) if (t >= p.at && t - p.at <= (p.isError ? MOTION.errorPulseMs : MOTION.pulseMs)) return FPS.busy
   if (view.tween !== null && nowMs - view.tween.at < MOTION.tweenMs) return FPS.busy
-  if (clashes.some(c => clashActive(state, c, nowMs))) return FPS.busy
   for (const s of Object.values(stats)) if (!s.placeholder && (s.status === 'running' || s.stuck)) return FPS.glow
+  for (const a of Object.values(state.agents)) if (a.finishedAt !== null && nowMs >= a.finishedAt && nowMs - a.finishedAt < MOTION.ghostMs) return FPS.glow
+  for (const l of Object.values(state.links)) if (t >= l.lastAt && t - l.lastAt < MOTION.linkFadeMs) return FPS.glow
+  if (clashes.some(c => clashActive(state, c, nowMs))) return FPS.glow
   return FPS.tick
 }
 
