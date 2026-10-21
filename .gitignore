@@ -8,3 +8,5 @@
 
 # Execution scratch (task briefs, reports, ledger)
 .superpowers/
+node_modules/
+.omnis-swarm/
