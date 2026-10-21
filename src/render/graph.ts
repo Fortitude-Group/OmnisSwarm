@@ -124,25 +124,23 @@ function trimmed(a: Point, b: Point, ra: number, rb: number): [Point, Point] | n
   return [{ x: a.x + ux * ra, y: a.y + uy * ra }, { x: b.x - ux * rb, y: b.y - uy * rb }]
 }
 
-/** A tool start less than this after the agent's last flicker is folded into it. */
-const COALESCE_MS = 600
-
 /**
  * The strongest live pulse per agent: its colour and how far it has faded. Degraded, a pulse does not fade: it is
  * drawn at full strength for its window, stretched to at least one frame at the cap so it is never skipped.
  */
 export function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<string, NonNullable<Rim>> {
   const out = new Map<string, NonNullable<Rim>>()
-  const lastFlicker = new Map<string, number>()
-  for (const p of [...view.pulses].sort((a, b) => a.at - b.at)) {
-    // Coalesce: a tool start soon after the agent's last flicker adds nothing. Errors are always drawn.
-    const last = lastFlicker.get(p.agent)
-    if (!p.isError && last !== undefined && p.at - last < COALESCE_MS) continue
-    lastFlicker.set(p.agent, p.at)
+  const failing = new Set<string>()
+  for (const p of view.pulses) {
+    if (p.coalesced === true || !Number.isFinite(p.at)) continue
     const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
     const age = tEff - p.at
     const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 3) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
-    if (k <= 0 || (out.get(p.agent)?.k ?? 0) >= k) continue
+    const held = out.get(p.agent)?.k ?? 0
+    // Strongest wins; on a tie an error beats a tool pulse, so a failure shows red at once.
+    if (k <= 0 || held > k || (held === k && (!p.isError || failing.has(p.agent)))) continue
+    if (p.isError) failing.add(p.agent)
+    else failing.delete(p.agent)
     out.set(p.agent, { color: p.isError ? STATUS.failed : KIND[p.kind], k, flare: true })
   }
   return out

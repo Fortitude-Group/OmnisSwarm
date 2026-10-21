@@ -320,23 +320,23 @@ test('a clash or stuck rim still recolours the disc edge and draws no flare', ()
   assert.deepEqual(band(lit, R + GRAPH.ringPx, R + GRAPH.ringPx + 1), band(quiet, R + GRAPH.ringPx, R + GRAPH.ringPx + 1))
 })
 
-test('a tool start within 600 ms of the last flicker on that agent is skipped, errors never are', () => {
+test('the renderer skips coalesced pulses, ties go to an error, and a pulse fades in 3 steps', () => {
   const motion = motionFor(60)
   const T = 100_000
-  const pulse = (agent: string, at: number, isError = false) => ({ agent, kind: 'bash' as const, at, isError })
+  const pulse = (agent: string, at: number, isError = false, coalesced = false) => ({ agent, kind: 'bash' as const, at, isError, ...(coalesced && { coalesced }) })
   const rimsAt = (pulses: ReturnType<typeof pulse>[], t: number) => pulseRims({ ...emptyView(), pulses }, t, motion)
-  // The second start at +500 is coalesced. At +520 the first is already over (450 ms), so nothing is drawn.
-  const burst = [pulse('a', T), pulse('a', T + 500)]
-  assert.equal(rimsAt(burst, T + 520).get('a'), undefined)
-  // A start at +600 flickers: it is the fresher, stronger one.
-  const later = rimsAt([pulse('a', T), pulse('a', T + 600)], T + 620).get('a')
-  assert.ok(later !== undefined && later.k > (rimsAt([pulse('a', T)], T + 620).get('a')?.k ?? 0))
+  // A coalesced pulse draws nothing, even when it is the only live one.
+  assert.equal(rimsAt([pulse('a', T - 600), pulse('a', T, false, true)], T + 50).get('a'), undefined)
   // Another agent is unaffected.
-  assert.ok(rimsAt([pulse('a', T), pulse('b', T + 100)], T + 120).has('b'))
-  // An error inside the window is drawn, in the failed colour.
-  assert.equal(rimsAt([pulse('a', T), pulse('a', T + 100, true)], T + 120).get('a')?.color, STATUS.failed)
-  // The pulse lasts 450 ms in 3 steps: halfway is 1/3 or 2/3, never a quarter step.
+  assert.ok(rimsAt([pulse('a', T, false, true), pulse('b', T + 100)], T + 120).has('b'))
+  // On equal strength an error shows, whichever order they arrive in.
+  for (const order of [[false, true], [true, false]]) {
+    const got = rimsAt(order.map(e => pulse('a', T, e)), T + 50).get('a')
+    assert.equal(got?.color, STATUS.failed)
+  }
+  // A pulse that is not finite is dropped.
+  assert.equal(rimsAt([pulse('a', NaN), pulse('a', Infinity)], T).size, 0)
+  // Three levels, 0, 1/2 and 1: about 200 ms into 450 ms is the middle one (four levels would give 2/3).
   assert.equal(MOTION.pulseMs, 450)
-  const k = rimsAt([pulse('a', T)], T + 100).get('a')!.k
-  assert.ok([1 / 3, 2 / 3, 1].some(v => Math.abs(v - k) < 1e-9))
+  assert.equal(rimsAt([pulse('a', T)], T + 200).get('a')?.k, 0.5)
 })

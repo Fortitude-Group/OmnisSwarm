@@ -9,7 +9,8 @@ export type Rect = { x: number; y: number; w: number; h: number }
 export type Size = { columns: number; rows: number }
 export type SizeStep = 'full' | 'noTimeline' | 'compactSpotlight' | 'tree' | 'summary'
 /** A tool start, or a tool end that failed, as the pane saw it arrive. */
-export type Pulse = { agent: string; kind: ToolKind; at: number; isError: boolean }
+/** `coalesced`: set once when the pulse arrives (see markPulses): it came too soon after the agent's last flicker, so it is not drawn. */
+export type Pulse = { agent: string; kind: ToolKind; at: number; isError: boolean; coalesced?: boolean }
 /** Who the spotlight is on, and since when (it holds each agent for SPOTLIGHT_HOLD_MS). */
 export type Spot = { id: string; since: number }
 /** Node positions to glide from, after the layout changed at `at`. */

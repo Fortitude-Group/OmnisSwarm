@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { FeedReply } from '../../src/core/feed-reply.ts'
 import { emptyState, foldAll } from '../../src/core/fold.ts'
-import { MAX_PULSES, applyReply, emptyModel, feedArgs, prunePulses, pulsesFrom } from '../../src/mod/pane-model.ts'
+import { COALESCE_MS, MAX_PULSES, applyReply, emptyModel, feedArgs, prunePulses, pulsesFrom } from '../../src/mod/pane-model.ts'
+import { ev } from '../helpers.ts'
 import { FIVE_SWARM, FIVE_T0, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 
 const events = fiveAgentEvents()
@@ -120,4 +121,36 @@ test('hiddenFinished is cleared once folded events bring in an agent the state d
   const b = applyReply(a, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 9, events: events.slice(8, 9), bad: 0 }, FIVE_T0).model
   assert.equal(Object.hasOwn(b.state!.agents, 'a-cod2'), true)
   assert.equal(b.hiddenFinished, 0)
+})
+
+test('a steady tool cadence flickers on a stable schedule once per 600 ms or more, never zero, as pulses are pruned frame by frame', () => {
+  for (const cadence of [300, 400, 550, 700]) {
+    let model = applyReply(emptyModel(), { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 1, state: emptyState(FIVE_SWARM) }, 0).model
+    const base = Date.parse(events[0]!.ts)
+    const starts = Array.from({ length: Math.ceil(20_000 / cadence) }, (_, i) => i)
+    const flag = new Map<number, boolean>()
+    const drawn = new Set<number>()
+    let offset = 1
+    for (let now = base; now <= base + 20_000; now += 50) {
+      const due = starts.filter(i => base + i * cadence > now - 50 && base + i * cadence <= now)
+      const batch = due.map(i => {
+        const e = ev('agent.tool', { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'x', isError: false }, { agent: 'a-x' })
+        return { ...e, ts: new Date(base + i * cadence).toISOString() }
+      })
+      offset += batch.length
+      model = applyReply(model, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset, events: batch, bad: 0 }, now).model
+      for (const p of model.pulses) {
+        const was = flag.get(p.at)
+        assert.ok(was === undefined || was === (p.coalesced === true), 'a pulse never changes its mark')
+        flag.set(p.at, p.coalesced === true)
+        if (p.coalesced !== true) drawn.add(p.at)
+      }
+    }
+    const times = [...drawn].sort((a, b) => a - b)
+    assert.ok(times.length > 20_000 / (COALESCE_MS + cadence) - 1, `cadence ${cadence}: flickers keep coming`)
+    for (let i = 1; i < times.length; i++) {
+      const gap = times[i]! - times[i - 1]!
+      assert.ok(gap >= COALESCE_MS && gap < COALESCE_MS + cadence, `cadence ${cadence}: gap ${gap}`)
+    }
+  }
 })
