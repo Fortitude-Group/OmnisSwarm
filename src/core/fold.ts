@@ -143,7 +143,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const name = text(d.name, 64)
       if (name !== '') state.swarm.name = name
       if (isOneOf(TOPOLOGIES, d.topology)) state.swarm.topology = d.topology
-      if (typeof d.goal === 'string') state.swarm.goal = d.goal.slice(0, 200)
+      if (typeof d.goal === 'string') state.swarm.goal = text(d.goal, 200) || null
       state.swarm.implicit = d.implicit === true
       break
     }
@@ -265,7 +265,9 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       if (!isSafeKey(id)) break
       state.tasks[id] = {
         id, title: text(d.title, 120), state: 'pending', assignee: text(d.assignee, 64) || null,
-        dependsOn: Array.isArray(d.dependsOn) ? d.dependsOn.filter((x): x is string => typeof x === 'string').slice(0, 20) : [],
+        dependsOn: Array.isArray(d.dependsOn)
+          ? d.dependsOn.map(x => text(x, 32)).filter(x => x !== '' && isSafeKey(x)).slice(0, 20)
+          : [],
         createdAt: at, updatedAt: at, note: null,
       }
       feed(state, { at, kind: 'task', agent: who, text: `task ${id} created: ${state.tasks[id]!.title}` })
@@ -277,8 +279,8 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const task = isSafeKey(id) && Object.hasOwn(state.tasks, id) ? state.tasks[id] : undefined
       if (task === undefined) break
       if (isOneOf(TASK_STATES, d.state)) task.state = d.state
-      if (typeof d.assignee === 'string') task.assignee = d.assignee.slice(0, 64)
-      if (typeof d.note === 'string') task.note = d.note.slice(0, 200)
+      if (typeof d.assignee === 'string') task.assignee = text(d.assignee, 64) || null
+      if (typeof d.note === 'string') task.note = text(d.note, 200)
       task.updatedAt = at
       feed(state, { at, kind: 'task', agent: who, text: `task ${id} → ${task.state}` })
       break
