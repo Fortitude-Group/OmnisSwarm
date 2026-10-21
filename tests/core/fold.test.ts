@@ -190,3 +190,17 @@ test('text drops control characters and never splits a surrogate pair', () => {
   assert.equal(s.feed[0]!.text, '[31mred')
   assert.equal(s.feed[1]!.text, '😀'.repeat(200))
 })
+
+test('text turns control characters into single spaces and trims', () => {
+  const s = run([
+    ev('message.sent', { to: 'lead', summary: 'line one\nline two\tx' }, { agent: 'a1', atSec: 1 }),
+    ev('message.sent', { to: 'lead', summary: '  a \r\n\r\n  b  ' }, { agent: 'a1', atSec: 2 }),
+  ])
+  assert.equal(s.feed[0]!.text, 'line one line two x')
+  assert.equal(s.feed[1]!.text, 'a b')
+})
+
+test('text replaces bidi and other format characters', () => {
+  const s = run([ev('message.sent', { to: 'lead', summary: 'abc\u202Edef\u200Bghi' }, { agent: 'a1', atSec: 1 })])
+  assert.equal(s.feed[0]!.text, 'abc def ghi')
+})

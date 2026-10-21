@@ -86,9 +86,14 @@ const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite5
 const zeroTools = (): Record<ToolKind, number> => Object.fromEntries(TOOL_KINDS.map(k => [k, 0])) as Record<ToolKind, number>
 const MAX_COUNT = 1e12
 const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.min(x, MAX_COUNT) : 0)
-/** Strips control characters (so no terminal escapes) and cuts by code point, never inside a surrogate pair. */
+/**
+ * Makes text safe to draw in a terminal: control and format/bidi characters become spaces, whitespace
+ * runs collapse to one space, and the cut is by code point so a surrogate pair is never split.
+ */
 const text = (x: unknown, max: number): string =>
-  typeof x === 'string' ? Array.from(x.replace(/\p{Cc}/gu, '')).slice(0, max).join('') : ''
+  typeof x === 'string'
+    ? Array.from(x.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()).slice(0, max).join('').trimEnd()
+    : ''
 const trim = <T>(list: T[], max: number): void => {
   while (list.length > max) list.shift()
 }
