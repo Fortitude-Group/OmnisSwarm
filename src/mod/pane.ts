@@ -15,7 +15,7 @@ import { CELL_W, SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
 import { FPS, GLYPH } from '../render/tokens.ts'
 import type { Frame, Size, Spot, Tween, View } from '../render/types.ts'
 import { emptyModel, prunePulses } from './pane-model.ts'
-import { PANE_ID, resume, startPulling, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
+import { PANE_ID, periodFailed, resume, startPulling, wake, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
 import { connectServer } from './server.ts'
 
 export { PANE_ID }
@@ -88,7 +88,7 @@ type Runtime = PullState & {
 const panelOf = (x: unknown): Panel => (x === 'auto' || x === 'off' ? x : 'command')
 const fresh = (panel: Panel): Runtime => ({
   panel, host: null, open: false, shown: false, closedByPerson: false, server: null, model: emptyModel(), pulling: false, pullSeq: 0, stalledMs: 0, stallMarked: false,
-  pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0,
+  pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0, quiet: 0, unreadableMs: 0,
   frameTimer: null, frameMs: 0, renderMs: 0, renderAvgMs: 0, drawnAt: 0, redrawWait: null, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
   onScreen: { top: null, bottom: null }, blitId: { top: 0, bottom: 0 }, refused: { top: false, bottom: false },
 })
@@ -193,22 +193,27 @@ function animate(host: Host, fps: number): void {
   rt.frameTimer = host.every(interval, () => tick(host))
 }
 
+/** One frame. A throw (a render that fails) stops the loop and flags the pane; the redraw it asks for starts it again. */
 function tick(host: Host): void {
-  const started = Date.now()
-  const frame = rt.open && rt.shown ? frameAt(started) : null
-  if (frame === null || rt.last === null) {
-    stopFrames()
-    return
+  try {
+    const started = Date.now()
+    const frame = rt.open && rt.shown ? frameAt(started) : null
+    if (frame === null || rt.last === null) {
+      stopFrames()
+      return
+    }
+    if (frame.treeKey !== rt.last.treeKey) {
+      stopFrames()
+      host.invalidate()
+      return
+    }
+    blitFrame(host, frame)
+    rt.last = frame
+    spent(Date.now() - started)
+    animate(host, frame.fps)
+  } catch {
+    periodFailed(rt, host, stopFrames)
   }
-  if (frame.treeKey !== rt.last.treeKey) {
-    stopFrames()
-    host.invalidate()
-    return
-  }
-  blitFrame(host, frame)
-  rt.last = frame
-  spent(Date.now() - started)
-  animate(host, frame.fps)
 }
 
 /** After news: blit when the element tree still fits, otherwise ask for a redraw. */
@@ -325,6 +330,7 @@ function chipRow($: EngineInterface, kit: Kit, frame: Frame, columns: number): R
     ...(chip.pinned && { variant: 'primary' as const }),
     onPress: () => {
       void togglePin($, chip.id)
+      if (rt.host !== null) wake(hooks, rt.host)
     },
     children: [kit.Text({ color: hex(chip.color), children: chip.pinned ? GLYPH.pinned : GLYPH.dot }), ` ${chip.label}`],
   }))
@@ -371,7 +377,11 @@ export function registerPane(on: On, options: PluginOptions): void {
       columns: Math.max(1, Math.floor(Number(e.props.bodyColumns) || 1)),
       rows: Math.max(1, Math.floor(Number(e.props.scroll.bodyRows) || 1)),
     }
-    if (rt.host !== null) startPulling(hooks, rt.host)
+    if (rt.host !== null) {
+      startPulling(hooks, rt.host)
+      // A re-render (a resize, or shown again) means someone is looking: pull at full speed.
+      wake(hooks, rt.host)
+    }
     const started = Date.now()
     const frame = frameAt(started)
     rt.last = frame
