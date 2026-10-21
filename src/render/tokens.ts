@@ -20,7 +20,7 @@ export type ModelFamily = keyof typeof MODEL
 export const STATUS = { running: 0x7ee787, waiting: 0x9aa4b2, done: 0x8b98a9, failed: 0xf85149, warn: 0xe69f00 } as const
 
 export const KIND: Readonly<Record<ToolKind, number>> = {
-  read: 0x4fd8e8, edit: 0xffc861, bash: 0xc49bff, search: 0xa6e35a, web: 0x6f95ff, agent: 0xff86c2, other: 0xd6dbe1,
+  read: 0x4fd8e8, edit: 0xffc861, bash: 0xc49bff, search: 0xa6e35a, web: 0x6f95ff, agent: 0xff86c2, other: 0x9aa4b2,
 }
 export const KIND_LETTER: Readonly<Record<ToolKind, string>> = { read: 'r', edit: 'e', bash: 'b', search: 's', web: 'w', agent: 'a', other: 'o' }
 
@@ -34,7 +34,7 @@ export const GLYPH = {
 
 export const MOTION = {
   fadeInMs: 600, ghostMs: 1500, glowPeriodMs: 2000, cometMs: 900, trailMs: 450, trailDots: 6, linkFadeMs: 3000,
-  pulseMs: 350, errorPulseMs: 900, clashFlashMs: 4000, clashBlinkMs: 400, tweenMs: 400,
+  pulseMs: 450, errorPulseMs: 900, clashFlashMs: 4000, clashBlinkMs: 400, tweenMs: 400,
 } as const
 
 export const FPS = { busy: 20, glow: 5, min: 4, tick: 1 } as const

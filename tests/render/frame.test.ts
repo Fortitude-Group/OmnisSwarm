@@ -215,9 +215,9 @@ test('under 10 fps a pulse is drawn at full strength, not part-faded', () => {
   assert.notEqual(top(0), top(300))
   assert.equal(top(0, 9.9), top(300, 9.9))
   assert.equal(top(0, 9.9), top(0))
-  // Held for one frame at the cap when that is longer than its own 350 ms window: at 2 fps, 500 ms.
+  // Held for one frame at the cap when that is longer than its own 450 ms window: at 2 fps, 500 ms.
   assert.equal(top(400, 2), top(0, 2))
-  assert.notEqual(top(400, 9.9), top(0, 9.9))
+  assert.notEqual(top(460, 9.9), top(0, 9.9))
 })
 
 test('every frame stays inside its colour-pair budget and the Raster limits', () => {

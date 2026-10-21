@@ -124,16 +124,24 @@ function trimmed(a: Point, b: Point, ra: number, rb: number): [Point, Point] | n
   return [{ x: a.x + ux * ra, y: a.y + uy * ra }, { x: b.x - ux * rb, y: b.y - uy * rb }]
 }
 
+/** A tool start less than this after the agent's last flicker is folded into it. */
+const COALESCE_MS = 600
+
 /**
  * The strongest live pulse per agent: its colour and how far it has faded. Degraded, a pulse does not fade: it is
  * drawn at full strength for its window, stretched to at least one frame at the cap so it is never skipped.
  */
-function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<string, NonNullable<Rim>> {
+export function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<string, NonNullable<Rim>> {
   const out = new Map<string, NonNullable<Rim>>()
-  for (const p of view.pulses) {
+  const lastFlicker = new Map<string, number>()
+  for (const p of [...view.pulses].sort((a, b) => a.at - b.at)) {
+    // Coalesce: a tool start soon after the agent's last flicker adds nothing. Errors are always drawn.
+    const last = lastFlicker.get(p.agent)
+    if (!p.isError && last !== undefined && p.at - last < COALESCE_MS) continue
+    lastFlicker.set(p.agent, p.at)
     const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
     const age = tEff - p.at
-    const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 4) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
+    const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 3) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
     if (k <= 0 || (out.get(p.agent)?.k ?? 0) >= k) continue
     out.set(p.agent, { color: p.isError ? STATUS.failed : KIND[p.kind], k, flare: true })
   }
@@ -145,7 +153,7 @@ function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<stri
  * node can draw (a squared-distance test first), writes the pixel array directly and works out the disc's four shades
  * once. The colours are the same arithmetic as before, pixel for pixel.
  */
-function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; color: number } | null, rim: Rim): void {
+export function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; color: number } | null, rim: Rim): void {
   const r = n.r
   const ringOut = r + GRAPH.ringPx
   const outer = r + GRAPH.ringPx + GRAPH.glowPx
@@ -174,7 +182,8 @@ function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; col
       if (d <= r) {
         // quantise(1 - d / r, 4) is one of q / 3 for q in 0..3.
         data[i] = shade[Math.round(clamp01(1 - d / r) * 3)]!
-        if (rim !== null && d > r - 1) data[i] = mix(data[i]!, rim.color, rim.k)
+        // Only the clash and stuck rims recolour the edge; a tool flicker leaves the disc alone.
+        if (rim !== null && !rim.flare && d > r - 1) data[i] = mix(data[i]!, rim.color, rim.k)
       } else if (ring !== null && d <= ringOut) {
         let angle = Math.atan2(dx, -dy)
         if (angle < 0) angle += 2 * Math.PI
@@ -186,7 +195,7 @@ function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; col
           data[i] = under === CANVAS ? halo[q]! : add(under, n.fill, (q / 4) * glowK * 0.8)
         }
         // One pixel band outside the ring, so a flicker the same hue as the node still shows.
-        if (flare && d > ringOut && d <= band) data[i] = add(data[i]!, rim.color, 0.6 * rim.k)
+        if (flare && d > ringOut && d <= band) data[i] = mix(data[i]!, rim.color, 0.85 * rim.k)
       }
     }
   }

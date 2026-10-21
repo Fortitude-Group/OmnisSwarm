@@ -4,11 +4,12 @@ import { LEAD, foldAll, type SwarmState } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.ts'
 import { pulsesFrom } from '../../src/mod/pane-model.ts'
 import { desaturate, mix, scale } from '../../src/render/color.ts'
-import { bendFor, drawGraph, nodeColor, nodeRadius, radiusCap } from '../../src/render/graph.ts'
+import { bendFor, drawGraph, nodeColor, nodeRadius, paintNode, pulseRims, radiusCap } from '../../src/render/graph.ts'
 import { motionFor } from '../../src/render/fx.ts'
 import { Grid, gridText, pairCount } from '../../src/render/grid.ts'
 import { layoutNodes } from '../../src/render/layout.ts'
-import { CANVAS, GRAPH, LINK, MODEL, STATUS, TEXT } from '../../src/render/tokens.ts'
+import { Pixels } from '../../src/render/canvas.ts'
+import { CANVAS, GRAPH, KIND, LINK, MODEL, MOTION, STATUS, TEXT } from '../../src/render/tokens.ts'
 import { emptyView, rect } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 import { ev } from '../helpers.ts'
@@ -272,4 +273,70 @@ test('the glyph-only label keeps a stuck agent\'s mark', () => {
   assert.ok(text.includes('◆ lead ▶'))
   assert.ok(text.includes('▶!'), text)
   assert.ok(!text.includes('tester'))
+})
+
+// Pixel-level checks of the tool flicker, straight on the node painter.
+const SIZE = 40
+const C = SIZE / 2
+const R = 8
+const node = { id: 'n', p: { x: C, y: C }, r: R, fill: MODEL.sonnet, s: {}, a: {} } as unknown as Parameters<typeof paintNode>[1]
+const paint = (rim: Parameters<typeof paintNode>[4], glowK = 0) => {
+  const px = new Pixels(SIZE, SIZE, CANVAS)
+  paintNode(px, node, glowK, { fill: 0.5, color: 0x55aa55 }, rim)
+  return px
+}
+const band = (px: Pixels, lo: number, hi: number): number[] => {
+  const out: number[] = []
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+    const d = Math.hypot(x + 0.5 - C, y + 0.5 - C)
+    if (d > lo && d <= hi) out.push(px.get(x, y))
+  }
+  return out
+}
+
+test('a tool flicker leaves the disc, including its edge, exactly as it was', () => {
+  const quiet = paint(null)
+  const lit = paint({ color: KIND.edit, k: 1, flare: true })
+  assert.deepEqual(band(lit, 0, R), band(quiet, 0, R))
+})
+
+test('a tool flicker mixes its colour into the flare band instead of adding it', () => {
+  const ringOut = R + GRAPH.ringPx
+  const k = 2 / 3
+  const lit = paint({ color: KIND.agent, k, flare: true }, 0.7)
+  const quiet = paint(null, 0.7)
+  const got = band(lit, ringOut, ringOut + 1)
+  const under = band(quiet, ringOut, ringOut + 1)
+  assert.ok(got.length > 0)
+  got.forEach((c, i) => assert.equal(c, mix(under[i]!, KIND.agent, 0.85 * k)))
+  // Over the blue-ish halo the hue is a straight mix, never brighter than the colour itself.
+  assert.ok(got.every(c => (c >> 16 & 255) <= Math.max(KIND.agent >> 16 & 255, under[0]! >> 16 & 255) + 1))
+})
+
+test('a clash or stuck rim still recolours the disc edge and draws no flare', () => {
+  const quiet = paint(null)
+  const lit = paint({ color: LINK.clash, k: 0.9, flare: false })
+  assert.notDeepEqual(band(lit, R - 1, R), band(quiet, R - 1, R))
+  assert.deepEqual(band(lit, R + GRAPH.ringPx, R + GRAPH.ringPx + 1), band(quiet, R + GRAPH.ringPx, R + GRAPH.ringPx + 1))
+})
+
+test('a tool start within 600 ms of the last flicker on that agent is skipped, errors never are', () => {
+  const motion = motionFor(60)
+  const T = 100_000
+  const pulse = (agent: string, at: number, isError = false) => ({ agent, kind: 'bash' as const, at, isError })
+  const rimsAt = (pulses: ReturnType<typeof pulse>[], t: number) => pulseRims({ ...emptyView(), pulses }, t, motion)
+  // The second start at +500 is coalesced. At +520 the first is already over (450 ms), so nothing is drawn.
+  const burst = [pulse('a', T), pulse('a', T + 500)]
+  assert.equal(rimsAt(burst, T + 520).get('a'), undefined)
+  // A start at +600 flickers: it is the fresher, stronger one.
+  const later = rimsAt([pulse('a', T), pulse('a', T + 600)], T + 620).get('a')
+  assert.ok(later !== undefined && later.k > (rimsAt([pulse('a', T)], T + 620).get('a')?.k ?? 0))
+  // Another agent is unaffected.
+  assert.ok(rimsAt([pulse('a', T), pulse('b', T + 100)], T + 120).has('b'))
+  // An error inside the window is drawn, in the failed colour.
+  assert.equal(rimsAt([pulse('a', T), pulse('a', T + 100, true)], T + 120).get('a')?.color, STATUS.failed)
+  // The pulse lasts 450 ms in 3 steps: halfway is 1/3 or 2/3, never a quarter step.
+  assert.equal(MOTION.pulseMs, 450)
+  const k = rimsAt([pulse('a', T)], T + 100).get('a')!.k
+  assert.ok([1 / 3, 2 / 3, 1].some(v => Math.abs(v - k) < 1e-9))
 })

@@ -123,7 +123,7 @@ $ fg #379658 bg #272d39 x2
 & fg #42574f bg #272d39 x2
 * fg #54675f bg #272d39 x2
 + fg #8b98a9 bg #0b0f17 x1
-## bottom 120x17 pairs 28 sha 4834538dce0b748a
+## bottom 120x17 pairs 27 sha 86054322ba7d0f17
 ### glyphs
  ● architect · system-architect · claude-opus-5-5                                                     ◌ waiting · 6m39s 
  tokens in 7.0k  out 1.6k  cache r 42k w 42k  = 93k                                                              ≈$0.28 
@@ -147,48 +147,47 @@ abbcccccccccdddeeeeeeeeeeeeeeeedddbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aeeeeeeeccccccceecccccccceeeeeeeeccccccccccceeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacccccca
 aeeeeeeeeddddddddddeeeeeeeeeeeeeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aeeeeeeeeceddddddddddddddbbeeeeeeeeeddddddddddddddbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-aeeeeeeffcccggeeehheeeiieeejjeeekkeeelleeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeffcccggeeehheeeiieeejjeeekkeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aeeeeeeceeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeea
-mnnnnnnmmmmmmmmooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooopm
-mnnnnnnnnnnnmmmooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooopm
-mnnnnnnnnnmmmmmmqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqrm
-mssnnnnnnnmmmmmmtttttummmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-mnnnnnnnnmmmmmmmmmvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvwm
-mxxnnnnnnnnmmmmmmmyyyxxmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-mmmmmmmmmmmmmmznnzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzznnnnnm
-nnnnAAAAAAAAAAAAAAAAAmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-nnnnBBBmmmmmmmmmzzzmmmmmmzzBBBBBBBBBBBBBmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-nnnnBBBmmmmzzzmmmmmmzzBBBBBBBBBBBBBBBBBBBBBBBmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-nnnnBBBmmmmmmmmmzzzmmmmmmmzzBBBBBBBBBBBBBBBBmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+lmmmmmmllllllllnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnol
+lmmmmmmmmmmmlllnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnol
+lmmmmmmmmmllllllppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppql
+lrrmmmmmmmllllllssssstllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+lmmmmmmmmllllllllluuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvl
+lwwmmmmmmmmlllllllxxxwwlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+llllllllllllllymmyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyymmmmml
+mmmmzzzzzzzzzzzzzzzzzlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAlllllllllyyyllllllyyAAAAAAAAAAAAAllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAllllyyyllllllyyAAAAAAAAAAAAAAAAAAAAAAAlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAlllllllllyyylllllllyyAAAAAAAAAAAAAAAAllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
 ### legend
 a fg #131a26 bg #131a26 x424
 b fg #4d8dff bg #131a26 x21
 c fg #e6edf3 bg #131a26 x52
 d fg #5c6679 bg #131a26 x47
-e fg #9aa4b2 bg #131a26 x162
+e fg #9aa4b2 bg #131a26 x164
 f fg #4fd8e8 bg #131a26 x2
 g fg #ffc861 bg #131a26 x2
 h fg #c49bff bg #131a26 x2
 i fg #a6e35a bg #131a26 x2
 j fg #6f95ff bg #131a26 x2
 k fg #ff86c2 bg #131a26 x2
-l fg #d6dbe1 bg #131a26 x2
-m fg #e6edf3 bg #0b0f17 x630
-n fg #9aa4b2 bg #0b0f17 x72
-o fg #254378 bg #0b0f17 x206
-p fg #3766b8 bg #0b0f17 x2
-q fg #25603e bg #0b0f17 x102
-r fg #379658 bg #0b0f17 x1
-s fg #8b98a9 bg #0b0f17 x2
-t fg #31453f bg #0b0f17 x5
-u fg #4a695a bg #0b0f17 x1
-v fg #6c6826 bg #0b0f17 x100
-w fg #ada430 bg #0b0f17 x1
-x fg #f85149 bg #0b0f17 x4
-y fg #993735 bg #0b0f17 x3
-z fg #5c6679 bg #0b0f17 x113
-A fg #ffb86b bg #0b0f17 x17
-B fg #9ecbff bg #0b0f17 x61
+l fg #e6edf3 bg #0b0f17 x630
+m fg #9aa4b2 bg #0b0f17 x72
+n fg #254378 bg #0b0f17 x206
+o fg #3766b8 bg #0b0f17 x2
+p fg #25603e bg #0b0f17 x102
+q fg #379658 bg #0b0f17 x1
+r fg #8b98a9 bg #0b0f17 x2
+s fg #31453f bg #0b0f17 x5
+t fg #4a695a bg #0b0f17 x1
+u fg #6c6826 bg #0b0f17 x100
+v fg #ada430 bg #0b0f17 x1
+w fg #f85149 bg #0b0f17 x4
+x fg #993735 bg #0b0f17 x3
+y fg #5c6679 bg #0b0f17 x113
+z fg #ffb86b bg #0b0f17 x17
+A fg #9ecbff bg #0b0f17 x61
 ## chips
 ● #3f73d1 lead (lead)
 ● #3f73d1 architect (a-arch)
