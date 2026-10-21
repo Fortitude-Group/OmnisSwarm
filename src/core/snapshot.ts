@@ -1,9 +1,9 @@
 /** Loads swarm state from a snapshot plus the log tail, and keeps it current with `advance`. */
 import { randomUUID } from 'node:crypto'
-import { closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, fstatSync, openSync, readSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, relative } from 'node:path'
 import { emptyState, fold, type SwarmState } from './fold.ts'
-import { ensureLogDirs, logPaths, readEvents, sortEvents, swarmLogPath } from './log.ts'
+import { ensureLogDirs, isLink, logPaths, renameWithRetry, readEvents, sortEvents, swarmLogPath } from './log.ts'
 import { isSwarmState } from './state-check.ts'
 
 export const SNAPSHOT_EVERY = 500
@@ -22,14 +22,12 @@ export function saveSnapshot(root: string, loaded: Loaded): void {
   let renamed = false
   try {
     writeFileSync(tmp, JSON.stringify({ v: 1, offset: loaded.offset, state: loaded.state }), { flag: 'wx' })
-    renameSync(tmp, file)
+    renameWithRetry(tmp, file)
     renamed = true
   } finally {
     if (!renamed) rmSync(tmp, { force: true })
   }
 }
-
-const isLink = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
 
 /** Null unless the snapshot is a plain file in a real log folder, of sane size, with a valid state inside. */
 export function loadSnapshot(root: string, id: string): Loaded | null {

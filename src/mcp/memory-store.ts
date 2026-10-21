@@ -4,9 +4,9 @@ import {
   closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
-import { isSafeKey } from '../core/events.ts'
+import { isSafeKey, NAME } from '../core/events.ts'
 import { MEMORY_KEY } from '../core/fold.ts'
-import { ensureLogDirs, isValidSwarmId, logPaths } from '../core/log.ts'
+import { ensureLogDirs, isValidSwarmId, logPaths, renameWithRetry, sleep } from '../core/log.ts'
 
 export const MAX_VALUE_BYTES = 4096
 
@@ -26,7 +26,6 @@ export class MemoryLimitError extends Error {
 
 export type StoredValue = { value: string; writer: string; at: string }
 
-const WRITER = /^[A-Za-z0-9._-]{1,64}$/
 const LOCK_WAIT_MS = 2000
 const LOCK_STALE_MS = 5000
 
@@ -41,10 +40,6 @@ function isStored(entry: unknown): entry is StoredValue {
   if (typeof entry !== 'object' || entry === null) return false
   const e = entry as Record<string, unknown>
   return typeof e.value === 'string' && typeof e.writer === 'string' && typeof e.at === 'string'
-}
-
-const sleep = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
 type Loaded = { kind: 'missing' } | { kind: 'bad'; why: string } | { kind: 'ok'; data: Record<string, StoredValue> }
@@ -85,7 +80,7 @@ function load(file: string): Loaded {
   const data = emptyStore()
   for (const key of Object.keys(raw)) {
     const entry = (raw as Record<string, unknown>)[key]
-    if (isSafeKey(key) && MEMORY_KEY.test(key) && isStored(entry) && WRITER.test(entry.writer) && Buffer.byteLength(entry.value) <= MAX_VALUE_BYTES) data[key] = { value: entry.value, writer: entry.writer, at: entry.at }
+    if (isSafeKey(key) && MEMORY_KEY.test(key) && isStored(entry) && NAME.test(entry.writer) && Buffer.byteLength(entry.value) <= MAX_VALUE_BYTES) data[key] = { value: entry.value, writer: entry.writer, at: entry.at }
   }
   return { kind: 'ok', data }
 }
@@ -159,24 +154,11 @@ export function releaseLock(lock: string, token: string): void {
   }
 }
 
-function renameWithRetry(from: string, to: string): void {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      renameSync(from, to)
-      return
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code
-      if (attempt >= 4 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw err
-      sleep(20 * (attempt + 1))
-    }
-  }
-}
-
 export function putMemory(root: string, swarm: string, key: string, value: string, writer: string, now = new Date()): void {
   const file = fileFor(root, swarm)
   if (!isSafeKey(key) || !MEMORY_KEY.test(key)) throw new Error(`invalid memory key: ${JSON.stringify(key.slice(0, 80))}`)
   if (Buffer.byteLength(value) > MAX_VALUE_BYTES) throw new Error(`memory value is over ${MAX_VALUE_BYTES} bytes`)
-  if (!WRITER.test(writer)) throw new Error('invalid writer name')
+  if (!NAME.test(writer)) throw new Error('invalid writer name')
   ensureLogDirs(root)
   const lock = `${file}.lock`
   const token = takeLock(lock)

@@ -3,6 +3,7 @@ import './stdio-guard.ts' // must stay the first import
 import { resolve } from 'node:path'
 import { runStdio } from './protocol.ts'
 import { toolFactories } from './registry.ts'
+import { Session } from './session.ts'
 
 /** First non-empty candidate that isn't an unexpanded `${...}` placeholder. */
 const pick = (...candidates: Array<string | undefined>): string | undefined =>
@@ -11,5 +12,6 @@ const pick = (...candidates: Array<string | undefined>): string | undefined =>
 const root = resolve(pick(process.env.OMNIS_PROJECT_DIR, process.env.CLAUDE_PROJECT_DIR) ?? process.cwd())
 process.stderr.write(`omnis: project root ${root}\n`)
 
-const tools = toolFactories.flatMap(factory => factory({ root }))
+const session = new Session(root)
+const tools = toolFactories.flatMap(factory => factory({ root, session }))
 void runStdio(tools, { name: 'omnis-swarm', version: '0.1.0' })

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { appendEvent, readCurrent, readEvents, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
 import { handleMessage } from '../../src/mcp/protocol.ts'
+import { Session } from '../../src/mcp/session.ts'
 import { MAX_TASKS, createTools } from '../../src/mcp/tools.ts'
 import { InputError, optStringList } from '../../src/mcp/validate.ts'
 import { ev, tmpRoot } from '../helpers.ts'
@@ -11,7 +12,7 @@ import { ev, tmpRoot } from '../helpers.ts'
 const NOW = new Date('2026-10-21T10:00:00.000Z')
 const setup = () => {
   const root = tmpRoot()
-  const tools = createTools({ root, now: () => NOW })
+  const tools = createTools({ root, now: () => NOW, session: new Session(root) })
   const call = (name: string, args: Record<string, unknown> = {}) => {
     const tool = tools.find(t => t.name === name)
     if (tool === undefined) throw new Error(`no tool ${name}`)
@@ -138,7 +139,7 @@ test('null-prototype arguments work', () => {
 const twoSessions = () => {
   const root = tmpRoot()
   const make = () => {
-    const tools = createTools({ root, now: () => NOW })
+    const tools = createTools({ root, now: () => NOW, session: new Session(root) })
     return (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
   }
   return { root, a: make(), b: make() }
@@ -349,7 +350,7 @@ test('losing the race to publish current means adopting the winner without ownin
     if (++calls === 2) writeCurrent(root, 'winner')
     return NOW.toISOString()
   }
-  const tools = createTools({ root, now: () => racing })
+  const tools = createTools({ root, now: () => racing, session: new Session(root) })
   const run = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
   run('omnis_task_create', { title: 'x' })
   assert.equal(readCurrent(root), 'winner')

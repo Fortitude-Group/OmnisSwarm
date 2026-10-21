@@ -25,7 +25,8 @@ export function swarmLogPath(root: string, id: string): string {
   return join(logPaths(root).swarms, `${id}.jsonl`)
 }
 
-const isLink = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
+/** True if `path` is a symbolic link (Node reports Windows junctions as links too). */
+export const isLink = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
 
 /** Throws if `path` exists and is a symbolic link (Node reports Windows junctions as links too). */
 function refuseLink(path: string): void {
@@ -74,17 +75,47 @@ export function ensureLogDirs(root: string): void {
   ensureGitignore(root)
 }
 
-/** One append of one line. Retries once, and returns false rather than throwing. */
+/** Roots whose log folders passed the full check and have had no write failure since. */
+const checkedRoots = new Set<string>()
+
+/** The full folder check, but only the first time for a root (and again after a failed append). */
+function ensureLogDirsOnce(root: string): void {
+  if (checkedRoots.has(root)) return
+  ensureLogDirs(root)
+  checkedRoots.add(root)
+}
+
+/** Sleeps this thread; used between retries of a locked file. */
+export const sleep = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/** Renames, retrying a few times on the errors Windows gives while another process holds the file. */
+export function renameWithRetry(from: string, to: string): void {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (attempt >= 4 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) throw err
+      sleep(20 * (attempt + 1))
+    }
+  }
+}
+
+/** One append of one line. Retries once, and returns false rather than throwing. The folders are fully checked on the first append and after any failure. */
 export function appendEvent(root: string, event: SwarmEvent): boolean {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const line = serialise(event)
-      ensureLogDirs(root)
+      ensureLogDirsOnce(root)
       const file = swarmLogPath(root, event.swarm)
       refuseLink(file)
       appendFileSync(file, line)
       return true
     } catch {
+      checkedRoots.delete(root)
       // A locked file, a link or a full disk: try once more, then let the caller show a gap.
     }
   }
@@ -172,7 +203,7 @@ export function writeCurrent(root: string, id: string): void {
   const temp = `${current}.${process.pid}.tmp`
   rmSync(temp, { force: true })
   writeFileSync(temp, `${id}\n`, { flag: 'wx' })
-  renameSync(temp, current)
+  renameWithRetry(temp, current)
 }
 
 export function clearCurrent(root: string): void {

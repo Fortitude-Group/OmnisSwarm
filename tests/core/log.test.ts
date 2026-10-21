@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { serialise, SCHEMA_VERSION } from '../../src/core/events.ts'
 import {
@@ -283,4 +283,22 @@ test('readEvents treats a bad offset as 0 and reports a reset', () => {
     assert.equal(read.reset, true, String(bad))
     assert.deepEqual(read.events, [msg(1)], String(bad))
   }
+})
+
+test('appends after the first do not re-run the folder checks', () => {
+  const root = tmpRoot()
+  assert.equal(appendEvent(root, msg(1)), true)
+  rmSync(join(root, '.gitignore'))
+  assert.equal(appendEvent(root, msg(2)), true)
+  assert.equal(existsSync(join(root, '.gitignore')), false, 'the second append re-ran ensureGitignore')
+})
+
+test('a failed append makes the next append check the folders again', () => {
+  const root = tmpRoot()
+  assert.equal(appendEvent(root, msg(1)), true)
+  rmSync(join(root, '.gitignore'))
+  rmSync(logPaths(root).swarms, { recursive: true })
+  assert.equal(appendEvent(root, msg(2)), true, 'the retry recreates the folders')
+  assert.equal(existsSync(join(root, '.gitignore')), true)
+  assert.equal(readEvents(swarmLogPath(root, 's1')).events.length, 1)
 })

@@ -57,6 +57,9 @@ const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/
 export const isValidSwarmId = (id: string): boolean =>
   SWARM_ID.test(id) && !id.includes('..') && !id.endsWith('.') && !RESERVED.test(id)
 
+/** Agent, writer and assignee names as the tools accept them. */
+export const NAME = /^[A-Za-z0-9._-]{1,64}$/
+
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 /** True for a string that is safe to use as a plain-object key. */
