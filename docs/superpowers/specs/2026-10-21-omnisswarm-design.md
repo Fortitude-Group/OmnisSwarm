@@ -443,7 +443,7 @@ answers `too-large` and the pane says the swarm is too large to draw.
 Pulls run on a `$.clock.every` timer at most 4 times a second (every 250 ms), only while the pane is
 placed and shown (`$.ui.open` answered `isPlaced` and no `ui.close` since), and stop when it closes.
 After 8 empty replies they slow to every 1.5 s, and return to 250 ms on news, a resize, a re-render
-or a pin press. While replies are unreadable they back off to 5 s. One pull is in flight at a time
+or a pin press. While replies are unreadable they back off, doubling up to 5 s. One pull is in flight at a time
 (an awaited call measured 33-88 ms, spike A1). `omnis_feed` is guarded like `omnis_record`
 (section 6). The frame loop doesn't stop when nothing moves: while the pane is shown it drops to
 `FPS.tick` (1 fps) so clock-driven text (ages, live timeline bars) keeps updating, and it stops only
