@@ -1,13 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { appendEvent, readCurrent, readEvents, swarmLogPath } from '../../src/core/log.ts'
-import { swarmOwner, uniqueSwarmId } from '../../src/core/swarm.ts'
+import { readFileSync } from 'node:fs'
+import { sessionKey, swarmOwner, uniqueSwarmId } from '../../src/core/swarm.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createTools } from '../../src/mcp/tools.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
 const NOW = new Date('2026-10-21T10:00:00.000Z')
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
+const KEY = sessionKey(SID)
 const OTHER = '99999999-0000-0000-0000-000000000000'
 
 const toolsFor = (root: string, session: Session) => {
@@ -34,7 +36,7 @@ test('the implicit swarm is named after the session and its swarm.started carrie
   assert.equal(readCurrent(root), id)
   assert.equal(s.owned, true)
   const [started] = readEvents(swarmLogPath(root, id)).events
-  assert.deepEqual(started?.data, { name: id, topology: 'hierarchical', implicit: true, session: SID })
+  assert.deepEqual(started?.data, { name: id, topology: 'hierarchical', implicit: true, session: sessionKey(SID) })
 })
 
 test('without a session id the implicit swarm is named by time and carries no id', () => {
@@ -117,15 +119,71 @@ test('omnis_swarm_init stamps the session id on a new swarm when it is known', (
   s.noteSession(SID)
   toolsFor(root, s)('omnis_swarm_init', { name: 'Explicit', topology: 'star' })
   const [started] = readEvents(swarmLogPath(root, 'explicit')).events
-  assert.deepEqual(started?.data, { name: 'Explicit', topology: 'star', implicit: false, session: SID })
+  assert.deepEqual(started?.data, { name: 'Explicit', topology: 'star', implicit: false, session: KEY })
 })
 
 test('swarmOwner reads the first swarm.started only, and is null when there is none', () => {
   const root = tmpRoot()
   const id = uniqueSwarmId(root, 'owned')
   assert.equal(swarmOwner(root, id), null)
-  appendEvent(root, ev('swarm.started', { name: 'owned', topology: 'mesh', implicit: false, session: SID }, { swarm: id, src: 'mcp' }))
-  appendEvent(root, ev('swarm.started', { name: 'renamed', topology: 'mesh', implicit: false, session: OTHER }, { swarm: id, src: 'mcp', atSec: 1 }))
-  assert.equal(swarmOwner(root, id), SID)
+  appendEvent(root, ev('swarm.started', { name: 'owned', topology: 'mesh', implicit: false, session: KEY }, { swarm: id, src: 'mcp' }))
+  appendEvent(root, ev('swarm.started', { name: 'renamed', topology: 'mesh', implicit: false, session: sessionKey(OTHER) }, { swarm: id, src: 'mcp', atSec: 1 }))
+  assert.equal(swarmOwner(root, id), KEY)
   assert.equal(swarmOwner(root, 'missing'), null)
+})
+
+test('the raw session id never appears in the log', () => {
+  const root = tmpRoot()
+  const s = new Session(root)
+  s.noteSession(SID)
+  const id = s.swarmOrCreate(NOW)
+  assert.ok(!readFileSync(swarmLogPath(root, id), 'utf8').includes(SID))
+})
+
+test('presenting the key read from the log does not grant ownership', () => {
+  const root = tmpRoot()
+  const first = new Session(root)
+  first.noteSession(SID)
+  const id = first.swarmOrCreate(NOW)
+  const key = swarmOwner(root, id)!
+  const attacker = new Session(root)
+  attacker.noteSession(key.padEnd(36, '0').replace(/(.{8})(.{4})(.{4})(.{4})(.*)/, '$1-$2-$3-$4-$5'))
+  attacker.mySwarm()
+  assert.equal(attacker.owned, false)
+})
+
+test('a conflicting second session id switches log ownership off', () => {
+  const root = tmpRoot()
+  const first = new Session(root)
+  first.noteSession(SID)
+  first.swarmOrCreate(NOW)
+  const restarted = new Session(root)
+  restarted.noteSession(SID)
+  const write = process.stderr.write
+  let warned = 0
+  process.stderr.write = (() => { warned++; return true }) as typeof process.stderr.write
+  try {
+    restarted.noteSession(OTHER)
+    restarted.noteSession(OTHER)
+  } finally {
+    process.stderr.write = write
+  }
+  assert.equal(warned, 1)
+  assert.equal(restarted.sessionKey, null)
+  assert.equal(restarted.mySwarm(false), null)
+  assert.equal(restarted.owned, false)
+})
+
+test('a swarm started before the session id was known is still owned after a restart', () => {
+  const root = tmpRoot()
+  const first = new Session(root)
+  const id = first.swarmOrCreate(NOW)
+  first.noteSession(SID)
+  assert.equal(first.owned, true)
+
+  const restarted = new Session(root)
+  restarted.noteSession(SID)
+  assert.equal(restarted.swarmOrCreate(NOW), id)
+  assert.equal(restarted.owned, true)
+  assert.match(toolsFor(root, restarted)('omnis_swarm_end').text, /ended/)
 })

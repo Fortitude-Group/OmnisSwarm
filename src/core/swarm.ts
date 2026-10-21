@@ -1,4 +1,5 @@
 /** Naming swarms and making sure one is running. */
+import { createHash } from 'node:crypto'
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { makeEvent, parseLine, type Source } from './events.ts'
 import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, readEvents, swarmLogPath, writeCurrent } from './log.ts'
@@ -69,16 +70,24 @@ export function announceSwarm(root: string, id: string, input: { src: Source; no
   }))
 }
 
+/** What the log stores in place of a Claude Code session id: the first 16 hex of its sha256. The raw id never reaches a log. */
+export function sessionKey(sessionId: string): string {
+  return createHash('sha256').update(sessionId).digest('hex').slice(0, 16)
+}
+
 /**
- * The Claude Code session that started swarm `id`: the `session` of its first swarm.started, or null.
- * Later swarm.started lines (renames) don't change it. The log is a display record, so this only
- * decides whether this server may end or rename the swarm.
+ * The session key (see sessionKey) of the session that started swarm `id`: the `session` of its first
+ * swarm.started that carries one, or null. Renames after that don't change it. The log is a display
+ * record, so this only decides whether this server may end or rename the swarm. It is safe only while
+ * non-owners can't append swarm.started: init renames only swarms it owns, and the recorder can't
+ * write that type.
  */
 export function swarmOwner(root: string, id: string): string | null {
   try {
-    const first = readEvents(swarmLogPath(root, id)).events.find(e => e.type === 'swarm.started')
-    const session = first?.type === 'swarm.started' ? first.data.session : undefined
-    return typeof session === 'string' ? session : null
+    for (const e of readEvents(swarmLogPath(root, id)).events) {
+      if (e.type === 'swarm.started' && typeof e.data.session === 'string') return e.data.session
+    }
+    return null
   } catch {
     return null
   }
