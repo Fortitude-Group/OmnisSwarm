@@ -91,6 +91,35 @@ function safely($: EngineInterface, work: () => void): void {
   }
 }
 
+/**
+ * The end event of a tool call, and for a protocol SendMessage its message event. Module level on purpose: a closure
+ * made in the hook would share its scope with the hook's other closures and keep the tool's input and result alive.
+ */
+function endBodies(
+  $: EngineInterface, tool: string, args: Fields, result: { isError?: boolean; deny?: unknown }, who: string,
+): { end: RecordBody | null; message: RecordBody | null } {
+  try {
+    const failed = result.isError === true || result.deny !== undefined
+    // Plain-text SendMessage is recorded from session.send; protocol payloads raise none, so they come from here.
+    const message = tool === 'SendMessage' && !failed ? protocolMessage(args, who) : null
+    return { end: toolEvent('end', tool, args, who, failed), message }
+  } catch {
+    rec.outbox.lose()
+    saveDropped($)
+    return { end: null, message: null }
+  }
+}
+
+/** Sends the end once the start's call has settled, so it can't overtake it. Holds only the small bodies and the time. */
+function chainEnd($: EngineInterface, started: Promise<void>, end: RecordBody | null, message: RecordBody | null, ts: string): void {
+  void started.then(() =>
+    safely($, () => {
+      void send($, end, ts)
+      void send($, message, ts)
+    }),
+  )
+}
+
 async function restore($: EngineInterface): Promise<void> {
   const stored = await read($, droppedAtom)
   for (const id of await read($, seenAtom)) rec.seen.add(id)
@@ -152,23 +181,11 @@ export function registerRecorder(on: On): void {
     const result = await next(e)
     const who: string | null = agent
     if (who !== null) {
-      // Built now, so the wait below holds only these small bodies and the time the tool finished, not its input or result.
-      let end: RecordBody | null = null
-      let message: RecordBody | null = null
+      // Built now, so the wait holds only these small bodies and the time the tool finished, not its input or result.
       const ts = new Date(Date.now()).toISOString()
-      safely($, () => {
-        const failed = result.isError === true || result.deny !== undefined
-        end = toolEvent('end', tool, args, who, failed)
-        // Plain-text SendMessage is recorded from session.send; protocol payloads raise none, so they come from here.
-        if (tool === 'SendMessage' && !failed) message = protocolMessage(args, who)
-      })
-      // The end goes out once the start's call has settled, so it can't overtake it. Not awaited: the result returns now.
-      void started.then(() =>
-        safely($, () => {
-          void send($, end, ts)
-          void send($, message, ts)
-        }),
-      )
+      const { end, message } = endBodies($, tool, args, result, who)
+      // Not awaited: the result returns now.
+      chainEnd($, started, end, message, ts)
     }
     return result
   }).catch((_$, e, next) => next(e))
