@@ -200,12 +200,16 @@ test('a refused blit is sent again by the next frame, even when its cells have n
   for (let i = 0; i < 400 && seen.blitLog.filter(b => !b.ok).length === 0; i++) await clock.advance(250)
   const refused = seen.blitLog.find(b => !b.ok)
   expect(refused).toBeDefined()
-  const at = seen.blitLog.indexOf(refused!)
-  // The next blit of that Raster carries the refused cells again: the frame after a refusal is usually the same picture.
-  const sameRaster = () => seen.blitLog.slice(at + 1).filter(b => b.key === refused!.key)
-  for (let i = 0; i < 400 && sameRaster().length === 0; i++) await clock.advance(50)
-  expect(sameRaster()[0]?.cells).toBe(refused!.cells)
-  expect(sameRaster()[0]?.ok).toBe(true)
+  // Every pull answers a whole state, and each answer draws a frame. Frames that send nothing are invisible to the
+  // stub, so the answers mark frames: the resend must come no later than the frame drawn for the first answer after
+  // the refusal, so before the second answer. Without the fix, identical frames send nothing until the picture moves.
+  const newsAfter = () => seen.news.filter(n => n > refused!.at)
+  for (let i = 0; i < 400 && newsAfter().length < 2; i++) await clock.advance(50)
+  expect(newsAfter().length).toBeGreaterThanOrEqual(2)
+  const resend = seen.blitLog.find(b => b.at > refused!.at && b.key === refused!.key)
+  expect(resend).toBeDefined()
+  expect(resend!.ok).toBe(true)
+  expect(resend!.at).toBeLessThan(newsAfter()[1]!)
   await ui.unmount()
 })
 
