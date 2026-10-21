@@ -19,6 +19,7 @@ gets rendered. Developers write the render code.
 
 ## House rules (every OmnisSwarm role)
 
+- NEVER kill processes by name or image (no `taskkill /IM`, `pkill`, `killall`, `Stop-Process -Name`). This machine runs other Claude sessions and servers. Stop only a process you started, by its own PID, and prefer timeouts (e.g. `node --test --test-timeout=60000`) so nothing hangs in the first place.
 - Windows dev machine: commands must work in Git Bash and PowerShell. Node >= 24 runs `.ts` directly.
 - Commits: author `Fortitude Omnis <dev@fortitude-omnis.group>`, plain developer English, no
   `Co-Authored-By`, no "Generated with" line, no AI attribution of any kind.
