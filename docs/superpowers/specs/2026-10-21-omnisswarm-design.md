@@ -78,7 +78,8 @@ Non-goals (v1)
 A hooks module runs with no Node: it imports only its own files and `claude-code`, and reaches files
 through `$.fs`, which can't append or read from an offset (spike Q5). So the mod never touches the log
 file. It hands each event to the plugin's own MCP server with `$.mcp.call`, and the server appends it.
-That channel was run end to end in the spike (round 2): calls arrive in hook order, an awaited call
+That channel was run end to end in the spike (round 2): sequential calls arrive in hook order (only one
+was ever in flight, so overlapping calls are untested, and readers order by the mod's `ts` anyway), an awaited call
 takes 33-88 ms, a slow call doesn't hold up the session, and a killed server is restarted by Claude
 Code on the next call (spike A1).
 
@@ -187,8 +188,13 @@ and dropped. The arguments must be plain, cloneable data (a Promise in them is r
 `arguments are not plain data`). At most 64 calls are in flight; past that an event is dropped and
 counted, and the count is sent with the next event that gets through so the pane can show a gap.
 `$.mcp.call` raises `tool.call` and `tool.check` like any tool call (only the hook that made the call
-is skipped), so the recorder's `tool.call` handler ignores `omnis_*` internal tools rather than
-recording its own traffic. A killed server answers in-flight calls with `isError` ("Connection
+is skipped), so the recorder's `tool.call` handler ignores the internal tools `omnis_record` and `omnis_feed`
+(by their full names, `mcp__plugin_<plugin>_<server>__omnis_record` and `__omnis_feed`) rather than
+recording its own traffic. The model's calls to the public `omnis_*` tools (`omnis_swarm_init`,
+`omnis_memory_put` and the rest) are still recorded as `agent.tool` like any other tool. Every recorder
+event and every pane pull runs every installed mod's `tool.call` and `tool.check` hooks, ours
+included; phase 2 checks whether `$.mcp.call` also raises classic `PreToolUse` command hooks (a
+process spawn per call would be too slow at this rate) and, if it does, says so in the README. A killed server answers in-flight calls with `isError` ("Connection
 closed"), and Claude Code restarts it on the next call. That call's event and any in flight are lost.
 
 **Guard (security).** The internal tools are listed by the server, so the model can find them with
@@ -201,6 +207,15 @@ ToolSearch. The mod therefore:
   tier: 'user' }` (verified, spike A1). The registration carries
   `.catch(($, e, next) => isInternal(e.tool) ? { decision: 'deny' } : next(e))`, so a failing guard
   fails closed for our tools and open for everything else.
+
+The origin check was verified only with `--plugin-dir`, where `$.plugin.name` and `next.origin.plugin`
+both read the bare name (`omnis-probe`, while `tool.describe`'s `provider` read `omnis-probe@inline`).
+Phase 4 re-checks it after a marketplace install, where the id becomes `<name>@<marketplace>`.
+
+**When mods don't load** (`disableAllHooks`, `allowManagedHooksOnly`, `allowManagedModsOnly`), the
+MCP server still connects but nothing guards `omnis_record` and `omnis_feed`: the model can call
+them and could forge `agent.*` events. That is accepted, because the log is a display record and not
+a trust boundary (section 8); the server's own type and `LIMITS` checks still apply.
 
 The server does its own checks too, since the mod is not a trust boundary: `omnis_record` accepts
 only the recorder's event types (`agent.started`, `agent.finished`, `agent.usage`, `agent.tool`,
@@ -311,7 +326,8 @@ Rules:
 - Memory values themselves live in `.omnis-swarm/memory/<swarmId>.json`, written by the MCP
   server, so the log stays small.
 - The log is a display record, not a trust boundary. Any process that can write the project folder
-  can write lines, and any installed mod can call the server. Nothing reads the log to decide what
+  can write lines, and any installed mod can try to call the server (the guard refuses unless a hook
+  in a tier above ours overrides it). Nothing reads the log to decide what
   to run or allow. Readers treat every field as untrusted text when drawing it (length caps, no
   control characters).
 
@@ -421,7 +437,7 @@ The rule: OmnisSwarm never breaks or slows the session. Failures make it show le
 
 | Failure | Behaviour |
 |---|---|
-| Function hooks off (policy: `disableAllHooks`, `allowManagedHooksOnly`, `allowManagedModsOnly`) | MCP tools still work; no recorder or pane. Claude Code 2.1.306 needs no environment variable to load mods |
+| Function hooks off (policy: `disableAllHooks`, `allowManagedHooksOnly`, `allowManagedModsOnly`) | MCP tools still work, including the internal `omnis_record` and `omnis_feed`, which are then unguarded (accepted: the log is a display record, section 8); no recorder or pane. Claude Code 2.1.306 needs no environment variable to load mods |
 | MCP server unreachable from the mod | `$.mcp.call` fails; the event is dropped and counted; the session is untouched |
 | MCP server killed or crashed | In-flight calls resolve `isError` ("Connection closed"); Claude Code starts a new server on the next call (verified); those events are lost and counted; the new server rebuilds from `.omnis-swarm/` |
 | MCP server slow | Recorder calls are not awaited, so hooks return at once (a 2 s call was measured with no delay to the session); past 64 in flight, events are dropped and counted |
@@ -457,7 +473,12 @@ itself, so they need the `claude` CLI. `npm run check` becomes typecheck, then `
 `npm run test:mod` (`claude plugin test .`), plus `claude plugin validate .` so a mod that imports
 Node or passes `$` where the engine can't follow it fails the check. Where `claude` isn't on PATH,
 `test:mod` prints that it was skipped and exits non-zero only under `CI=1`. Mod test files must
-not sit under `tests/`, or `node --test` would pick them up without the engine.
+not sit under `tests/`, or `node --test` would pick them up without the engine. The mod side gets its
+own `tsconfig.mod.json` (covering `src/mod/`, `src/render/` and the core files they import) with
+`"types": []` (no `@types/node`), `"lib": ["ES2024"]`, the engine's `claude-code` declarations, and a small
+ambient file declaring only the web globals a mod has (`TextEncoder`, `structuredClone`, `setTimeout` and the
+like, per the spike's run-time list). So `Buffer`, `process` or `require` in a mod file fails the
+typecheck; `npm run typecheck` runs both configs.
 - **e2e:** a scripted 5-agent swarm log rendered headless through the pane; checks the expected nodes, links and totals.
 
 ## 13. Later: hub server and WebGL window
@@ -510,11 +531,13 @@ each one against the engine's own type declarations and a probe session.
 
 - ✅ `agent.spawn`'s `result.agentId` matches the `agent-<id>.jsonl` transcript name exactly (spike Q1).
 - ✏️ `tool.call` exposes `SendMessage`'s `to`, `message` and `summary`, but `session.send` is the better
-  source: it says whether the message was delivered. The lead's address is `main`, not `lead` (spike Q2).
+  source: it says whether the message was delivered. The lead's address is `main` or its team name
+  (`team-lead`), with a trailing ` [ref]` stripped, as in section 6 (spike Q2).
 - ✅ `turn.complete` fires once per subagent run with its `agentId`. Reasons are `answer`, `aborted`,
   `refusal` and `error`. A resumed agent or a teammate finishes once per run (spike Q3).
-- ✅ `Raster` is up to 512 columns by 256 rows, blits up to 120 a second (about 60 shown), and paints at
-  most 1024 distinct colour pairs per frame. Blit throughput itself is untested (spike Q6).
+- ✏️ `Raster`, partly verified: the 512 x 256 bounds and the cell encoding were checked against the
+  engine. The blit rate (up to 120 a second, about 60 shown) and the 1024-colour-pair palette are from the
+  docs only (spike Q6).
 - ✅ Plugin MCP servers run `.ts` with Node's type stripping and no build. They start in the project
   directory, and `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PROJECT_DIR}` expand in `args` and `env` (spike Q7).
 - ✏️ Function hooks are early access, but 2.1.306 loaded the mod without
