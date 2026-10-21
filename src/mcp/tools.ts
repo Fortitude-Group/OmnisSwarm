@@ -75,7 +75,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const topology = reqEnum(args, 'topology', TOPOLOGIES)
         const goal = optText(args, 'goal', 200)
         const now = clock()
-        const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false }
+        const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false, ...(session.sessionKey !== null && { session: session.sessionKey }) }
         const existing = session.mySwarm(false) // init never takes over a swarm it didn't start
         let replaced: string | null = null
         if (existing !== null && session.owned) {

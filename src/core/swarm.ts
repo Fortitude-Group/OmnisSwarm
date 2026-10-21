@@ -1,7 +1,8 @@
 /** Naming swarms and making sure one is running. */
+import { createHash } from 'node:crypto'
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { makeEvent, parseLine, type Source } from './events.ts'
-import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, swarmLogPath, writeCurrent } from './log.ts'
+import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, readEvents, swarmLogPath, writeCurrent } from './log.ts'
 
 /** Lower-case letters, digits, dots and dashes; no leading or trailing punctuation; no dot runs; at most 64 characters. */
 export function slugify(name: string): string {
@@ -58,15 +59,38 @@ export function uniqueSwarmId(root: string, base: string, onAttempt?: () => void
   throw new Error('no free swarm id')
 }
 
-/** Appends the swarm.started event to a swarm whose id was claimed with uniqueSwarmId. */
-export function announceSwarm(root: string, id: string, input: { src: Source; now?: Date }): void {
+/** Appends the swarm.started event to a swarm whose id was claimed with uniqueSwarmId. `session` is the Claude Code session that started it. */
+export function announceSwarm(root: string, id: string, input: { src: Source; now?: Date; session?: string }): void {
   appendEvent(root, makeEvent({
     type: 'swarm.started',
     swarm: id,
     src: input.src,
-    data: { name: id, topology: 'hierarchical', implicit: true },
+    data: { name: id, topology: 'hierarchical', implicit: true, ...(input.session !== undefined && { session: input.session }) },
     ...(input.now !== undefined && { now: input.now }),
   }))
+}
+
+/** What the log stores in place of a Claude Code session id: the first 16 hex of its sha256. The raw id never reaches a log. */
+export function sessionKey(sessionId: string): string {
+  return createHash('sha256').update(sessionId).digest('hex').slice(0, 16)
+}
+
+/**
+ * The session key (see sessionKey) of the session that started swarm `id`: the `session` of its first
+ * swarm.started that carries one, or null. Renames after that don't change it. The log is a display
+ * record, so this only decides whether this server may end or rename the swarm. It is safe only while
+ * non-owners can't append swarm.started: init renames only swarms it owns, and the recorder can't
+ * write that type.
+ */
+export function swarmOwner(root: string, id: string): string | null {
+  try {
+    for (const e of readEvents(swarmLogPath(root, id)).events) {
+      if (e.type === 'swarm.started' && typeof e.data.session === 'string') return e.data.session
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 /** True if the swarm's log holds nothing but its own swarm.started line. */
