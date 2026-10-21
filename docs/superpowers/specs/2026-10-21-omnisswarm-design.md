@@ -175,6 +175,7 @@ the result through unchanged, even if the handler throws.
 | `turn.step` with `agentId` (after `next`, when `usage` is not null), or without it for the lead | `agent.usage` from the step's `usage`, see section 7 |
 | `tool.call` (before and after `next`) | `agent.tool`: `phase` `start`/`end`, `tool`, `kind` (read, edit, bash, search, web, agent, other), `subject` (path or command, ≤ 80 chars), `isError` |
 | `session.send` with `origin.kind === 'model'` (after `next`, when `isDelivered`) | `message.sent`: `to`, `summary` (first 200 chars of `text`). Sends by plugins (`origin.kind === 'plugin'`) are not recorded |
+| `tool.call` where `tool` is `SendMessage` and `message` is an object (after `next`, when the result has no `isError`) | `message.sent`: `to`, `summary` = `[<message.type>]` plus `approve: yes/no` where the payload has it (never `reason` or `feedback` text) |
 | `session.measure` when `changed` has `context` or `cost` | `session.measure`, see section 9 |
 | `ui.render` / `ui.close` / `command.run` | Pane only, see section 10 |
 
@@ -224,8 +225,17 @@ disambiguation suffix ListAgents shows); `main`, or the lead's name in an agent 
 a string equal to a known agent id is that agent; otherwise the most recently started agent with
 that name in the swarm (a teammate name with a `-2` style suffix matches exactly, not by prefix).
 A name it can't resolve becomes a placeholder node marked "unknown", so the message still shows
-rather than being dropped. `session.send` carries plain-text messages only; the protocol messages
-(`shutdown_request` and the like) are visible only as `SendMessage` tool calls.
+rather than being dropped.
+
+**Protocol messages.** `session.send` carries plain-text messages only. SendMessage's protocol
+payloads (`message` an object: `shutdown_request`, `shutdown_response`, `plan_approval_response`)
+raise no `session.send`, so the recorder takes them from the `SendMessage` `tool.call` instead,
+after `next`, and records them as `message.sent` with the summary `[shutdown_request]` (or
+`[plan_approval_response] approve: no`, and so on). A plain-text SendMessage is never recorded from
+`tool.call`, only from `session.send`, so nothing is counted twice. The `tool.call` path can't tell
+whether a protocol message was delivered: a failed SendMessage comes back without `isError` (spike
+Q2), so these are recorded when sent, not when delivered. That difference is accepted: they are rare
+and the pane shows them as control messages, not chat.
 
 ## 7. Token usage
 
