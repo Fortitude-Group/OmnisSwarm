@@ -10,7 +10,7 @@ while (Date.now() < start) {
   // spin for the last few milliseconds
 }
 try {
-  putMemory(root, 's1', `${prefix}/first`, 'v', prefix)
+  putMemory(root, 's1', `${prefix}/first`, 'v', prefix, new Date(), 30_000)
 } catch (err) {
   console.error(String(err))
   process.exit(1)
