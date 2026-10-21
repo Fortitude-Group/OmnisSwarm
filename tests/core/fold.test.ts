@@ -204,3 +204,18 @@ test('text replaces bidi and other format characters', () => {
   const s = run([ev('message.sent', { to: 'lead', summary: 'abc\u202Edef\u200Bghi' }, { agent: 'a1', atSec: 1 })])
   assert.equal(s.feed[0]!.text, 'abc def ghi')
 })
+
+test('goal, note, assignee and dependsOn are cleaned of terminal escapes', () => {
+  const s = run([
+    ev('swarm.started', { name: 'n', topology: 'mesh', goal: '\u001b]0;pwn\u0007', implicit: false }, { atSec: 1, src: 'mcp' }),
+    ev('task.created', { id: 't1', title: 'a', assignee: '\u001b[2J', dependsOn: ['\u001b[2J', 't0', '\u202E'] }, { atSec: 2, src: 'mcp' }),
+    ev('task.created', { id: 't2', title: 'b' }, { atSec: 2, src: 'mcp' }),
+    ev('task.updated', { id: 't2', state: 'active', assignee: '\u001b[2J', note: '\u001b[31mred' }, { atSec: 3, src: 'mcp' }),
+  ])
+  assert.equal(s.swarm.goal, ']0;pwn')
+  assert.deepEqual(s.tasks.t1!.dependsOn, ['[2J', 't0'])
+  assert.equal(s.tasks.t1!.assignee, '[2J')
+  assert.equal(s.tasks.t2!.assignee, '[2J')
+  assert.equal(s.tasks.t2!.note, '[31mred')
+  assert.ok(!/[\p{Cc}\p{Cf}]/u.test(JSON.stringify(s)))
+})
