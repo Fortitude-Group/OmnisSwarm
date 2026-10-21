@@ -390,8 +390,28 @@ test('a pull that does not settle shows the degraded note after 5 s, and a new p
   expect(await top()).toContain('⚠ Waiting')
   expect(feedCalls(seen).length).toBe(stuck)
   seen.feed = 'ok'
-  await clock.advance(25_000)
+  // Given up at 30 s, then the 5 s wait before connecting afresh.
+  await clock.advance(30_000)
   expect(feedCalls(seen).length).toBeGreaterThan(stuck)
+  await ui.unmount()
+})
+
+test('giving up on a hung pull drops the server and backs off before connecting again', { timeoutMs: 30_000 }, async ($, on) => {
+  const { seen, clock, ui } = await opened($, on, true)
+  await clock.advance(300)
+  seen.late = never
+  seen.feed = 'late'
+  await clock.advance(300)
+  const stuck = feedCalls(seen).length
+  const connects = seen.connects
+  // Given up at 30 s: no call is stacked on the hung server, and no connect comes before the 5 s wait.
+  await clock.advance(31_000)
+  expect(feedCalls(seen).length).toBe(stuck)
+  expect(seen.connects).toBe(connects)
+  // After the wait the pane connects afresh, then pulls.
+  await clock.advance(5_000)
+  expect(seen.connects).toBe(connects + 1)
+  expect(feedCalls(seen).length).toBe(stuck + 1)
   await ui.unmount()
 })
 
