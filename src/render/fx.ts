@@ -18,15 +18,16 @@ export const ghost = (finishedAt: number | null, now: number): number =>
   finishedAt === null ? 0 : clamp01((now - finishedAt) / MOTION.ghostMs)
 
 /** A slow 0..1 breath, offset per agent by `seed` so neighbours don't pulse in step. */
-export const glow = (now: number, seed: number): number => 0.5 + 0.5 * Math.sin(2 * Math.PI * (now / MOTION.glowPeriodMs + seed))
+export const glow = (now: number, seed: number): number =>
+  Number.isFinite(now) && Number.isFinite(seed) ? 0.5 + 0.5 * Math.sin(2 * Math.PI * (now / MOTION.glowPeriodMs + seed)) : 0.5
 
 /** 1 at `at`, falling to 0 over `ms`; 0 before `at`. */
 export function flash(at: number, now: number, ms: number): number {
   const age = now - at
-  return age < 0 || age > ms ? 0 : 1 - age / ms
+  return ms > 0 && Number.isFinite(ms) && age >= 0 && age <= ms ? 1 - age / ms : 0
 }
 
-export const blink = (now: number, ms: number): boolean => Math.floor(now / ms) % 2 === 0
+export const blink = (now: number, ms: number): boolean => !(ms > 0) || !Number.isFinite(now) || Math.floor(now / ms) % 2 === 0
 
 /** A stable 0..1 number for a string (FNV-1a). */
 export function hashUnit(s: string): number {
@@ -41,8 +42,8 @@ export function hashUnit(s: string): number {
 export const lerpPoint = (a: Point, b: Point, t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
 
 /**
- * A gentle curve from a to b (a quadratic Bezier), bowed to the left of the direction of travel by `bend` times the
- * distance. The reverse direction bows the other way, so a pair of links reads as two.
+ * A gentle curve from a to b (a quadratic Bezier), bowed by `bend` times the
+ * distance. It bows to +y when travelling +x; the reverse direction bows the other way, so a pair of links reads as two.
  */
 export function arc(a: Point, b: Point, bend: number): (t: number) => Point {
   const cx = (a.x + b.x) / 2 - (b.y - a.y) * bend
@@ -62,7 +63,7 @@ export type Spark = { p: Point; k: number }
  */
 export function comet(path: (t: number) => Point, at: number, now: number): Spark[] {
   const age = now - at
-  if (age < 0 || age > MOTION.cometMs + MOTION.trailMs) return []
+  if (!Number.isFinite(age) || age < 0 || age > MOTION.cometMs + MOTION.trailMs) return []
   const head = age / MOTION.cometMs
   const gap = MOTION.trailMs / MOTION.cometMs / MOTION.trailDots
   const out: Spark[] = []
@@ -80,7 +81,7 @@ export function tween(target: Readonly<Record<string, Point>>, t: Tween | null, 
   const out: Record<string, Point> = {}
   for (const [id, p] of Object.entries(target)) {
     const from = t !== null && Object.hasOwn(t.from, id) ? t.from[id]! : p
-    out[id] = k >= 1 ? p : lerpPoint(from, p, k)
+    Object.defineProperty(out, id, { value: k >= 1 ? p : lerpPoint(from, p, k), enumerable: true, writable: true, configurable: true })
   }
   return out
 }

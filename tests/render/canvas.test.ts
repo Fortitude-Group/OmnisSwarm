@@ -64,3 +64,22 @@ test('compose draws half-blocks, flat cells and braille over the mean of the two
 test('toDots doubles both axes', () => {
   assert.deepEqual(toDots({ x: 1.5, y: 2 }), { x: 3, y: 4 })
 })
+
+test('non-finite coordinates are ignored and long lines stay bounded', () => {
+  const p = new Pixels(4, 4, 0x111111)
+  p.set(NaN, 1, 0xffffff)
+  assert.equal(p.get(NaN, 0), 0)
+  assert.equal(p.get(Infinity, 0), 0)
+  p.line({ x: 0, y: 0 }, { x: Infinity, y: 0 }, 0xffffff)
+  p.line({ x: NaN, y: 0 }, { x: 1, y: 0 }, 0xffffff)
+  assert.equal(p.get(0, 0), 0x111111)
+  const d = new Dots(2, 1)
+  d.dot(0, NaN, 1)
+  d.dot(Infinity, 0, 1)
+  d.line({ x: 0, y: 0 }, { x: -Infinity, y: 0 }, 1)
+  assert.deepEqual([...d.bits], [0, 0])
+  const t = Date.now()
+  p.line({ x: 0, y: 0 }, { x: 3e7, y: 3e7 }, 0x00ff00)
+  d.line({ x: 0, y: 0 }, { x: 3e7, y: 3e7 }, 1)
+  assert.ok(Date.now() - t < 100)
+})

@@ -73,3 +73,33 @@ test('tween glides from the old positions to the new ones', () => {
   const mid = tween(target, t, 1000 + MOTION.tweenMs / 2).a!
   assert.ok(mid.x > 5 && mid.x < 10)
 })
+
+test('glow phase and shape are pinned, and the trail strength is 1 - i/7', () => {
+  assert.equal(glow(0, 0), 0.5)
+  assert.ok(Math.abs(glow(MOTION.glowPeriodMs / 4, 0) - 1) < 1e-12)
+  const path = (t: number) => lerpPoint({ x: 0, y: 0 }, { x: 100, y: 0 }, t)
+  const c = comet(path, 0, MOTION.cometMs)
+  for (let i = 1; i < c.length; i++) assert.ok(Math.abs(c[i]!.k - (1 - i / 7)) < 1e-12)
+})
+
+test('non-finite inputs give safe answers', () => {
+  const path = (t: number) => lerpPoint({ x: 0, y: 0 }, { x: 100, y: 0 }, t)
+  for (const bad of [NaN, Infinity, -Infinity]) {
+    assert.equal(glow(bad, 0), 0.5)
+    assert.equal(glow(0, bad), 0.5)
+    assert.equal(flash(0, bad, 100), 0)
+    assert.equal(flash(0, 5, bad), 0)
+    assert.deepEqual(comet(path, 0, bad), [])
+    assert.equal(blink(0, bad), true)
+    assert.equal(typeof blink(bad, 250), 'boolean')
+  }
+  assert.equal(flash(0, 5, 0), 0)
+  assert.equal(blink(300, 0), true)
+})
+
+test('tween copes with a __proto__ id', () => {
+  const target = JSON.parse('{"__proto__":{"x":1,"y":2}}')
+  const out = tween(target, null, 0)
+  assert.deepEqual(Object.keys(out), ['__proto__'])
+  assert.equal(Object.getPrototypeOf(out), Object.prototype)
+})

@@ -24,6 +24,7 @@ export class Pixels {
   }
 
   #at(x: number, y: number): number {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return -1
     const px = Math.floor(x)
     const py = Math.floor(y)
     return px < 0 || py < 0 || px >= this.width || py >= this.height ? -1 : py * this.width + px
@@ -50,7 +51,8 @@ export class Pixels {
   }
 
   line(a: Point, b: Point, c: number, t = 1): void {
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))))
+    if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return
+    const steps = Math.min(this.width + this.height, Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)))))
     for (let i = 0; i <= steps; i++) this.blend(a.x + ((b.x - a.x) * i) / steps, a.y + ((b.y - a.y) * i) / steps, c, t)
   }
 }
@@ -78,6 +80,7 @@ export class Dots {
 
   /** Lights the dot under (x, y), in dot space. A cell takes the colour of the last dot drawn in it. */
   dot(x: number, y: number, c: number): void {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
     const dx = Math.floor(x)
     const dy = Math.floor(y)
     if (dx < 0 || dy < 0 || dx >= this.width || dy >= this.height) return
@@ -88,7 +91,8 @@ export class Dots {
 
   /** A line of dots from a to b in dot space. With `dash`, every other run of `dash` dots is left out. */
   line(a: Point, b: Point, c: number, dash = 0): void {
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))))
+    if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return
+    const steps = Math.min(this.width + this.height, Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)))))
     for (let i = 0; i <= steps; i++) {
       if (dash > 0 && Math.floor(i / dash) % 2 === 1) continue
       this.dot(a.x + ((b.x - a.x) * i) / steps, a.y + ((b.y - a.y) * i) / steps, c)
