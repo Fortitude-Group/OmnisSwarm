@@ -51,6 +51,13 @@ test('base64 matches the standard alphabet and round-trips', () => {
   assert.deepEqual([...fromBase64(toBase64(bytes))], [...bytes])
 })
 
+test('base64 of a whole large Raster matches Node, across every chunk boundary and tail length', () => {
+  for (const length of [0, 1, 2, 3, 6143, 6144, 6145, 24_576, 120 * 26 * 12, 512 * 256 * 12 + 2]) {
+    const bytes = Uint8Array.from({ length }, (_, i) => (i * 131 + (i >> 7)) & 255)
+    assert.equal(toBase64(bytes), Buffer.from(bytes).toString('base64'), `${length} bytes`)
+  }
+})
+
 test('encode packs little-endian [codePoint, fg, bg] triplets as the Raster expects', () => {
   const g = new Grid(1, 1)
   g.set(0, 0, 0x2588, 0xff8800, DEFAULT)

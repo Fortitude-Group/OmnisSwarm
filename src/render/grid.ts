@@ -135,21 +135,42 @@ export class Grid {
   }
 }
 
+const B64_CODES = Uint8Array.from(B64, ch => ch.charCodeAt(0))
+const PAD = 0x3d
+/** Characters handed to String.fromCharCode at once: well under any engine's argument limit, and the fastest size measured. */
+const CHUNK = 2048
+
+/** Base64 written as character codes into a typed array, then turned into a string a chunk at a time. */
 export function toBase64(bytes: Uint8Array): string {
-  let out = ''
+  const n = bytes.length
+  const out = new Uint8Array(Math.ceil(n / 3) * 4)
+  let o = 0
   let i = 0
-  for (; i + 2 < bytes.length; i += 3) {
-    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!
-    out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]! + B64[(n >> 6) & 63]! + B64[n & 63]!
+  for (; i + 2 < n; i += 3) {
+    const v = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = B64_CODES[(v >> 6) & 63]!
+    out[o + 3] = B64_CODES[v & 63]!
+    o += 4
   }
-  if (bytes.length - i === 1) {
-    const n = bytes[i]! << 16
-    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}==`
-  } else if (bytes.length - i === 2) {
-    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8)
-    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}${B64[(n >> 6) & 63]}=`
+  if (n - i === 1) {
+    const v = bytes[i]! << 16
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = PAD
+    out[o + 3] = PAD
+  } else if (n - i === 2) {
+    const v = (bytes[i]! << 16) | (bytes[i + 1]! << 8)
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = B64_CODES[(v >> 6) & 63]!
+    out[o + 3] = PAD
   }
-  return out
+  let text = ''
+  // apply takes the typed array as it is; a spread would walk it through an iterator, several times slower.
+  for (let k = 0; k < out.length; k += CHUNK) text += String.fromCharCode.apply(null, out.subarray(k, k + CHUNK) as unknown as number[])
+  return text
 }
 
 export function fromBase64(text: string): Uint8Array {
