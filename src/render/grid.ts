@@ -24,9 +24,20 @@ const WIDE: ReadonlyArray<readonly [number, number]> = [
 /** Marks (zero width), controls, format characters, surrogates, private use, unassigned, line and paragraph separators. */
 const NOT_A_CELL = /[\p{M}\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u
 
+/** safeGlyph's answer per BMP code point, worked out on first use; 0 means not yet (no answer is 0). */
+const glyphs = new Uint16Array(0x10000)
+
 /** The code point if the Raster accepts it (printable, one cell wide, in the BMP), otherwise '?'. */
 export function safeGlyph(cp: number): number {
   if (!Number.isInteger(cp) || cp < SPACE || cp > 0xffff) return REPLACEMENT
+  const known = glyphs[cp]!
+  if (known !== 0) return known
+  const out = checkGlyph(cp)
+  glyphs[cp] = out
+  return out
+}
+
+function checkGlyph(cp: number): number {
   if (cp >= 0xd800 && cp <= 0xdfff) return REPLACEMENT
   if (NOT_A_CELL.test(String.fromCharCode(cp))) return REPLACEMENT
   for (const [lo, hi] of WIDE) if (cp >= lo && cp <= hi) return REPLACEMENT
@@ -92,7 +103,15 @@ export class Grid {
     const y0 = Math.max(0, Math.floor(y))
     const x1 = Math.min(this.columns, x + w)
     const y1 = Math.min(this.rows, y + h)
-    for (let cy = y0; cy < y1; cy++) for (let cx = x0; cx < x1; cx++) this.set(cx, cy, SPACE, bg, bg)
+    const c = bg >>> 0
+    for (let cy = y0; cy < y1; cy++) {
+      for (let cx = x0; cx < x1; cx++) {
+        const at = (cy * this.columns + cx) * 3
+        this.cells[at] = SPACE
+        this.cells[at + 1] = c
+        this.cells[at + 2] = c
+      }
+    }
   }
 
   /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the columns advanced. */
