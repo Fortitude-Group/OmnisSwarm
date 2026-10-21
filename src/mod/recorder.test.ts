@@ -18,7 +18,7 @@ type Options = {
   /** Every $.state write waits for this before landing. */
   stateGate?: Promise<unknown>
   /** What $.state holds when the plugin loads, as after a reload. */
-  stored?: { seen?: string[]; dropped?: number }
+  stored?: { seen?: unknown; dropped?: unknown }
   writes?: Write[]
 }
 
@@ -375,4 +375,27 @@ test('two session.starts in quick succession carry the stored drop count exactly
   await call($, { tool: 'Bash', command: 'ls' })
   await until(() => sent.length === 2)
   expect(sent.map(s => s.dropped)).toEqual([3, undefined])
+})
+
+test('a corrupt seen list or drop count in state is ignored and recording goes on', LOADED, async ($, on) => {
+  const sent = engine(on, { stored: { seen: 42, dropped: '3' } })
+  await start($)
+  await settle()
+  await call($, { tool: 'Bash', command: 'ls' })
+  await until(() => sent.length === 2)
+  expect(sent.map(s => s.dropped)).toEqual([undefined, undefined])
+})
+
+test('a seen list in state keeps only its strings', LOADED, async ($, on) => {
+  const sent = engine(on, {
+    stored: { seen: ['a7', 5, { id: 'a8' }] },
+    agents: [
+      { id: 'a7', description: 'Earlier task', type: 'Explore', status: 'running', name: 'scout' },
+      { id: 'a8', description: 'Other task', type: 'Explore', status: 'running', name: 'other' },
+    ],
+  })
+  await start($)
+  await until(() => sent.length === 1)
+  await settle()
+  expect(sent.map(s => [s.type, s.agent])).toEqual([['agent.started', 'a8']])
 })

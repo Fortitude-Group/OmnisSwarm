@@ -24,6 +24,8 @@ const SWARM_INIT_TOOL = /^mcp__.+__omnis_swarm_init$/
 /** The built-in tool that spawns an agent: with panel auto, a spawn opens the pane as a new swarm does. */
 const AGENT_TOOL = 'Agent'
 const pinnedAtom = atom({ plugin: 'omnis-swarm', key: 'panePinned' } as const, null)
+/** $.state may hold anything (a corrupt or older file): only text is a pin, anything else is no pin. */
+const pinText = (x: unknown): string | null => (typeof x === 'string' ? x : null)
 
 type Panel = 'command' | 'auto' | 'off'
 type Kit = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -370,7 +372,7 @@ export function registerPane(on: On, options: PluginOptions): void {
   on('command.run', { command: 'omnis-swarm:watch' }, async $ => ({ text: await paneCommand($, '') })).catch(() => COMMAND_FAILED)
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    rt.pinned = await read($, pinnedAtom)
+    rt.pinned = pinText(await read($, pinnedAtom))
     rt.surface = e.surface
     rt.open = true
     rt.shown = true

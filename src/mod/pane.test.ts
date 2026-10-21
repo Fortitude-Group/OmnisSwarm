@@ -375,6 +375,24 @@ test('auto opens the pane while a foreground Agent call is still running', { opt
   await until(() => seen.opens === 1)
 })
 
+for (const [what, pin] of [['a number', 42], ['an object', { toString: 1, valueOf: 1 }], ['an unknown agent', 'a-gone']] as const) {
+  test(`a stored pin that is ${what} counts as no pin, and the pane draws normally`, async ($, on) => {
+    const seen = engine(on)
+    on('state.get', (_, e) => ({ value: { value: String(e.key) === 'panePinned' ? pin : undefined, version: 0 } }))
+    const clock = mock.clock(on, { now: FIVE_AT.mid })
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+    await clock.settle()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(rasterText(await ui.find({ type: 'Raster', key: 'top' })).join('\n')).toContain('architect')
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons).toHaveLength(6)
+    expect(buttons.every(b => b.props.variant === undefined)).toBe(true)
+    expect(feedCalls(seen).length).toBeGreaterThan(0)
+    await ui.unmount()
+  })
+}
+
 test('off the terminal a grid becomes Svg source, or the summary as text when the Svg is too big or the surface has none', () => {
   const grid = new Grid(40, 10, 0x0b0f17, 0xe6edf3)
   expect(svgSource(grid, 'auth refactor', true)).toContain('<svg')
