@@ -16,6 +16,14 @@ export const MAX_KEYS = 512
 /** The most bytes readMemory takes from a file; anything larger reads as empty. */
 export const MAX_MEMORY_FILE_BYTES = 4 * 1024 * 1024
 
+/** The store refused a write because it is at a size limit. The message holds no paths, so it is safe to show the model. */
+export class MemoryLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MemoryLimitError'
+  }
+}
+
 export type StoredValue = { value: string; writer: string; at: string }
 
 const WRITER = /^[A-Za-z0-9._-]{1,64}$/
@@ -178,10 +186,10 @@ export function putMemory(root: string, swarm: string, key: string, value: strin
     const loaded = load(file)
     if (loaded.kind === 'bad') throw new Error(`memory file is unusable (${loaded.why}); not overwriting it`)
     const all = loaded.kind === 'ok' ? loaded.data : emptyStore()
-    if (!(key in all) && Object.keys(all).length >= MAX_KEYS) throw new Error(`memory is full: ${MAX_KEYS} keys`)
+    if (!(key in all) && Object.keys(all).length >= MAX_KEYS) throw new MemoryLimitError(`Memory is full: the swarm already holds ${MAX_KEYS} keys.`)
     all[key] = { value, writer, at: now.toISOString() }
     const json = JSON.stringify(all)
-    if (Buffer.byteLength(json) > MAX_MEMORY_FILE_BYTES) throw new Error('memory file would be too big')
+    if (Buffer.byteLength(json) > MAX_MEMORY_FILE_BYTES) throw new MemoryLimitError('Memory is full: the store would be too big.')
     writeFileSync(tmp, json, { flag: 'wx', mode: 0o600 })
     renameWithRetry(tmp, file)
     renamed = true

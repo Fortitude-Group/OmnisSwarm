@@ -100,7 +100,7 @@ test('the 513th distinct key comes back as an error result, not a crash', () => 
   )
   const result = reply?.result as { isError: boolean; content: { text: string }[] }
   assert.equal(result.isError, true)
-  assert.match(result.content[0]!.text, /Could not update/)
+  assert.match(result.content[0]!.text, /Memory is full/)
 })
 
 test('tasks are created with sequential ids and updated', () => {

@@ -5,7 +5,7 @@ import { loadState } from '../core/snapshot.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { ensureSwarm, uniqueSwarmId } from '../core/swarm.ts'
 import { MEMORY_KEY, type SwarmState } from '../core/fold.ts'
-import { MAX_VALUE_BYTES, putMemory, readMemory } from './memory-store.ts'
+import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
@@ -272,7 +272,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       try {
         return tool.handler(args)
       } catch (err) {
-        if (err instanceof InputError) throw err
+        if (err instanceof InputError || err instanceof MemoryLimitError) throw err
         process.stderr.write(`omnis: ${tool.name} failed: ${err instanceof Error ? err.message : String(err)}\n`)
         throw new Error(FAILED)
       }
