@@ -36,18 +36,25 @@ export function parentsOf(state: SwarmState): Map<string, string | null> {
     const p = state.agents[id]?.parent ?? ''
     return p !== '' && p !== id && ids.has(p) ? p : root
   }
+  // Linear loop detection: each id is walked once. A path node is on-path until its walk ends, then done.
   const looped = new Set<string>()
-  for (const id of ids) {
-    const seen = new Set<string>()
-    let cur = direct(id)
-    while (cur !== null && !seen.has(cur)) {
-      if (cur === id) {
-        looped.add(id)
+  const done = new Set<string>()
+  for (const start of ids) {
+    if (done.has(start)) continue
+    const path: string[] = []
+    const at = new Map<string, number>()
+    let cur: string | null = start
+    while (cur !== null && !done.has(cur)) {
+      const pos = at.get(cur)
+      if (pos !== undefined) {
+        for (let i = pos; i < path.length; i++) looped.add(path[i]!)
         break
       }
-      seen.add(cur)
+      at.set(cur, path.length)
+      path.push(cur)
       cur = direct(cur)
     }
+    for (const id of path) done.add(id)
   }
   const out = new Map<string, string | null>()
   for (const id of ids) out.set(id, looped.has(id) ? (id === root ? null : root) : direct(id))
@@ -57,16 +64,19 @@ export function parentsOf(state: SwarmState): Map<string, string | null> {
 /** Steps from each agent up to its root. Bounded, so a loop that slipped through still ends. */
 export function depthsOf(parents: Map<string, string | null>): Map<string, number> {
   const out = new Map<string, number>()
-  for (const id of parents.keys()) {
-    let d = 0
-    let cur = parents.get(id) ?? null
-    const seen = new Set<string>([id])
-    while (cur !== null && !seen.has(cur)) {
-      seen.add(cur)
-      d++
+  for (const start of parents.keys()) {
+    if (out.has(start)) continue
+    const path: string[] = []
+    const onPath = new Set<string>()
+    let cur: string | null = start
+    while (cur !== null && !out.has(cur) && !onPath.has(cur)) {
+      onPath.add(cur)
+      path.push(cur)
       cur = parents.get(cur) ?? null
     }
-    out.set(id, d)
+    // The last path node sits one below a known depth, or at 0 under a root; a loop that slipped through is cut there.
+    let d = cur !== null && out.has(cur) ? out.get(cur)! + 1 : 0
+    for (let i = path.length - 1; i >= 0; i--) out.set(path[i]!, d++)
   }
   return out
 }
