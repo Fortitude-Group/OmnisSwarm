@@ -31,6 +31,8 @@ type Seen = {
   late: () => Promise<void>
   /** The kit draws a mount's tree but never paints a blit: the last top blit, and when it and the last redraw came (by count). */
   topBlit: { cells: string; columns: number; rows: number; at: number } | null
+  /** Blits that carried exactly the cells the last blit of the same Raster did. */
+  repeats: number
   redrawnAt: number
   seq: number
 }
@@ -41,7 +43,8 @@ const never = <T>(): Promise<T> => new Promise<T>(() => {})
 /** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
 function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults = {}): Seen {
   const seen: Seen = { calls: [], opens: 0, blits: 0, invalidates: 0, panes: 0, connects: 0, shown: true, feed: 'ok', connectOk: true,
-    topBlit: null, redrawnAt: 0, seq: 0, late: () => Promise.resolve() }
+    topBlit: null, repeats: 0, redrawnAt: 0, seq: 0, late: () => Promise.resolve() }
+  const lastCells = new Map<string, string>()
   const state = foldAll(FIVE_SWARM, fiveAgentEvents())
   let open = false
   on('command.register', (_, e) => (faults.register === 'hang' ? never() : { value: { command: e.name } }))
@@ -63,6 +66,10 @@ function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults =
   })
   on('ui.blit', (_, e) => {
     seen.blits++
+    if ('cells' in e) {
+      if (lastCells.get(e.key) === String(e.cells)) seen.repeats++
+      lastCells.set(e.key, String(e.cells))
+    }
     if (e.key === 'top' && 'cells' in e) seen.topBlit = { cells: String(e.cells), columns: Number(e.columns), rows: Number(e.rows), at: ++seen.seq }
     return { value: {} }
   })
@@ -303,6 +310,14 @@ test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the p
   const back = feedCalls(seen).length
   await clock.advance(1000)
   expect(feedCalls(seen).length - back).toBeLessThanOrEqual(4)
+  await ui.unmount()
+})
+
+test('a Raster whose cells have not changed is not blitted again', async ($, on) => {
+  const { seen, clock, ui } = await opened($, on)
+  await clock.advance(3000)
+  expect(seen.blits).toBeGreaterThan(0)
+  expect(seen.repeats).toBe(0)
   await ui.unmount()
 })
 

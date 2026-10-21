@@ -9,7 +9,7 @@ import type { Elements, EngineInterface, On, PluginOptions, RenderElement, Timer
 import type { SwarmState } from '../core/fold.ts'
 import { hex } from '../render/color.ts'
 import { budgetFps, frameInterval, render } from '../render/frame.ts'
-import type { Grid } from '../render/grid.ts'
+import { sameCells, type Grid } from '../render/grid.ts'
 import { chooseSpotlight } from '../render/spotlight.ts'
 import { CELL_W, SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
 import { GLYPH } from '../render/tokens.ts'
@@ -67,8 +67,11 @@ type Runtime = PullState & {
   surface: string | null
   size: Size | null
   last: Frame | null
-  /** The size each Raster was last mounted at; a blit of any other size is refused, so none is sent. */
-  mounted: { top: string | null; bottom: string | null }
+  /**
+   * The grid each Raster shows now, as mounted or last blitted. A blit of another size is refused, so none is sent;
+   * one with the same cells would change nothing, so none is sent either.
+   */
+  onScreen: { top: Grid | null; bottom: Grid | null }
 }
 
 const panelOf = (x: unknown): Panel => (x === 'auto' || x === 'off' ? x : 'command')
@@ -76,7 +79,7 @@ const fresh = (panel: Panel): Runtime => ({
   panel, host: null, open: false, shown: false, closedByPerson: false, server: null, model: emptyModel(), pulling: false, pullSeq: 0, stalledMs: 0, stallMarked: false,
   pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0,
   frameTimer: null, frameMs: 0, renderMs: 0, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
-  mounted: { top: null, bottom: null },
+  onScreen: { top: null, bottom: null },
 })
 
 /** Module state. A hot reload starts it over and the pane pulls a fresh state within one PULL_MS; the pin is in $.state. */
@@ -108,10 +111,12 @@ function frameAt(now: number): Frame | null {
 }
 
 function blitFrame(host: Host, frame: Frame): void {
-  const grids: Array<[string, Grid | null, string | null]> = [['top', frame.top, rt.mounted.top], ['bottom', frame.bottom, rt.mounted.bottom]]
-  for (const [key, grid, mounted] of grids) {
-    if (grid === null || mounted !== sizeKey(grid)) continue
+  for (const key of ['top', 'bottom'] as const) {
+    const grid = frame[key]
+    const shown = rt.onScreen[key]
+    if (grid === null || shown === null || sizeKey(shown) !== sizeKey(grid) || sameCells(shown, grid)) continue
     host.blit({ requestId: PANE_ID, key, cells: grid.encode(), columns: grid.columns, rows: grid.rows })
+    rt.onScreen[key] = grid
   }
 }
 
@@ -181,7 +186,7 @@ function closed(byPerson: boolean): void {
   rt.closedByPerson = rt.closedByPerson || byPerson
   stopAll()
   rt.last = null
-  rt.mounted = { top: null, bottom: null }
+  rt.onScreen = { top: null, bottom: null }
 }
 
 /** What the pulls (pane-pull.ts) see of the pane. */
@@ -312,10 +317,10 @@ export function registerPane(on: On, options: PluginOptions): void {
     if (e.surface === 'terminal') {
       const { Box, Text, Button, Raster } = $.ui.resolve(e)
       if (frame === null) {
-        rt.mounted = { top: null, bottom: null }
+        rt.onScreen = { top: null, bottom: null }
         return Text({ dimColor: true, children: waitingText() })
       }
-      rt.mounted = { top: sizeKey(frame.top), bottom: frame.bottom === null ? null : sizeKey(frame.bottom) }
+      rt.onScreen = { top: frame.top, bottom: frame.bottom }
       const tree = Box({
         flexDirection: 'column',
         children: [
@@ -329,7 +334,7 @@ export function registerPane(on: On, options: PluginOptions): void {
       return tree
     }
     const { Box, Text, Button, Svg } = $.ui.resolve(e)
-    rt.mounted = { top: null, bottom: null }
+    rt.onScreen = { top: null, bottom: null }
     stopFrames()
     if (frame === null) return Text({ dimColor: true, children: waitingText() })
     const picture = (grid: Grid, key: string): RenderElement => {

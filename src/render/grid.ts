@@ -213,6 +213,15 @@ export function gridText(grid: Grid): string[] {
   return rows
 }
 
+/** Whether two grids are the same size and hold the same cells, so a blit of one over the other would change nothing. */
+export function sameCells(a: Grid, b: Grid): boolean {
+  if (a.columns !== b.columns || a.rows !== b.rows) return false
+  const x = a.cells
+  const y = b.cells
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
+  return true
+}
+
 export function pairCount(grid: Grid): number {
   const pairs = new Set<number>()
   for (let i = 0; i < grid.columns * grid.rows; i++) pairs.add(grid.cells[i * 3 + 1]! * 0x2000000 + grid.cells[i * 3 + 2]!)

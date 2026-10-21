@@ -1,8 +1,8 @@
 /**
  * Times the pane's render, the way its frame loop runs it: one state, the clock stepping 50 ms a frame.
  *   node scripts/bench-render.ts [frames]        (default 300 timed frames per case, after 40 warm-up frames)
- * Per case it prints the mean, median and 95th percentile ms of render(), of encoding both grids for a blit, and of
- * the Svg for the top grid. Then it splits one case into the steps render() takes, timed apart. Development only;
+ * Per case it prints the mean, median and 95th percentile ms of render(), of encoding both grids for a blit, of a
+ * pane tick (render, then encode only the grids whose cells changed, as the pane blits), and of the Svg for the top grid. Then it splits one case into the steps render() takes, timed apart. Development only;
  * not shipped in the plugin's mod. Timing lives here rather than in a test, so the suite never flakes on a busy machine.
  */
 import { performance } from 'node:perf_hooks'
@@ -13,7 +13,7 @@ import { pulsesFrom } from '../src/mod/pane-model.ts'
 import { drawFeed } from '../src/render/feed.ts'
 import { render } from '../src/render/frame.ts'
 import { drawGraph } from '../src/render/graph.ts'
-import { Grid, limitPairs } from '../src/render/grid.ts'
+import { Grid, limitPairs, sameCells } from '../src/render/grid.ts'
 import { drawHeader } from '../src/render/header.ts'
 import { layoutNodes, structuralEdges } from '../src/render/layout.ts'
 import { planRegions } from '../src/render/regions.ts'
@@ -27,6 +27,7 @@ import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../tests/fixtures/swarm-fi
 const FRAMES = Math.max(10, Number(process.argv[2]) || 300)
 const WARM = 40
 const STEP_MS = 50
+const CYCLE = 20
 
 const T0 = Date.parse('2026-10-21T10:00:00.000Z')
 const MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1']
@@ -86,19 +87,39 @@ function bench(c: Case): void {
   const state = c.state()
   const renders: number[] = []
   const encodes: number[] = []
+  const ticks: number[] = []
   let svg = 0
   let step = ''
+  let shown: { top: Grid | null; bottom: Grid | null } = { top: null, bottom: null }
+  let unchanged = 0
   for (let i = 0; i < WARM + FRAMES; i++) {
-    const now = c.at + (i % 40) * STEP_MS
+    // The clock moves on 50 ms a frame, as the pane's frame loop does at 20 fps, over one second and round again,
+    // so a mid-swarm case keeps its comets in flight.
+    const now = c.at + (i % CYCLE) * STEP_MS
     const t0 = performance.now()
     const f = render(state, c.view, now, c.size)
     const t1 = performance.now()
     f.top.encode()
     f.bottom?.encode()
     const t2 = performance.now()
+    // The pane's tick: render, then encode and blit only a grid whose cells differ from what is on screen.
+    const t3 = performance.now()
+    const g = render(state, c.view, now, c.size)
+    let same = 0
+    for (const key of ['top', 'bottom'] as const) {
+      const grid = g[key]
+      const was = shown[key]
+      if (grid === null) continue
+      if (was !== null && sameCells(was, grid)) same++
+      else grid.encode()
+    }
+    const t4 = performance.now()
+    shown = { top: g.top, bottom: g.bottom }
     if (i >= WARM) {
       renders.push(t1 - t0)
       encodes.push(t2 - t1)
+      ticks.push(t4 - t3)
+      unchanged += same
     }
     if (i === WARM) {
       const t3 = performance.now()
@@ -109,7 +130,12 @@ function bench(c: Case): void {
   }
   const r = stats(renders)
   const e = stats(encodes)
-  console.log(`${c.name.padEnd(18)} render mean ${ms(r.mean)} p50 ${ms(r.p50)} p95 ${ms(r.p95)} | encode mean ${ms(e.mean)} | svg(top) ${ms(svg)} | ${step}`)
+  const t = stats(ticks)
+  const grids = FRAMES * (shown.bottom === null ? 1 : 2)
+  console.log(
+    `${c.name.padEnd(18)} render mean ${ms(r.mean)} p95 ${ms(r.p95)} | encode both ${ms(e.mean)} | pane tick mean ${ms(t.mean)} p95 ${ms(t.p95)}` +
+      ` (${((unchanged / grids) * 100).toFixed(0)}% of grids unchanged) | svg(top) ${ms(svg)} | ${step}`,
+  )
 }
 
 /** The steps render() takes, each timed on its own over the same frames. Mirrors frame.ts; layout is cached there, so it is timed once. */
@@ -126,7 +152,7 @@ function phases(c: Case): void {
   const layoutOnce = performance.now() - t
   const edges = structuralEdges(state, state.swarm.topology)
   for (let i = 0; i < WARM + FRAMES; i++) {
-    const now = c.at + (i % 40) * STEP_MS
+    const now = c.at + (i % CYCLE) * STEP_MS
     const timed = i >= WARM
     const time = (k: string, fn: () => void): void => {
       const a = performance.now()

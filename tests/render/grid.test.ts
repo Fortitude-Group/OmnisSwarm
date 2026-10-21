@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT } from '../../src/render/color.ts'
 import {
-  Grid, decodeCells, fromBase64, gridText, limitPairs, pairCount, safeGlyph, toBase64, writeParts, writeRight,
+  Grid, decodeCells, fromBase64, gridText, limitPairs, pairCount, safeGlyph, sameCells, toBase64, writeParts, writeRight,
 } from '../../src/render/grid.ts'
 import { RASTER_MAX } from '../../src/render/tokens.ts'
 
@@ -145,4 +145,17 @@ test('fromBase64 rejects characters outside the alphabet', () => {
 
 test('text reports the columns it advanced', () => {
   assert.equal(new Grid(5, 1).text(0, 0, 'abc😀', 0xffffff), 4)
+})
+
+test('sameCells is true only for the same size and every cell alike', () => {
+  const a = new Grid(4, 2, 0x0b0f17, 0xe6edf3)
+  const b = new Grid(4, 2, 0x0b0f17, 0xe6edf3)
+  assert.equal(sameCells(a, b), true)
+  b.set(3, 1, 0x41, 0xe6edf3)
+  assert.equal(sameCells(a, b), false)
+  a.set(3, 1, 0x41, 0xe6edf3)
+  assert.equal(sameCells(a, b), true)
+  a.set(0, 0, 0x20, 0xe6edf3, 0x131a26)
+  assert.equal(sameCells(a, b), false)
+  assert.equal(sameCells(new Grid(4, 2), new Grid(2, 4)), false)
 })
