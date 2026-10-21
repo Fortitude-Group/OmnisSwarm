@@ -1,9 +1,10 @@
 /** Per-session swarm state: which swarm this server is working in, and its folded state held between calls. */
+import { existsSync } from 'node:fs'
 import { makeEvent } from '../core/events.ts'
-import { appendEvent, readCurrent, writeCurrent } from '../core/log.ts'
+import { appendEvent, readCurrent, swarmLogPath, writeCurrent } from '../core/log.ts'
 import { SESSION_ID } from '../core/recording.ts'
 import { advance, loadState, type Loaded } from '../core/snapshot.ts'
-import { announceSwarm, publishCurrent, sessionKey, swarmOwner, uniqueSwarmId } from '../core/swarm.ts'
+import { announceSwarm, publishCurrent, recentSwarmIds, sessionKey, swarmOwner, uniqueSwarmId } from '../core/swarm.ts'
 import { InputError } from './validate.ts'
 
 const stamp = (d: Date): string => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
@@ -22,6 +23,8 @@ export class Session {
   #conflict = false
   /** The swarm whose owner was last read from its log, so each swarm's log is read once per session id. */
   #ownerRead: string | null = null
+  /** The session key for which the swarms folder was already searched for this session's own swarm. */
+  #searched: string | null = null
 
   /** `load` is only replaced in tests, to count full loads. */
   constructor(root: string, load: (root: string, id: string) => Loaded = loadState) {
@@ -101,7 +104,11 @@ export class Session {
     return this.state(id).state.swarm.endedAt !== null
   }
 
-  /** My live swarm. While I have none I adopt `current`: always when `adopt` is true, otherwise only if its log says this session started it. */
+  /**
+   * My live swarm. While I have none I adopt `current`. A session whose id is known adopts only a swarm its log says it
+   * started, so its recorder events and its tool calls share one swarm and never land in another session's. A session
+   * with no known id (no recorder) adopts any live `current` when `adopt` is true, otherwise none.
+   */
   mySwarm(adopt = true): string | null {
     if (this.#mine !== null && this.hasEnded(this.#mine)) this.letGo()
     if (this.#mine === null) {
@@ -109,14 +116,35 @@ export class Session {
       if (c !== null && !this.hasEnded(c)) {
         const key = this.sessionKey
         const ours = key !== null && swarmOwner(this.root, c) === key
-        if (adopt || ours) {
+        if (ours || (adopt && key === null)) {
           this.#mine = c
           this.#owned = ours
           this.#ownerRead = this.sessionKey === null ? null : c
         }
       }
+      if (this.#mine === null) this.#findOwn()
     }
     return this.#mine
+  }
+
+  /**
+   * After a restart `current` may name another session's swarm. Looks, once per session key, for a live swarm this
+   * session started: the deterministic implicit name first, then the newest few logs by modification time.
+   */
+  #findOwn(): void {
+    const key = this.sessionKey
+    if (key === null || this.#searched === key) return
+    this.#searched = key
+    const live = (id: string): boolean => swarmOwner(this.root, id) === key && !this.hasEnded(id)
+    const implicit = `session-${key.slice(0, 8)}`
+    const found = (existsSync(swarmLogPath(this.root, implicit)) && live(implicit) ? implicit : null)
+      ?? recentSwarmIds(this.root).find(live)
+      ?? null
+    if (found !== null) {
+      this.#mine = found
+      this.#owned = true
+      this.#ownerRead = found
+    }
   }
 
   /** Records that this session started swarm `id`. */
@@ -133,18 +161,21 @@ export class Session {
     this.#ownerRead = null
   }
 
-  /** My live swarm, starting an implicit one if there is none: `session-<first 8 of the session id>`, or by time before the id is known. */
+  /** My live swarm, starting an implicit one if there is none: `session-<first 8 of the session key>`, or by time before the id is known. */
   swarmOrCreate(now: Date): string {
     const id = this.mySwarm()
     if (id !== null) return id
     const root = this.root
     const sid = this.#sessionId
     const key = this.sessionKey
-    const idHint = sid !== null ? `session-${sid.slice(0, 8)}` : `session-${stamp(now)}`
+    const idHint = sid !== null ? `session-${sessionKey(sid).slice(0, 8)}` : `session-${stamp(now)}`
     const current = readCurrent(root)
     const claimed = uniqueSwarmId(root, idHint)
     announceSwarm(root, claimed, { src: 'mcp', now, ...(key !== null && { session: key }) })
-    if (current !== null && this.hasEnded(current)) {
+    if (key !== null && current !== null && !this.hasEnded(current)) {
+      // Another session's live swarm holds `current`: this session works in its own and leaves `current` alone.
+      this.#mine = claimed
+    } else if (current !== null && this.hasEnded(current)) {
       // current names an ended swarm: replace it, as an explicit init would
       writeCurrent(root, claimed)
       this.#mine = claimed
