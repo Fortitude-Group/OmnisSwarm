@@ -73,11 +73,21 @@ export class Grid {
     return cx < 0 || cy < 0 || cx >= this.columns || cy >= this.rows ? -1 : (cy * this.columns + cx) * 3
   }
 
-  /** Writes one cell. Leaves the background as it is when `bg` is not given. */
+  /**
+   * Writes one cell. Leaves the background as it is when `bg` is not given. Called for nearly every cell drawn, so a
+   * whole-number position and an already checked glyph skip the general paths (#at and safeGlyph) for the same answer.
+   */
   set(x: number, y: number, codePoint: number, fg: number, bg?: number): void {
-    const at = this.#at(x, y)
-    if (at < 0) return
-    this.cells[at] = safeGlyph(codePoint)
+    let at: number
+    if ((x | 0) === x && (y | 0) === y) {
+      if (x < 0 || y < 0 || x >= this.columns || y >= this.rows) return
+      at = (y * this.columns + x) * 3
+    } else {
+      at = this.#at(x, y)
+      if (at < 0) return
+    }
+    const known = (codePoint | 0) === codePoint && codePoint >= SPACE && codePoint <= 0xffff ? glyphs[codePoint]! : 0
+    this.cells[at] = known !== 0 ? known : safeGlyph(codePoint)
     this.cells[at + 1] = fg >>> 0
     if (bg !== undefined) this.cells[at + 2] = bg >>> 0
   }
@@ -117,9 +127,12 @@ export class Grid {
   /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the columns advanced. */
   text(x: number, y: number, s: string, fg: number, bg?: number, max = Number.POSITIVE_INFINITY): number {
     let n = 0
-    for (const ch of s) {
+    // By code point, as for...of would walk it, without the iterator.
+    for (let i = 0; i < s.length;) {
       if (n >= max || x + n >= this.columns) break
-      this.set(x + n, y, cp(ch), fg, bg)
+      const c = s.codePointAt(i)!
+      this.set(x + n, y, c, fg, bg)
+      i += c > 0xffff ? 2 : 1
       n++
     }
     return n
