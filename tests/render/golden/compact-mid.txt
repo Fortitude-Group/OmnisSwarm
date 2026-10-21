@@ -1,0 +1,148 @@
+# compact-mid: hierarchical at +30000 ms in 80x21; step compactSpotlight, fps 30, spotlight a-cod1
+## top 80x14 sha fe39348bf530d495
+### glyphs
+ ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · 259k tok · ≈$0.11/min 
+ tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash   move … 
+                                      ▀▀▀▀                                      
+                                     ▀ ▀▀ ▀                                     
+                                     ▀ ▀▀ ▀                                     
+                ▀▀▀▀▀▀▀   ⢀⣀⠤⠒⣒⡲⡶⠶⠶⠶⠦⣀⡀▀▀ ▀⠐⠄⠠⠄⢀⡀         ▀▀▀▀                  
+                ▀▀▀▀▀▀ ⢀⣔⠊⡥⠔⠚⠉⠉▀▀▀▀⠠⠚⠁⠈⠉⠒⠤⡈⠂  ▀▀ ⠈ ⠒ ⠤ ⣀  ▀▀▀▀▀                 
+                       ⣥⡊⣁▀▀▀▀      ◆ lead ▶⣀           ⢀⠭                      
+                ▀▀▀▀▀▀⠐⠬⣪⠢⡀⠉▀⠒▀⠒▀⠤▀⢄▀⣀       ⠑⡄▀▀▀▀▀ ▀⢀⠔⠁ ▀▀▀▀▀                 
+                ▀▀▀▀▀▀▀ ⠈⠑⠬⡑⢄⡀▀▀▀▀▀▀   ⠉ ⠉ ⠒ ⠤⠈⡦ ▀▀⢀⡠⠊⠁  ? ghost                
+              ▶ architect ▀⠘▶ tester !⠉⠁ ⠉✕ reviewer▀▀                          
+                        ▀▀▀ ▀▀⠉⠒⠢⠭⣑⣒⣤⣤⢄⣠⣤⣒⣊⠥⠤⠒⠊⠉▀▀▀▀ ▀                          
+                        ▶ coder-1              ✓ coder-2                        
+                                                                                
+### colours
+abbcccccccccccccdddeeeeeeeeeeeedddccccccccfffdddcccccccdddeeeeeeeedddeeeeeeeeeea
+aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaeeeeeea
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhjklmnlkjhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhjlmoppomljhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhiqkkrqihhhssssttuvwxyzABBoCDEFFFFhhhhhhhhhGGGGhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhjHmIJJmlKsssssLMNOONPQRyzzySEhhTUhFhFhFhFhVWXYZWVhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhh0lo111ol23s4456l78879!$%%%%&&s*++-hhhhhhh/:;<=<;Vhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhj>C?@@C^_~..D.......D..hhhhhhhs..^^..l^...V.....Vhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhh.......h............hhhFhFhFhFs.l......hh&%%%%%%hhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhh&%%%%%%%%%.l........%%....h.............lhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhh...l........................l.hhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhh&%%%%%%%%hhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+### legend
+a fg #131a26 bg #131a26 x7
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x51
+d fg #5c6679 bg #131a26 x30
+e fg #9aa4b2 bg #131a26 x50
+f fg #7ee787 bg #131a26 x11
+g fg #f85149 bg #131a26 x9
+h fg #0b0f17 bg #0b0f17 x651
+i fg #0b0f17 bg #101929 x6
+j fg #101929 bg #101929 x6
+k fg #101929 bg #3c4352 x4
+l fg #3c4352 bg #3c4352 x14
+m fg #3c4352 bg #4d8dff x5
+n fg #9aa4b2 bg #4d8dff x1
+o fg #5e98ff bg #5e98ff x5
+p fg #5e98ff bg #6ea2ff x2
+q fg #101929 bg #16223a x2
+r fg #101929 bg #9aa4b2 x1
+s fg #2b3546 bg #0b0f17 x13
+t fg #2b3546 bg #1c2d31 x2
+u fg #2b3546 bg #34524c x1
+v fg #2b3546 bg #34474e x1
+w fg #2b3546 bg #2c3c35 x1
+x fg #2b3546 bg #213743 x1
+y fg #2b3546 bg #3c4352 x3
+z fg #2b3546 bg #4568a9 x3
+A fg #2b3546 bg #5e98ff x1
+B fg #6ea2ff bg #5e98ff x2
+C fg #4d8dff bg #3c4352 x3
+D fg #545d6f bg #3c4352 x3
+E fg #545d6f bg #101929 x2
+F fg #545d6f bg #0b0f17 x12
+G fg #0b0f17 bg #0e131b x4
+H fg #16223a bg #3c4352 x1
+I fg #3c4352 bg #5e98ff x1
+J fg #4d8dff bg #5e98ff x2
+K fg #2b3546 bg #101929 x1
+L fg #2b3546 bg #2c4a4a x1
+M fg #545d6f bg #3c4e50 x1
+N fg #3c4352 bg #bae079 x2
+O fg #3c4352 bg #bbe285 x2
+P fg #81a6d1 bg #3c4352 x1
+Q fg #f5fbff bg #557f8b x1
+R fg #f5fbff bg #374c57 x1
+S fg #2b3546 bg #262e3e x1
+T fg #0b0f17 bg #f9615a x1
+U fg #0b0f17 bg #f85149 x1
+V fg #0e131b bg #0e131b x5
+W fg #0e131b bg #111620 x2
+X fg #111620 bg #181d29 x1
+Y fg #111620 bg #2e3441 x1
+Z fg #111620 bg #141a24 x1
+0 fg #16223a bg #16223a x1
+1 fg #6ea2ff bg #6ea2ff x3
+2 fg #f5fbff bg #324667 x1
+3 fg #9ecbff bg #101929 x1
+4 fg #0b0f17 bg #101d1f x2
+5 fg #1c1f1c bg #212d24 x1
+6 fg #3c594e bg #416756 x1
+7 fg #bbe285 bg #bbe285 x2
+8 fg #f3e965 bg #f3e965 x2
+9 fg #bae079 bg #bae079 x1
+! fg #b48cff bg #3c4352 x1
+$ fg #e6edf3 bg #2c4a4a x1
+% fg #e6edf3 bg #0b0f17 x29
+& fg #7ee787 bg #0b0f17 x5
+* fg #f9615a bg #f9615a x1
++ fg #f9716b bg #f9716b x2
+- fg #f85149 bg #f85149 x1
+/ fg #9ecbff bg #0e131b x1
+: fg #9ecbff bg #111620 x1
+; fg #141a24 bg #141a24 x2
+< fg #424753 bg #424753 x2
+= fg #555a64 bg #555a64 x1
+> fg #3c4352 bg #16223a x1
+? fg #5e98ff bg #3c4352 x1
+@ fg #5e98ff bg #4d8dff x2
+^ fg #0b0f17 bg #3c4352 x4
+_ fg #3c4e64 bg #101929 x1
+~ fg #6d8cb2 bg #0e161b x1
+. 65 more pairs
+## bottom 80x6 sha 3125a8d9282784cd
+### glyphs
+ ● coder-1 ▶ running · 25s · 65k tok · ≈$0.08 · ctx 3%                          
+  0s # task t2 → done                                                           
+  0s › architect → ?ghost: are you there                                        
+  0s › lead → tester: rerun with a fixed seed                                   
+  0s › architect → coder-1: use ed25519 keys                                    
+  4s › tester → lead: tests are flaky on CI                                     
+### colours
+abbcccccccdeeeeeeeeefffdddfffdddddddfffccccccfffffffddaaaaaaaaaaaaaaaaaaaaaaaaaa
+gggghhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiiiiikkkiiiiiikkjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiikkkiiiiiikkjjjjjjjjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiiiiikkkiiiiiiikkjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiikkkiiiikkjjjjjjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+### legend
+a fg #131a26 bg #131a26 x27
+b fg #4cd07a bg #131a26 x2
+c fg #e6edf3 bg #131a26 x13
+d fg #9aa4b2 bg #131a26 x13
+e fg #7ee787 bg #131a26 x9
+f fg #5c6679 bg #131a26 x16
+g fg #9aa4b2 bg #0b0f17 x20
+h fg #ffb86b bg #0b0f17 x17
+i fg #e6edf3 bg #0b0f17 x258
+j fg #9ecbff bg #0b0f17 x85
+k fg #5c6679 bg #0b0f17 x20
+## chips
+● #3f73d1 lead (lead)
+● #3f73d1 architect (a-arch)
+● #31854e coder-1 (a-cod1)
+● #31854e coder-2 (a-cod2)
+● #7e7823 tester (a-test)
+● #707681 reviewer (a-rev)

@@ -1,0 +1,170 @@
+/** One frame of the pane: render(state, view, now, size) gives the two grids, the chips and how fast to animate. Pure. */
+import type { SwarmState } from '../core/fold.ts'
+import { agentStats, fileClashes, swarmTotals, type AgentStats, type Clash } from '../core/stats.ts'
+import { luminance, scale } from './color.ts'
+import { drawFeed } from './feed.ts'
+import { clipText } from './format.ts'
+import { tween } from './fx.ts'
+import { clashActive, drawGraph } from './graph.ts'
+import { Grid, limitPairs, writeParts } from './grid.ts'
+import { drawHeader, drawSummary, summaryText } from './header.ts'
+import { layoutNodes, nodesKey, orderAgents, structuralEdges, type Edge } from './layout.ts'
+import { planRegions } from './regions.ts'
+import { busiest, drawSpotlight } from './spotlight.ts'
+import { drawTimeline } from './timeline.ts'
+import { CANVAS, CANVAS_RAISED, FPS, MOTION, PAIR_BUDGET, TEXT, modelColor } from './tokens.ts'
+import { drawTree } from './tree.ts'
+import type { Chip, Frame, Point, Size, View } from './types.ts'
+
+const MAX_LAG_MS = 1_000
+const CHIP_LABEL = 14
+/** Chip dots are darkened to this relative luminance so they read on light and dark terminal themes alike (pane.md section 2). */
+const CHIP_LUMINANCE = 0.18
+const lagOf = (view: View): number => Math.max(0, Math.min(MAX_LAG_MS, Number.isFinite(view.lagMs) ? view.lagMs : 0))
+
+/** What the pane knows about the last read beyond the swarm state; both come from the pane model. */
+export type Notes = { degraded?: 'too-large' | 'unreadable' | null; hiddenFinished?: number }
+
+const chipColors = new Map<number, number>()
+/** The model colour scaled down (halving the interval 20 times) until its luminance is at most CHIP_LUMINANCE. */
+export function chipColor(c: number): number {
+  const known = chipColors.get(c)
+  if (known !== undefined) return known
+  let out = c
+  if (luminance(c) > CHIP_LUMINANCE) {
+    let lo = 0
+    let hi = 1
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) / 2
+      if (luminance(scale(c, mid)) <= CHIP_LUMINANCE) lo = mid
+      else hi = mid
+    }
+    out = scale(c, lo)
+  }
+  chipColors.set(c, out)
+  return out
+}
+
+/**
+ * FPS.busy while comets, fades, pulses, a glide or a clash flash are live; FPS.glow while only glows move; otherwise
+ * FPS.tick, because ages and live bars follow the clock. The pane stops its loop itself when it is hidden.
+ */
+export function targetFps(state: SwarmState, view: View, nowMs: number, stats: Readonly<Record<string, AgentStats>>, clashes: readonly Clash[]): number {
+  const t = nowMs - lagOf(view)
+  for (const item of state.feed) if (item.kind === 'message' && t >= item.at && t - item.at <= MOTION.cometMs + MOTION.trailMs) return FPS.busy
+  for (const a of Object.values(state.agents)) {
+    if (nowMs >= a.startedAt && nowMs - a.startedAt < MOTION.fadeInMs) return FPS.busy
+    if (a.finishedAt !== null && nowMs >= a.finishedAt && nowMs - a.finishedAt < MOTION.ghostMs) return FPS.busy
+  }
+  for (const p of view.pulses) if (t >= p.at && t - p.at <= (p.isError ? MOTION.errorPulseMs : MOTION.pulseMs)) return FPS.busy
+  if (view.tween !== null && nowMs - view.tween.at < MOTION.tweenMs) return FPS.busy
+  if (clashes.some(c => clashActive(state, c, nowMs))) return FPS.busy
+  for (const s of Object.values(stats)) if (!s.placeholder && (s.status === 'running' || s.stuck)) return FPS.glow
+  return FPS.tick
+}
+
+/**
+ * The next frame interval in ms. A frame that took more than 60% of the interval doubles it (down to FPS.min, unless
+ * the target is already slower); one that took under a quarter halves it again, never faster than `fps` asks. 0 means stop.
+ */
+export function frameInterval(fps: number, previousMs: number, renderMs: number): number {
+  if (fps <= 0) return 0
+  const base = Math.round(1000 / fps)
+  const slowest = Math.max(base, Math.round(1000 / FPS.min))
+  if (previousMs <= 0) return base
+  if (renderMs > previousMs * 0.6) return Math.min(slowest, Math.max(base, previousMs * 2))
+  if (renderMs < previousMs * 0.25) return Math.max(base, Math.round(previousMs / 2))
+  return Math.max(base, previousMs)
+}
+
+/** Layout work that depends only on the nodes (nodesKey), cached until they change: order, edges, positions per canvas size. */
+type Shape = { key: string; ids: string[]; edges: Edge[]; sized: Map<string, Record<string, Point>> }
+let shape: Shape | null = null
+
+function shapeFor(state: SwarmState, key: string): Shape {
+  if (shape === null || shape.key !== key) {
+    shape = { key, ids: orderAgents(state).map(a => a.id), edges: structuralEdges(state, state.swarm.topology), sized: new Map() }
+  }
+  return shape
+}
+
+function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Record<string, Point> {
+  const size = `${w}x${h}`
+  let positions = s.sized.get(size)
+  if (positions === undefined) {
+    if (s.sized.size >= 4) s.sized.clear()
+    positions = layoutNodes(state, state.swarm.topology, w, h)
+    s.sized.set(size, positions)
+  }
+  return positions
+}
+
+export function render(state: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}): Frame {
+  const clashes = fileClashes(state, nowMs)
+  const totals = swarmTotals(state, nowMs, clashes)
+  const stats: Record<string, AgentStats> = {}
+  for (const id of Object.keys(state.agents)) {
+    const s = agentStats(state, id, nowMs, clashes)
+    if (s !== null) stats[id] = s
+  }
+  const key = nodesKey(state)
+  const cached = shapeFor(state, key)
+  // Placeholders are read fresh: whether a name has been seen is not part of the nodes' key.
+  const real = cached.ids.flatMap(id => { const a = state.agents[id]; return a === undefined || a.placeholder ? [] : [a] })
+  const realIds = new Set(real.map(a => a.id))
+  const regions = planRegions(size, real.length)
+  const top = new Grid(regions.top.columns, regions.top.rows, CANVAS, TEXT.primary)
+
+  // A failed read keeps the last good state. Say so in the header's goal slot: right-aligned, dim, clipped at its end.
+  const note = [
+    notes.degraded === 'too-large' ? `Swarm too large to draw (${real.length} agents)` : notes.degraded === 'unreadable' ? 'Waiting for the swarm…' : null,
+    notes.hiddenFinished !== undefined && notes.hiddenFinished > 0 ? `+${notes.hiddenFinished} finished` : null,
+    state.swarm.goal,
+  ].filter((t): t is string => t !== null).join(' · ')
+  const shown = note === (state.swarm.goal ?? '') ? state : { ...state, swarm: { ...state.swarm, goal: note } }
+
+  let positions: Record<string, Point> = {}
+  if (regions.step === 'summary') drawSummary(top, regions.header, state, totals)
+  else {
+    drawHeader(top, regions.header, shown, totals)
+    if (regions.tree !== null) drawTree(top, regions.tree, state, stats)
+    if (regions.graph !== null) {
+      positions = tween(positionsFor(state, cached, regions.graph.w, regions.graph.h * 2), view.tween, nowMs)
+      drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges })
+    }
+  }
+
+  const pinned = view.pinned !== null && realIds.has(view.pinned) ? view.pinned : null
+  const chosen = view.spotlight?.id ?? null
+  const spotlight = pinned ?? (chosen !== null && realIds.has(chosen) ? chosen : busiest(state, view.pulses, nowMs))
+
+  let bottom: Grid | null = null
+  if (regions.bottom !== null) {
+    bottom = new Grid(regions.bottom.columns, regions.bottom.rows, CANVAS, TEXT.primary)
+    const spot = regions.spotlight
+    if (spot !== null) {
+      const s = spotlight === null ? null : (stats[spotlight] ?? null)
+      if (s !== null && spotlight !== null) drawSpotlight(bottom, spot, s, state.agents[spotlight]!, nowMs, regions.step === 'compactSpotlight')
+      else {
+        bottom.fill(spot.x, spot.y, spot.w, spot.h, CANVAS_RAISED)
+        writeParts(bottom, spot.x + 1, spot.y, [['No agents yet.', TEXT.dim]], spot.x + spot.w - 1, CANVAS_RAISED)
+      }
+    }
+    if (regions.timeline !== null) drawTimeline(bottom, regions.timeline, state, nowMs)
+    if (regions.feed !== null) drawFeed(bottom, regions.feed, state, nowMs)
+  }
+
+  const chips: Chip[] = regions.chips
+    ? real.map(a => ({ id: a.id, label: clipText(a.name, CHIP_LABEL), color: chipColor(modelColor(a.model)), pinned: a.id === pinned }))
+    : []
+  limitPairs(top, PAIR_BUDGET.top)
+  if (bottom !== null) limitPairs(bottom, PAIR_BUDGET.bottom)
+  const treeKey = [
+    regions.step, `${top.columns}x${top.rows}`, bottom === null ? '-' : `${bottom.columns}x${bottom.rows}`,
+    ...chips.map(c => `${c.id}:${c.label}:${c.color}:${c.pinned ? 1 : 0}`),
+  ].join('|')
+  return {
+    step: regions.step, top, bottom, chips, treeKey, nodesKey: key, positions,
+    fps: targetFps(state, view, nowMs, stats, clashes), spotlight, alt: summaryText(state, totals),
+  }
+}

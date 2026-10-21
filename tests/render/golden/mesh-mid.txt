@@ -1,0 +1,212 @@
+# mesh-mid: mesh at +30000 ms in 120x44; step full, fps 30, spotlight a-cod1
+## top 120x26 sha 1ac8831ec33b0c55
+### glyphs
+ ◆ auth refactor · mesh · 6 agents 4▶ · ≈$0.57+ · 259k tok · ≈$0.11/min · ctx 34% · cc $1.20                            
+ tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash                   move sessions to signed tokens 
+                                              ⢀⣀⣀⡠⠤⠤⠤⠤⠒⠒⠒⠒⠒⠒⠒⠒⠒⠒⠤⠤⠤⠤⢄⣀⣀⡀                                                
+                                      ⢀⣀⡠⠤⠒⠒⠊⠉⠁        ▀▀▀▀▀▀▀▀▀▀      ⠈⠉⠑⠒⠒⠤⢄⣀⡀                                        
+                                 ⣀⡠⠔⠒⠉⠁                    ▀▀                  ⠈⠉⠒⠢⢄⣀                                   
+                            ⢀⡠⠔⠒⠉                          ▀▀  ⠐⠢⢄⡀                  ⠉⠒⠢⢄⡀         ▀▀▀▀▀▀               
+               ▀▀▀▀▀▀   ⢀⡠⠔⠊⠁                          ▀⢀⣠▀▀▀▀▀▀▀ ⠈⠉⠒⠤⢄⡀                 ⠈⠑⠢⢄⡀   ▀▀▀▀▀▀▀ ▀▀             
+                ▀▀▀▀▀⣀⠔⠊⠁                             ⡠⠞⢁⠇▀▀▀▀▀        ⠈⠉⠒⠢⠤⢄⣀⣀              ⠈⠑⠢⣀⣀   ▀▀▀▀ ▀             
+               ▀▀▀▀▀⠉                               ⡴⠊  ◆ lead ▶               ⠉⠉⠉⠑⠒⠒⠒⠒⠒⠒⠒⠒⠒⠒⠉⠉⠉⠁⠉ ▀  ▀▀ ▀              
+              ▀ ▀▀▀▀▀                            ⢀⠴⠉   ⡼                                          ▀⢀▀▀▀▀⢀ ▀▀            
+              ? ghost                          ⢀⡰⠋    ⡸                                          ⡠⠒⡏▀▀▀▀⠘⡆              
+                                              ⡠⠊     ⡰⠁                                       ⢀⠴⠉▶ architect            
+                                            ⢀⠔⠁     ⡜                                        ⡔⠃  ⡰⠁       ⠈⠢⡀  ▀▀▀▀     
+                                           ⢀⠎     ⢀⠞                                       ⣠⠋   ⣰⠁          ⠈⠫⠄   ▀▀▀   
+      ▀▀▀                                 ⢠⠃     ⡰⠃                         ⢀⣀⣀⣀⣀⣀⠤⠤⠤⠤⠤⠤⠤⠤⡼⠠⠤⢄⣀⣜⣀⣀⣀⡀       ▀▀ ▀ ▀▀▀▀▀   
+     ▀▀▀                                 ⡠⠃    ⣀⠎                ⢀⣀⡠⠤⠤⠒⠒⠚⠉⠉⠉⠁           ⢀⠎   ⢀⠎    ⠈⠉⠉⠉⠒⠒⠒⠤⠤⠄   ▀       
+      ▀▀                                ⢠⠃   ⢠⠔⠁          ⣀⡠⠤⠔⠒⠊⠉⠁                     ⢀⠎  ⢀⡔⠁          ⢀⣀ ⠐⠊ ▀▀▀▀▀ ▀   
+  ✕ reviewer                           ⢀⠇  ⡠⠜⠁      ⢀⣀⠤⠖⠊⠉                            ⢀⠎ ⢀⠤⠃       ⢀ ⠠⠒     ▀▀▀▀▀▀▀ ▀   
+                                       ⡎ ⡤⠊⠁   ⢀⡠⠤⠒⠉⠁                                 ⡜⣀⠔⠉     ⠠⠤ ⠈⠁        ▶ coder-1   
+                                 ▀▀▀▀▀⢰⠓⠉  ⢀⡠⠔⠊⠁                                ▀ ▀▀▀⠐⠋  ⢀⡠ ⠐⠉                          
+                                 ▀▀▀▀▀▀⢀⡠⠔⠊⠁                                    ▀ ▀▀▀▀▀⠒                                
+                                  ▀▀▀▀▀                                            ▀  ▀                                 
+                                ▀▀▀ ▀ ▀▀▀                                        ▀▀▀▀▀▀                                 
+                                ▶ tester !                                        ▀▀▀                                   
+                                                                               ✓ coder-2                                
+                                                                                                                        
+### colours
+abbcccccccccccccdddeeeedddccccccccfffdddcccccccdddeeeeeeeedddeeeeeeeeeedddeeeeeeedddeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeea
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiiiiiiiiijjjjjjiiiiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiiiiiiihhhhhhhhklmnnonmlkhhhhhhiiiiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiiiihhhhhhhhhhhhhhhhpqrsttsrqphhhhhhhhhhhhhhiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiiihhhhhhhhhhhhhhhhhhhhhhpqrsuusrvwxxhhhhhhhhhhhhhhhhhhiiiiihhhhhhhhhkkkkkkhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhyyzzyyhhhiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhABCDDDDEFAhxxxxxxhhhhhhhhhhhhhhhhhiiiiihhhklmnnonqGkhhhhhhhhhhhhh
+hhhhhhhhhhhhhhHIJKKLzMiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhNONPAAAAAhhhhhhhhxxxxxxxxhhhhhhhhhhhhhhiiiiQqrstttRqmphhhhhhhhhhhh
+hhhhhhhhhhhhhhHSTUUVWHhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiNhhXYYYYYZZhhhhhhhhhhhhhhhxxxxxxxxxxxxxxxxxP0q1s23usDqphhhhhhhhhhhh
+hhhhhhhhhhhhhh4H56654hhhhhhhhhhhhhhhhhhhhhhhhhhhhNNNhhhxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhp7v81119qFAhhhhhhhhhhhh
+hhhhhhhhhhhhhhZYYYYYYhhhhhhhhhhhhhhhhhhhhhhhhhhN!$hhhhxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhxPP7777%&hhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhhhhxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhxxxZYYYYYYYYYYhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNNhhhhhxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhxxhhxxhhhhhhhONihh****hhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhhhhxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhxxhhhxxhhhhhhhhhh+-/qqq:;*hhh
+hhhhhh<<=hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhhhhxxhhhhhhhhhhhhhhhhhhhhhhhhhxxxxxxxxxxxxxxxxxxxxxxxxhhhhhhh*;q>?@@>^:_hh
+hhhhh~...hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhhhxxhhhhhhhhhhhhhhhhxxxxxxxxxxxxhhhhhhhhhhhxxhhhxxhhhhxxxxxxxx.v.?...?.q_hh
+hhhhhh~~hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhhxxxhhhhhhhhhhxxxxxxxxhhhhhhhhhhhhhhhhhhhhhxxhhxxxhhhhhhhhhh~~h..q.....q._hh
+hh~~~~~~~~~~hhhhhhhhhhhhhhhhhhhhhhhhhhhNNhhxxxhhhhhhxxxxxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhxxhxxxhhhhhhh~h~~hhhhh......._.hhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhNhxxxhhhxxxxxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhxxxxhhhhh~~h~~hhhhhhhhZYYYYYYYYhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.......xhhxxxxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.q...v.hh~~h~~hhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.......v.xxxhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhq........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.q.....q.hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhq.......qhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh...q.q...hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhq......hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhZYYYYYYY..hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh...hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+### legend
+a fg #131a26 bg #131a26 x50
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x51
+d fg #5c6679 bg #131a26 x36
+e fg #9aa4b2 bg #131a26 x81
+f fg #7ee787 bg #131a26 x11
+g fg #f85149 bg #131a26 x9
+h fg #0b0f17 bg #0b0f17 x2268
+i fg #9ecbff bg #0b0f17 x79
+j fg #9ecbff bg #0e1420 x6
+k fg #0b0f17 bg #101929 x10
+l fg #101929 bg #16223a x3
+m fg #16223a bg #3c4352 x4
+n fg #3c4352 bg #4d8dff x6
+o fg #9aa4b2 bg #4d8dff x2
+p fg #101929 bg #101929 x6
+q fg #3c4352 bg #3c4352 x25
+r fg #4d8dff bg #4d8dff x5
+s fg #5e98ff bg #5e98ff x7
+t fg #5e98ff bg #6ea2ff x5
+u fg #6ea2ff bg #5e98ff x3
+v fg #2b3546 bg #3c4352 x5
+w fg #2b3546 bg #101929 x1
+x fg #2b3546 bg #0b0f17 x156
+y fg #0b0f17 bg #0e131b x4
+z fg #0e131b bg #111620 x3
+A fg #101929 bg #0b0f17 x8
+B fg #6d8cb2 bg #131e32 x1
+C fg #3c4e64 bg #293346 x1
+D fg #4d8dff bg #3c4352 x5
+E fg #3c4352 bg #16223a x1
+F fg #16223a bg #101929 x2
+G fg #101929 bg #3c4352 x1
+H fg #0e131b bg #0e131b x4
+I fg #111620 bg #111620 x1
+J fg #141a24 bg #2e3441 x1
+K fg #141a24 bg #424753 x2
+L fg #111620 bg #141a24 x1
+M fg #9ecbff bg #0d1119 x1
+N fg #81a6d1 bg #0b0f17 x24
+O fg #6d8cb2 bg #0b0f17 x2
+P fg #2b3546 bg #0e1420 x4
+Q fg #2b3546 bg #131e32 x1
+R fg #4d8dff bg #5e98ff x1
+S fg #141a24 bg #111620 x1
+T fg #424753 bg #181d29 x1
+U fg #555a64 bg #424753 x2
+V fg #181d29 bg #141a24 x1
+W fg #9ecbff bg #111620 x1
+X fg #b48cff bg #0b0f17 x1
+Y fg #e6edf3 bg #0b0f17 x36
+Z fg #7ee787 bg #0b0f17 x6
+0 fg #f5fbff bg #2f415e x1
+1 fg #5e98ff bg #4d8dff x4
+2 fg #6ea2ff bg #6ea2ff x1
+3 fg #7fadff bg #6ea2ff x1
+4 fg #0e131b bg #0b0f17 x2
+5 fg #111620 bg #0e131b x2
+6 fg #141a24 bg #0e131b x2
+7 fg #3c4352 bg #101929 x5
+8 fg #5e98ff bg #3c4352 x1
+9 fg #81a6d1 bg #4568a9 x1
+! fg #f5fbff bg #273344 x1
+$ fg #f5fbff bg #0b0f17 x1
+% fg #0b0f17 bg #131e32 x1
+& fg #3c4e64 bg #0e1420 x1
+* fg #0b0f17 bg #101d1f x6
++ fg #81a6d1 bg #0e161b x1
+- fg #f5fbff bg #2e4850 x1
+/ fg #81a6d1 bg #263039 x1
+: fg #152c28 bg #3c4352 x2
+; fg #101d1f bg #3c4352 x2
+< fg #0b0f17 bg #f9615a x2
+= fg #0b0f17 bg #f85149 x1
+> fg #4cd07a bg #5dd486 x2
+? fg #5dd486 bg #5dd486 x3
+@ fg #5dd486 bg #6dd993 x2
+^ fg #3c4352 bg #4cd07a x1
+_ fg #101d1f bg #101d1f x4
+~ fg #f85149 bg #0b0f17 x26
+. 50 more pairs
+## bottom 120x17 sha 7a71914abb23187d
+### glyphs
+ ● coder-1 · coder · claude-sonnet-5-5                                                                  ▶ running · 25s 
+ tokens in 5.0k  out 3.7k  cache r 48k w 8.0k  = 65k                                                             ≈$0.08 
+ context ░░░░░░░░░░ 3%  cache hit 79%                                                                                   
+ speed ≈ 1480 tok/s ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█  tokens ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅█                                                           
+ tools r 0  e 2  b 0  s 0  w 0  a 0  o 0   errors 0                                                                     
+ files 2  src/auth/token.ts, src/auth/issuer.ts                                   msgs ↓2 ↑1  ! clash src/auth/token.ts 
+ ▶ lead         ███████████████████████████████████████████████████████████████████████████████████████████████████████ 
+ ▶ architect      █████████████████████████████████████████████████████████████████████████████████████████████████████ 
+ ▶ coder-1                      ███████████████████████████████████████████████████████████████████████████████████████ 
+ ✓ coder-2                      ██████████████████████████████████████████████████████████▌                             
+ ▶ tester                                        ██████████████████████████████████████████████████████████████████████ 
+ ✕ reviewer                                         ██████████████████████████████████████████✕                         
+              └0s───────────────────────────────────────────────────────────────────────────────────────────────────30s 
+  0s # task t2 → done                                                                                                   
+  0s › architect → ?ghost: are you there                                                                                
+  0s › lead → tester: rerun with a fixed seed                                                                           
+  0s › architect → coder-1: use ed25519 keys                                                                            
+### colours
+abbcccccccdddeeeeedddbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafffffffffdddeeea
+aeeeeeeeccccccceecccccccceeeeeeeecccccccccccceeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacccccca
+aeeeeeeeeddddddddddeeeeeeeeeeeeeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeeecccccccccceddddddddddddddbbeeeeeeeeeddddddddddddddbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeggeeehhccciieeejjeeekkeeelleeemmeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeennnnnnnnnnnnnnnnnnnnnnnnna
+oppqqqqooooooooorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrso
+oppqqqqqqqqqoooooorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrso
+oppqqqqqqqoooooooooooooooooooooottttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttuo
+ovvqqqqqqqoooooooooooooooooooooowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwooooooooooooooooooooooooooooo
+oppqqqqqqooooooooooooooooooooooooooooooooooooooooxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyo
+ozzqqqqqqqqooooooooooooooooooooooooooooooooooooooooozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzooooooooooooooooooooooooo
+ooooooooooooooAqqAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAqqqo
+qqqqBBBBBBBBBBBBBBBBBooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+qqqqCCCoooooooooAAAooooooAACCCCCCCCCCCCCoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+qqqqCCCooooAAAooooooAACCCCCCCCCCCCCCCCCCCCCCCooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+qqqqCCCoooooooooAAAoooooooAACCCCCCCCCCCCCCCCoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo
+### legend
+a fg #131a26 bg #131a26 x382
+b fg #4cd07a bg #131a26 x23
+c fg #e6edf3 bg #131a26 x60
+d fg #5c6679 bg #131a26 x47
+e fg #9aa4b2 bg #131a26 x160
+f fg #7ee787 bg #131a26 x9
+g fg #4fd8e8 bg #131a26 x2
+h fg #ffc861 bg #131a26 x2
+i fg #c49bff bg #131a26 x2
+j fg #a6e35a bg #131a26 x2
+k fg #6f95ff bg #131a26 x2
+l fg #ff86c2 bg #131a26 x2
+m fg #d6dbe1 bg #131a26 x2
+n fg #f85149 bg #131a26 x25
+o fg #e6edf3 bg #0b0f17 x590
+p fg #7ee787 bg #0b0f17 x8
+q fg #9aa4b2 bg #0b0f17 x62
+r fg #4d8dff bg #0b0f17 x202
+s fg #8bb5ff bg #0b0f17 x2
+t fg #4cd07a bg #0b0f17 x86
+u fg #8be0a9 bg #0b0f17 x1
+v fg #8b98a9 bg #0b0f17 x2
+w fg #4a695a bg #0b0f17 x59
+x fg #f0e442 bg #0b0f17 x69
+y fg #f5ed84 bg #0b0f17 x1
+z fg #f85149 bg #0b0f17 x45
+A fg #5c6679 bg #0b0f17 x115
+B fg #ffb86b bg #0b0f17 x17
+C fg #9ecbff bg #0b0f17 x61
+## chips
+● #3f73d1 lead (lead)
+● #3f73d1 architect (a-arch)
+● #31854e coder-1 (a-cod1)
+● #31854e coder-2 (a-cod2)
+● #7e7823 tester (a-test)
+● #707681 reviewer (a-rev)
