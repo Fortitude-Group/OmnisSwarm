@@ -58,3 +58,13 @@ test('isOneOf narrows to a known value', () => {
   assert.equal(isOneOf(TOPOLOGIES, 'ring'), false)
   assert.equal(isOneOf(TOPOLOGIES, 3), false)
 })
+
+test('parseLine rejects an invalid swarm id and an over-long agent name', () => {
+  const ok = JSON.parse(serialise(message()))
+  assert.equal(parseLine(JSON.stringify(ok)).ok, true)
+  for (const swarm of ['../x', 'Auth', 'nul', '']) {
+    assert.deepEqual(parseLine(JSON.stringify({ ...ok, swarm })), { ok: false, reason: 'shape' }, swarm)
+  }
+  assert.deepEqual(parseLine(JSON.stringify({ ...ok, agent: 'a'.repeat(65) })), { ok: false, reason: 'shape' })
+  assert.equal(parseLine(JSON.stringify({ ...ok, agent: 'a'.repeat(64) })).ok, true)
+})

@@ -1,14 +1,19 @@
 /** Reading and writing the per-swarm event log under `.omnis-swarm/`. */
-import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { parseLine, serialise, type Source, type SwarmEvent } from './events.ts'
+import {
+  appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync,
+  realpathSync, renameSync, rmSync, writeFileSync,
+} from 'node:fs'
+import { isAbsolute, join, relative } from 'node:path'
+import { isValidSwarmId, LIMITS, parseLine, serialise, type Source, type SwarmEvent } from './events.ts'
+
+export { isValidSwarmId }
 
 export const LOG_DIR = '.omnis-swarm'
 
-const SWARM_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+/** The most bytes one readEvents call takes from a file. */
+export const MAX_READ_BYTES = 1_048_576
 
-/** Swarm ids become file names, so only safe characters and never `..`. */
-export const isValidSwarmId = (id: string): boolean => SWARM_ID.test(id) && !id.includes('..')
+const badId = (id: string): Error => new Error(`invalid swarm id: ${JSON.stringify(id.slice(0, 80))}`)
 
 export function logPaths(root: string): { dir: string; current: string; swarms: string; memory: string } {
   const dir = join(root, LOG_DIR)
@@ -16,13 +21,21 @@ export function logPaths(root: string): { dir: string; current: string; swarms: 
 }
 
 export function swarmLogPath(root: string, id: string): string {
-  if (!isValidSwarmId(id)) throw new Error(`invalid swarm id: ${JSON.stringify(id)}`)
+  if (!isValidSwarmId(id)) throw badId(id)
   return join(logPaths(root).swarms, `${id}.jsonl`)
 }
 
-/** Adds `.omnis-swarm/` to the project's .gitignore unless it is already there. */
+const isLink = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
+
+/** Throws if `path` exists and is a symbolic link (Node reports Windows junctions as links too). */
+function refuseLink(path: string): void {
+  if (isLink(path)) throw new Error(`refusing to write through a link: ${path}`)
+}
+
+/** Adds `.omnis-swarm/` to the project's .gitignore unless it is already there. A symlinked .gitignore is left alone. */
 export function ensureGitignore(root: string): void {
   const file = join(root, '.gitignore')
+  if (isLink(file)) return
   const entry = `${LOG_DIR}/`
   const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
   if (text.split(/\r?\n/).some(line => line.trim() === entry || line.trim() === LOG_DIR)) return
@@ -30,15 +43,23 @@ export function ensureGitignore(root: string): void {
   writeFileSync(file, `${text}${sep}${entry}\n`)
 }
 
-const ready = new Set<string>()
+/** Creates `dir` if missing, then insists it is a real directory inside the project. */
+function checkedDir(root: string, dir: string): void {
+  let stat = lstatSync(dir, { throwIfNoEntry: false })
+  if (stat === undefined) {
+    mkdirSync(dir)
+    stat = lstatSync(dir)
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`log folder is not a plain directory: ${dir}`)
+  const rel = relative(realpathSync(root), realpathSync(dir))
+  if (rel.startsWith('..') || isAbsolute(rel)) throw new Error(`log folder resolves outside the project: ${dir}`)
+}
 
+/** Creates the log folders, refusing any that is a link or leads outside the project. Checked on every call. */
 export function ensureLogDirs(root: string): void {
-  if (ready.has(root) && existsSync(logPaths(root).swarms)) return
   const paths = logPaths(root)
-  mkdirSync(paths.swarms, { recursive: true })
-  mkdirSync(paths.memory, { recursive: true })
+  for (const dir of [paths.dir, paths.swarms, paths.memory]) checkedDir(root, dir)
   ensureGitignore(root)
-  ready.add(root)
 }
 
 /** One append of one line. Retries once, and returns false rather than throwing. */
@@ -47,10 +68,12 @@ export function appendEvent(root: string, event: SwarmEvent): boolean {
     try {
       const line = serialise(event)
       ensureLogDirs(root)
-      appendFileSync(swarmLogPath(root, event.swarm), line)
+      const file = swarmLogPath(root, event.swarm)
+      refuseLink(file)
+      appendFileSync(file, line)
       return true
     } catch {
-      // A locked file or full disk: try once more, then let the caller show a gap.
+      // A locked file, a link or a full disk: try once more, then let the caller show a gap.
     }
   }
   return false
@@ -59,7 +82,8 @@ export function appendEvent(root: string, event: SwarmEvent): boolean {
 export type ReadResult = { events: SwarmEvent[]; offset: number; bad: number; skipped: number; reset: boolean }
 
 /**
- * Reads complete lines from `offset` on. A trailing line with no newline yet is left for next time.
+ * Reads complete lines from `offset` on, at most MAX_READ_BYTES per call; call again from the returned offset.
+ * A short trailing line with no newline yet is left for next time; one longer than a line can be is counted bad and skipped.
  * If the file is now shorter than `offset`, it was replaced, so reading starts again from 0 and `reset` is true.
  */
 export function readEvents(file: string, offset = 0): ReadResult {
@@ -75,18 +99,29 @@ export function readEvents(file: string, offset = 0): ReadResult {
     const start = reset ? 0 : offset
     const result: ReadResult = { events: [], offset: start, bad: 0, skipped: 0, reset }
     if (size === start) return result
-    const buf = Buffer.alloc(size - start)
-    readSync(fd, buf, 0, buf.length, start)
-    const end = buf.lastIndexOf(0x0a)
-    if (end === -1) return result
-    for (const line of buf.subarray(0, end + 1).toString('utf8').split('\n')) {
+    const buf = Buffer.alloc(Math.min(size - start, MAX_READ_BYTES))
+    const got = readSync(fd, buf, 0, buf.length, start)
+    const data = buf.subarray(0, got)
+    let from = 0
+    for (let nl = data.indexOf(0x0a, from); nl !== -1; nl = data.indexOf(0x0a, from)) {
+      const raw = data.subarray(from, nl)
+      from = nl + 1
+      if (raw.length > LIMITS.line) {
+        result.bad++
+        continue
+      }
+      const line = raw.toString('utf8')
       if (line.trim() === '') continue
       const parsed = parseLine(line)
       if (parsed.ok) result.events.push(parsed.event)
       else if (parsed.reason === 'version') result.skipped++
       else result.bad++
     }
-    result.offset = start + end + 1
+    if (data.length - from > LIMITS.line) {
+      result.bad++
+      from = data.length
+    }
+    result.offset = start + from
     return result
   } finally {
     closeSync(fd)
@@ -94,18 +129,29 @@ export function readEvents(file: string, offset = 0): ReadResult {
 }
 
 export function readCurrent(root: string): string | null {
+  let fd: number | undefined
   try {
-    const id = readFileSync(logPaths(root).current, 'utf8').trim()
+    fd = openSync(logPaths(root).current, 'r')
+    const buf = Buffer.alloc(128)
+    const got = readSync(fd, buf, 0, buf.length, 0)
+    const id = buf.subarray(0, got).toString('utf8').trim()
     return isValidSwarmId(id) ? id : null
   } catch {
     return null
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
 }
 
 export function writeCurrent(root: string, id: string): void {
-  if (!isValidSwarmId(id)) throw new Error(`invalid swarm id: ${JSON.stringify(id)}`)
+  if (!isValidSwarmId(id)) throw badId(id)
   ensureLogDirs(root)
-  writeFileSync(logPaths(root).current, `${id}\n`)
+  const { current } = logPaths(root)
+  refuseLink(current)
+  const temp = `${current}.${process.pid}.tmp`
+  rmSync(temp, { force: true })
+  writeFileSync(temp, `${id}\n`, { flag: 'wx' })
+  renameSync(temp, current)
 }
 
 export function clearCurrent(root: string): void {
