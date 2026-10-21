@@ -6,8 +6,8 @@ import { desaturate, mix, quantise, scale } from './color.ts'
 import { clipText } from './format.ts'
 import { arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
-import { orderAgents, structuralEdges } from './layout.ts'
-import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
+import { type Edge, orderAgents, structuralEdges } from './layout.ts'
+import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
 import type { Point, Rect, View } from './types.ts'
 
 export type GraphInput = {
@@ -19,6 +19,8 @@ export type GraphInput = {
   now: number
   /** The time effects are drawn at: now less the arrival lag, so a comet starts at its sender. */
   tEff: number
+  /** The swarm's structural edges, when the caller has them cached; otherwise worked out each frame. */
+  edges?: readonly Edge[]
 }
 
 type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState }
@@ -36,7 +38,7 @@ export function nodeRadius(tokens: number, maxRadius: number): number {
   const t = Number.isFinite(tokens) ? Math.max(0, tokens) : tokens > 0 ? 1e12 : 0
   const cap = Number.isNaN(maxRadius) ? GRAPH.minRadius : Math.max(GRAPH.minRadius, maxRadius)
   const r = GRAPH.minRadius + 0.9 * Math.log10(1 + t / 1000)
-  return Math.max(GRAPH.minRadius, Math.min(cap, r))
+  return Math.max(GRAPH.minRadius, Math.min(GRAPH.maxRadius, cap, r))
 }
 
 /** Running: the model colour. Waiting: dimmer. Done: fades to a ghost. Failed: red. Everything fades in from the canvas. */
@@ -47,6 +49,44 @@ export function nodeColor(s: AgentStats, a: AgentState, now: number): number {
   else if (s.status === 'done') c = mix(base, mix(desaturate(base, 0.7), CANVAS, 0.55), quantise(ghost(a.finishedAt, now), 6))
   else if (s.status === 'waiting') c = scale(base, 0.72)
   return mix(CANVAS, c, quantise(fadeIn(a.startedAt, now), 8))
+}
+
+/** The largest node radius for these centres: about 0.4 of the gap to the nearest neighbour, so dense layers shrink. */
+export function radiusCap(points: readonly Point[], area: Rect): number {
+  const sorted = [...points].sort((p, q) => p.x - q.x || p.y - q.y)
+  let nearest = Number.POSITIVE_INFINITY
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length && sorted[j]!.x - sorted[i]!.x < nearest; j++) {
+      nearest = Math.min(nearest, Math.hypot(sorted[j]!.x - sorted[i]!.x, sorted[j]!.y - sorted[i]!.y))
+    }
+  }
+  const fit = Math.max(GRAPH.minRadius, (area.h * 2) / 7)
+  return Math.min(GRAPH.maxRadius, fit, Math.max(GRAPH.minRadius, 0.4 * nearest))
+}
+
+/**
+ * The bend for an arc from a to b: GRAPH.linkBend, raised (up to GRAPH.linkBendMax) until the arc's peak clears every
+ * obstacle between the ends. A quadratic arc with its control point over the midpoint sits 2t(1-t) x bend x length off the
+ * line at the fraction t along it.
+ */
+export function bendFor(a: Point, b: Point, obstacles: readonly { p: Point; reach: number }[]): number {
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  if (!(len > 0)) return GRAPH.linkBend
+  const ux = (b.x - a.x) / len
+  const uy = (b.y - a.y) / len
+  let bend: number = GRAPH.linkBend
+  for (let pass = 0; pass < 2; pass++) {
+    for (const o of obstacles) {
+      const ox = o.p.x - a.x
+      const oy = o.p.y - a.y
+      const t = (ox * ux + oy * uy) / len
+      if (!(t > 0 && t < 1)) continue
+      const side = -ox * uy + oy * ux
+      const k = 2 * t * (1 - t) * len
+      if (Math.abs(bend * k - side) < o.reach) bend = Math.max(bend, (side + o.reach) / k)
+    }
+  }
+  return Math.min(GRAPH.linkBendMax, bend)
 }
 
 export function lastEditAt(state: SwarmState, path: string): number {
@@ -123,7 +163,7 @@ function dotPath(dots: Dots, path: (t: number) => Point, length: number, color: 
 function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
   const used = new Uint8Array(area.w * area.h)
   for (const n of nodes) {
-    const row = Math.max(0, Math.min(area.h - 1, Math.floor((n.p.y + n.r + 0.5) / 2) + 1))
+    const row = Math.max(0, Math.min(area.h - 1, Math.floor((n.p.y + n.r + GRAPH.ringPx) / 2) + 1))
     const isLead = n.id === LEAD
     const status = statusGlyph(n.s.status, n.s.placeholder)
     const statusColor = STATUS[n.s.status]
@@ -134,7 +174,7 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
     const full: Part[] = isLead
       ? [[GLYPH.lead, ACCENT], [` ${name}`, nameColor], [` ${status}`, statusColor], ...stuck]
       : [[status, statusColor], [` ${name}`, nameColor], ...stuck]
-    const short: Part[] = [isLead ? [GLYPH.lead, ACCENT] : [status, statusColor]]
+    const short: Part[] = isLead ? [[GLYPH.lead, ACCENT], [status, statusColor]] : [[status, statusColor]]
     for (const parts of [full, short]) {
       const cells = parts.flatMap(([text, color]) => [...text].map(ch => [ch, color] as const))
       if (cells.length > area.w) continue
@@ -149,25 +189,48 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
   }
 }
 
-export function drawGraph(grid: Grid, area: Rect, input: GraphInput): void {
+export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const { state, stats, positions, clashes, view, now, tEff } = input
+  if (![full.x, full.y, full.w, full.h].every(v => !Number.isNaN(v))) return
+  const x = Math.max(0, Math.floor(full.x))
+  const y = Math.max(0, Math.floor(full.y))
+  const area: Rect = {
+    x, y,
+    w: Math.floor(Math.min(full.w, grid.columns - x, RASTER_MAX.columns)),
+    h: Math.floor(Math.min(full.h, grid.rows - y, RASTER_MAX.rows)),
+  }
   if (area.w < 1 || area.h < 1) return
   const px = new Pixels(area.w, area.h * 2, CANVAS)
   const dots = new Dots(area.w, area.h)
-  const crowd = Math.max(1, Object.keys(state.agents).length)
-  // Dense layers shrink the nodes: each gets about its share of the canvas, never less than the minimum.
-  const maxR = Math.min(GRAPH.maxRadius, Math.max(GRAPH.minRadius, (area.h * 2) / 7), Math.max(GRAPH.minRadius, Math.sqrt((area.w * area.h * 2) / crowd) / 3))
-  const nodes = new Map<string, Node>()
+  const placed: { a: AgentState; p: Point; s: AgentStats }[] = []
   for (const a of orderAgents(state)) {
     const p = posOf(positions, a.id)
     const s = Object.hasOwn(stats, a.id) ? stats[a.id]! : null
-    if (p === null || s === null) continue
-    nodes.set(a.id, { id: a.id, p, r: s.placeholder ? GRAPH.minRadius : nodeRadius(s.tokens.total, maxR), fill: nodeColor(s, a, now), s, a })
+    if (p !== null && s !== null) placed.push({ a, p, s })
+  }
+  const maxR = radiusCap(placed.map(n => n.p), area)
+  const nodes = new Map<string, Node>()
+  for (const { a, p, s } of placed) {
+    const room = Math.min(p.y, area.h * 2 - 2 - p.y, p.x, area.w - p.x) - GRAPH.ringPx - 0.5
+    const r = s.placeholder ? GRAPH.minRadius : nodeRadius(s.tokens.total, Math.min(maxR, Math.max(GRAPH.minRadius, room)))
+    nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now), s, a })
   }
   const segment = (from: string, to: string, gap = 1): [Point, Point] | null => {
     const a = nodes.get(from)
     const b = nodes.get(to)
     return a === undefined || b === undefined ? null : trimmed(a.p, b.p, a.r + gap, b.r + gap)
+  }
+  const bends = new Map<string, number>()
+  const bendOf = (from: string, to: string, seg: [Point, Point]): number => {
+    const key = `${from} ${to}`
+    const known = bends.get(key)
+    if (known !== undefined) return known
+    const obstacles = [...nodes.values()]
+      .filter(n => n.id !== from && n.id !== to)
+      .map(n => ({ p: n.p, reach: n.r + GRAPH.ringPx + 1 }))
+    const bend = bendFor(seg[0], seg[1], obstacles)
+    bends.set(key, bend)
+    return bend
   }
   const recency = (lastAt: number): number => quantise(flash(lastAt, tEff, MOTION.linkFadeMs), 5)
 
@@ -176,7 +239,7 @@ export function drawGraph(grid: Grid, area: Rect, input: GraphInput): void {
     if (link.count < GRAPH.linkThick[1]) continue
     const seg = segment(link.from, link.to, 0.5)
     if (seg === null) continue
-    const path = arc(seg[0], seg[1], GRAPH.linkBend)
+    const path = arc(seg[0], seg[1], bendOf(link.from, link.to, seg))
     const steps = Math.min(MAX_STEPS, Math.max(2, Math.ceil(Math.hypot(seg[1].x - seg[0].x, seg[1].y - seg[0].y))))
     const color = mix(LINK.idle, LINK.active, recency(link.lastAt))
     for (let i = 0; i <= steps; i++) {
@@ -199,7 +262,7 @@ export function drawGraph(grid: Grid, area: Rect, input: GraphInput): void {
   }
 
   // 3. The swarm's shape: faint dotted edges.
-  for (const e of structuralEdges(state, state.swarm.topology)) {
+  for (const e of input.edges ?? structuralEdges(state, state.swarm.topology)) {
     const seg = segment(e.from, e.to)
     if (seg !== null) dots.line(toDots(seg[0]), toDots(seg[1]), mix(CANVAS, TEXT.faint, 0.9), 2)
   }
@@ -210,8 +273,9 @@ export function drawGraph(grid: Grid, area: Rect, input: GraphInput): void {
     if (seg === null) continue
     const color = mix(LINK.idle, LINK.active, recency(link.lastAt))
     const length = Math.hypot(seg[1].x - seg[0].x, seg[1].y - seg[0].y)
-    dotPath(dots, arc(seg[0], seg[1], GRAPH.linkBend), length, color)
-    if (link.count >= GRAPH.linkThick[0]) dotPath(dots, arc(seg[0], seg[1], GRAPH.linkBend + 0.04), length, color)
+    const bend = bendOf(link.from, link.to, seg)
+    dotPath(dots, arc(seg[0], seg[1], bend), length, color)
+    if (link.count >= GRAPH.linkThick[0]) dotPath(dots, arc(seg[0], seg[1], bend + GRAPH.busyArcOffset), length, color)
   }
 
   // 5. File clashes: a dashed red line between the agents editing the same file.
@@ -228,7 +292,7 @@ export function drawGraph(grid: Grid, area: Rect, input: GraphInput): void {
     if (item.kind !== 'message' || item.to === undefined) continue
     const seg = segment(item.agent, item.to)
     if (seg === null) continue
-    for (const spark of comet(arc(seg[0], seg[1], GRAPH.linkBend), item.at, tEff)) {
+    for (const spark of comet(arc(seg[0], seg[1], bendOf(item.agent, item.to, seg)), item.at, tEff)) {
       if (spark.k === 1) heads.push(spark.p)
       else {
         const d = toDots(spark.p)

@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { foldAll, type SwarmState } from '../../src/core/fold.ts'
+import { LEAD, foldAll, type SwarmState } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.ts'
 import { pulsesFrom } from '../../src/mod/pane-model.ts'
 import { desaturate, mix, scale } from '../../src/render/color.ts'
-import { drawGraph, nodeColor, nodeRadius } from '../../src/render/graph.ts'
+import { bendFor, drawGraph, nodeColor, nodeRadius, radiusCap } from '../../src/render/graph.ts'
 import { Grid, gridText, pairCount } from '../../src/render/grid.ts'
 import { layoutNodes } from '../../src/render/layout.ts'
-import { CANVAS, GRAPH, LINK, MODEL, STATUS } from '../../src/render/tokens.ts'
+import { CANVAS, GRAPH, LINK, MODEL, STATUS, TEXT } from '../../src/render/tokens.ts'
 import { emptyView, rect } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 import { ev } from '../helpers.ts'
@@ -116,7 +116,7 @@ test('a tool flicker lights a pixel band outside the context ring', () => {
   assert.ok(outside > 0)
 })
 
-test('a dense swarm and hostile input draw without NaN or overflow', () => {
+test('a dense swarm and hostile input draw without NaN or overflow', { timeout: 10_000 }, () => {
   const events = [] as ReturnType<typeof ev>[]
   for (let i = 0; i < 300; i++) events.push(ev('agent.started', { name: `n${i}`, role: 'r', description: '', parent: i === 0 ? '' : 'n0' }, { agent: `n${i}`, atSec: i }))
   const s = foldAll('s1', events)
@@ -127,7 +127,84 @@ test('a dense swarm and hostile input draw without NaN or overflow', () => {
   const bad = new Grid(40, 10, CANVAS)
   const positions = Object.fromEntries(Object.keys(s.agents).map(id => [id, { x: NaN, y: Infinity }]))
   drawGraph(bad, rect(0, 0, 40, 10), { state: s, stats, positions, clashes, view: emptyView(), now: NaN, tEff: NaN })
+  assert.ok(cells(bad).every(c => c.bg === CANVAS && c.glyph === 0x20), 'every hostile position was rejected')
   drawGraph(bad, rect(0, 0, 0, 0), { state: s, stats, positions: {}, clashes, view: emptyView(), now, tEff: now })
   const tiny = new Grid(3, 2, CANVAS)
   drawGraph(tiny, rect(0, 0, 3, 2), { state: s, stats, positions: layoutNodes(s, s.swarm.topology, 3, 4), clashes, view: emptyView(), now, tEff: now })
+})
+
+const one = (): SwarmState => foldAll('s1', [ev('agent.started', { name: 'solo', role: 'r', description: '', parent: '' }, { agent: 'solo', atSec: 0 })])
+const T1 = Date.parse('2026-10-21T10:00:30.000Z')
+
+test('caller-supplied edges replace the per-frame structural edges', () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const { stats, clashes } = statsOf(s, FIVE_AT.idle)
+  const positions = layoutNodes(s, s.swarm.topology, 120, 48)
+  const faint = mix(CANVAS, TEXT.faint, 0.9)
+  const count = (edges?: { from: string; to: string }[]) => {
+    const g = new Grid(120, 24, CANVAS)
+    drawGraph(g, rect(0, 0, 120, 24), { state: s, stats, positions, clashes, view: emptyView(), now: FIVE_AT.idle, tEff: FIVE_AT.idle, ...(edges ? { edges } : {}) })
+    return cells(g).filter(c => c.glyph > 0x2800 && c.fg === faint).length
+  }
+  assert.ok(count() > 0)
+  assert.equal(count([]), 0)
+})
+
+test('a max-size node at the top of the canvas keeps its context ring inside it', () => {
+  const s = one()
+  const { stats, clashes } = statsOf(s, T1)
+  const big = { ...stats['solo']!, status: 'waiting' as const, contextFill: 0.5, tokens: { ...stats['solo']!.tokens, total: 1e12 } }
+  const g = new Grid(40, 30, CANVAS)
+  drawGraph(g, rect(0, 0, 40, 30), { state: s, stats: { solo: big }, positions: { solo: { x: 20, y: 6 } }, clashes, view: emptyView(), now: T1, tEff: T1 })
+  assert.ok(cells(g).slice(19, 21).some(c => c.fg === TEXT.dim || c.bg === TEXT.dim), 'the ring top is on the canvas')
+})
+
+test('a node on the bottom layer leaves its own label row clear of its ring', () => {
+  const s = one()
+  const { stats, clashes } = statsOf(s, T1)
+  const big = { ...stats['solo']!, status: 'waiting' as const, contextFill: 0.5, tokens: { ...stats['solo']!.tokens, total: 1e12 } }
+  const g = new Grid(40, 30, CANVAS)
+  drawGraph(g, rect(0, 0, 40, 30), { state: s, stats: { solo: big }, positions: { solo: { x: 20, y: 53 } }, clashes, view: emptyView(), now: T1, tEff: T1 })
+  assert.ok(cells(g).slice(29 * 40).every(c => c.glyph !== 0x2580 && c.bg === CANVAS), 'nothing but the label in the last row')
+  assert.ok(gridText(g)[29]!.includes('solo'))
+})
+
+test('radius is capped by the spacing between nodes', () => {
+  const area = rect(0, 0, 120, 24)
+  assert.equal(radiusCap([{ x: 10, y: 20 }, { x: 80, y: 20 }], area), GRAPH.maxRadius)
+  assert.equal(radiusCap([{ x: 10, y: 20 }, { x: 15, y: 20 }], area), 2)
+  assert.equal(radiusCap([{ x: 10, y: 20 }, { x: 10, y: 20 }], area), GRAPH.minRadius)
+  assert.equal(radiusCap([{ x: 10, y: 20 }], area), GRAPH.maxRadius)
+  assert.ok(nodeRadius(1e12, 99) <= GRAPH.maxRadius)
+})
+
+test('an arc bends enough to clear a node sitting between its ends', () => {
+  const a = { x: 10, y: 20 }
+  const b = { x: 70, y: 20 }
+  assert.equal(bendFor(a, b, []), GRAPH.linkBend)
+  const reach = 7
+  const bend = bendFor(a, b, [{ p: { x: 40, y: 20 }, reach }])
+  assert.ok(bend > GRAPH.linkBend && bend <= GRAPH.linkBendMax)
+  assert.ok(0.5 * bend * 60 >= reach - 1e-9, 'the peak clears the node')
+  assert.equal(bendFor(a, b, [{ p: { x: 40, y: 20 }, reach: 1000 }]), GRAPH.linkBendMax)
+  assert.equal(bendFor(a, a, [{ p: a, reach: 3 }]), GRAPH.linkBend)
+})
+
+test('a crowded lead keeps its status glyph beside the diamond', () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const { stats, clashes } = statsOf(s, FIVE_AT.mid)
+  const positions = layoutNodes(s, s.swarm.topology, 120, 48)
+  const g = new Grid(5, 24, CANVAS)
+  drawGraph(g, rect(0, 0, 5, 24), { state: s, stats, positions: { [LEAD]: { x: 2, y: 10 } }, clashes, view: emptyView(), now: FIVE_AT.mid, tEff: FIVE_AT.mid })
+  assert.match(gridText(g).join(''), /◆[▶◌✓✕]/)
+})
+
+test('an infinite or oversized area is clamped to the grid', { timeout: 10_000 }, () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const { stats, clashes } = statsOf(s, FIVE_AT.mid)
+  const positions = layoutNodes(s, s.swarm.topology, 120, 48)
+  const g = new Grid(120, 24, CANVAS)
+  for (const area of [rect(0, 0, Infinity, Infinity), rect(0, 0, 4000, 4000), rect(100, 10, 4000, 4000), rect(NaN, 0, 10, 10)]) {
+    drawGraph(g, area, { state: s, stats, positions, clashes, view: emptyView(), now: FIVE_AT.mid, tEff: FIVE_AT.mid })
+  }
 })
