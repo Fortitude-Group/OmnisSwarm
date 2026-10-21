@@ -234,3 +234,53 @@ test('error messages embed at most 80 characters of a bad id', () => {
   const err = assert.throws(() => swarmLogPath(tmpRoot(), 'Z'.repeat(5000)), (e: Error) => e.message.length < 200)
   assert.equal(err, undefined)
 })
+
+// Fix round 2
+
+test('readers refuse a symlinked log file and a symlinked current file', t => {
+  const root = tmpRoot()
+  appendEvent(root, msg(1))
+  const real = swarmLogPath(root, 's1')
+  const link = swarmLogPath(root, 's2')
+  const curLink = logPaths(root).current
+  const target = join(logPaths(root).dir, 'real-current')
+  writeFileSync(target, 'auth\n')
+  try {
+    symlinkSync(real, link, 'file')
+    symlinkSync(target, curLink, 'file')
+  } catch {
+    t.skip('cannot create file symlinks here')
+    return
+  }
+  assert.deepEqual(readEvents(link), { events: [], offset: 0, bad: 0, skipped: 0, reset: false })
+  assert.equal(readCurrent(root), null)
+  assert.equal(readEvents(real).events.length, 1)
+})
+
+test('readers refuse a directory where a file should be', () => {
+  const root = tmpRoot()
+  ensureLogDirs(root)
+  mkdirSync(logPaths(root).current)
+  assert.equal(readCurrent(root), null)
+  const dirAsLog = join(logPaths(root).swarms, 'd.jsonl')
+  mkdirSync(dirAsLog)
+  assert.deepEqual(readEvents(dirAsLog), { events: [], offset: 0, bad: 0, skipped: 0, reset: false })
+})
+
+test('a .gitignore that is a directory does not stop logging', () => {
+  const root = tmpRoot()
+  mkdirSync(join(root, '.gitignore'))
+  assert.equal(appendEvent(root, msg(1)), true)
+  assert.equal(readEvents(swarmLogPath(root, 's1')).events.length, 1)
+})
+
+test('readEvents treats a bad offset as 0 and reports a reset', () => {
+  const root = tmpRoot()
+  appendEvent(root, msg(1))
+  const file = swarmLogPath(root, 's1')
+  for (const bad of [-5, Number.NaN, 1.5, Number.POSITIVE_INFINITY]) {
+    const read = readEvents(file, bad)
+    assert.equal(read.reset, true, String(bad))
+    assert.deepEqual(read.events, [msg(1)], String(bad))
+  }
+})

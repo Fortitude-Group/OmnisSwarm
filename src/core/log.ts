@@ -1,6 +1,6 @@
 /** Reading and writing the per-swarm event log under `.omnis-swarm/`. */
 import {
-  appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync,
+  appendFileSync, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync,
   realpathSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
@@ -32,15 +32,20 @@ function refuseLink(path: string): void {
   if (isLink(path)) throw new Error(`refusing to write through a link: ${path}`)
 }
 
-/** Adds `.omnis-swarm/` to the project's .gitignore unless it is already there. A symlinked .gitignore is left alone. */
+/** Adds `.omnis-swarm/` to the project's .gitignore unless it is already there. Best effort: only a regular file is edited and any failure is swallowed. */
 export function ensureGitignore(root: string): void {
-  const file = join(root, '.gitignore')
-  if (isLink(file)) return
-  const entry = `${LOG_DIR}/`
-  const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
-  if (text.split(/\r?\n/).some(line => line.trim() === entry || line.trim() === LOG_DIR)) return
-  const sep = text === '' || text.endsWith('\n') ? '' : '\n'
-  writeFileSync(file, `${text}${sep}${entry}\n`)
+  try {
+    const file = join(root, '.gitignore')
+    const stat = lstatSync(file, { throwIfNoEntry: false })
+    if (stat !== undefined && !stat.isFile()) return
+    const entry = `${LOG_DIR}/`
+    const text = stat === undefined ? '' : readFileSync(file, 'utf8')
+    if (text.split(/\r?\n/).some(line => line.trim() === entry || line.trim() === LOG_DIR)) return
+    const sep = text === '' || text.endsWith('\n') ? '' : '\n'
+    writeFileSync(file, `${text}${sep}${entry}\n`)
+  } catch {
+    // An odd .gitignore must never stop logging.
+  }
 }
 
 /** Creates `dir` if missing, then insists it is a real directory inside the project. */
@@ -84,19 +89,25 @@ export type ReadResult = { events: SwarmEvent[]; offset: number; bad: number; sk
 /**
  * Reads complete lines from `offset` on, at most MAX_READ_BYTES per call; call again from the returned offset.
  * A short trailing line with no newline yet is left for next time; one longer than a line can be is counted bad and skipped.
+ * An offset that is not a safe non-negative integer counts as 0, with `reset` true.
  * If the file is now shorter than `offset`, it was replaced, so reading starts again from 0 and `reset` is true.
  */
 export function readEvents(file: string, offset = 0): ReadResult {
+  const validOffset = Number.isSafeInteger(offset) && offset >= 0
+  const given = validOffset ? offset : 0
   let fd: number
   try {
+    if (isLink(file)) throw new Error('refusing a link')
     fd = openSync(file, 'r')
   } catch {
-    return { events: [], offset, bad: 0, skipped: 0, reset: false }
+    return { events: [], offset: given, bad: 0, skipped: 0, reset: false }
   }
   try {
-    const size = fstatSync(fd).size
-    const reset = size < offset
-    const start = reset ? 0 : offset
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) return { events: [], offset: given, bad: 0, skipped: 0, reset: false }
+    const size = stat.size
+    const reset = !validOffset || size < given
+    const start = reset ? 0 : given
     const result: ReadResult = { events: [], offset: start, bad: 0, skipped: 0, reset }
     if (size === start) return result
     const buf = Buffer.alloc(Math.min(size - start, MAX_READ_BYTES))
@@ -131,7 +142,10 @@ export function readEvents(file: string, offset = 0): ReadResult {
 export function readCurrent(root: string): string | null {
   let fd: number | undefined
   try {
-    fd = openSync(logPaths(root).current, 'r')
+    const file = logPaths(root).current
+    if (isLink(file)) return null
+    fd = openSync(file, 'r')
+    if (!fstatSync(fd).isFile()) return null
     const buf = Buffer.alloc(128)
     const got = readSync(fd, buf, 0, buf.length, 0)
     const id = buf.subarray(0, got).toString('utf8').trim()
