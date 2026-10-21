@@ -174,7 +174,7 @@ spotlight. In greyscale the glyphs `▶ ◌ ✓ ✕ ?` and the trailing `!` are 
 
 | Status | Node fill | Glyph (colour) | Label colour | Motion |
 |---|---|---|---|---|
-| running | Model colour, lit core (centre mixed toward white by up to 28%, 4 steps) | `▶` (`STATUS.running`) | `TEXT.primary` | Glow halo breathes: halo light = `0.55 × q5(0.45 + 0.55 × glow)`, period `glowPeriodMs`, phase offset per agent |
+| running | Model colour, lit core (centre mixed toward white by up to 28%, 4 steps) | `▶` (`STATUS.running`) | `TEXT.primary` | Glow halo breathes: at distance `d` past the node edge, light `0.8 × q5(1 - (d - r) / (ringPx + glowPx)) × q5(0.45 + 0.55 × glow)` of the fill, linear falloff, period `glowPeriodMs`, phase offset per agent |
 | waiting | Model colour × 0.72 (e.g. opus `#3766b8`, 3.43:1) | `◌` (`STATUS.waiting`) | `TEXT.dim` | None |
 | done | Fades linearly over `ghostMs` to `mix(desaturate(model, 0.7), CANVAS, 0.55)`, 6 steps. Ghost contrast 2.0-3.5:1: still visible, clearly out of play | `✓` (`STATUS.done`) | `TEXT.dim` | The fade, then still |
 | failed | `STATUS.failed`, stays | `✕` (`STATUS.failed`) | `STATUS.failed` | A red rim pulse (`errorPulseMs`) for the failed tool call, if one came first; then still. Red but still is how failed differs from a live error pulse |
@@ -188,8 +188,9 @@ the name**: `◆ lead ▶`. Without that, a failed lead would be shown by red al
 status glyph after the name for the lead, coloured as for any agent, with a space before it.)
 
 **Context ring** (radius ≥ 2.2 only): an arc clockwise from 12 o'clock, its length the context fill, in
-`contextColor(fill)` (`TEXT.dim` below 70%, `STATUS.warn` from 70%, `STATUS.failed` from 90%). The unfilled part is
-`mix(CANVAS, TEXT.faint, 0.6)`. Arc length carries the amount, so the threshold colour is never the only carrier;
+`contextColor(fill)` (`TEXT.dim` below 70%, `STATUS.warn` from 70%, `STATUS.failed` from 90%). The unfilled part is a
+faint track, `mix(CANVAS, TEXT.faint, 0.35)` (`#272d39`), so a near-empty context doesn't draw a grey frame round
+every node. Arc length carries the amount, so the threshold colour is never the only carrier;
 the spotlight prints the percentage.
 
 **Tool flicker** (`pulseMs`): the outer pixel band of the node (`r - 1 < d ≤ r`) blends toward `KIND[kind]` by
@@ -223,7 +224,7 @@ misalign too.
 | `▀` | U+2580 | A | Half block: two vertical pixels a cell, upper = fg, lower = bg |
 | `⠀`-`⣿` | U+2800-U+28FF | N | Braille: 2×4 dots a cell, for structural edges, message arcs, comets, the clash dashes |
 | `▁▂▃▄▅▆▇█` | U+2581-U+2588 | A | Sparklines (8 heights) and full timeline cells |
-| `▏▎▍▌▋▊▉` | U+258F-U+2589 | A | Left eighths: sub-cell ends of timeline bars |
+| `▅` | U+2585 | A | Timeline bars (five-eighths high, so rows stay apart) |
 | `░` | U+2591 | A | Empty part of the context bar |
 | `─` `└` | U+2500, U+2514 | A | Timeline axis |
 | `→` `↓` `↑` `≈` `·` `…` `–` | U+2192, U+2193, U+2191, U+2248, U+00B7, U+2026, U+2013 | A | Text punctuation |
@@ -311,19 +312,24 @@ spokes, lead to each agent.
               (T)            (?ghost)
 ```
 
-**Node size in a crowd.** A node's radius is capped at about 0.4 times the gap to its nearest neighbour (never
+**Node size in a crowd.** A node's radius is capped at 0.4 times the gap to its nearest neighbour (never
 below `minRadius`, never above `maxRadius` or a seventh of the graph height), so dense layers shrink and roomy ones
 keep full-size nodes. It is also capped by edge room: the node and its ring stay inside the canvas at the top,
 bottom and sides, and the label row sits below the ring rather than over it.
 
 **Links over every layout.**
-- Structural edges (tree: parent to child; star: the spokes; mesh: none) are always straight, faint and dotted,
-  and stop one pixel short of each node's edge.
+- Structural edges (tree: parent to child; star: the spokes; mesh: none) are always straight and dotted (dash 2)
+  in `mix(CANVAS, TEXT.faint, 0.6)` (`#3c4352`, 1.93:1): the quietest line in the graph, and stop one pixel short of
+  each node's edge.
 - A message link is a quadratic arc bowed `linkBend` (0.18) of its length to the left of travel, raised up to
   `linkBendMax` (0.5) until its peak clears every node between its ends (radius + ring + 1 px). A→B and B→A
   curve opposite ways, so both show. A link never lies on its parent edge, and a same-row link arcs over the
   nodes between.
-- A link brightens from `LINK.idle` to `LINK.active` when a message passes and decays over `linkFadeMs`.
+- **A quiet link (fewer than `linkThick[0]` messages) is drawn only while it is recent:** `mix(CANVAS, LINK.active,
+  recency)`, fading to nothing over `linkFadeMs`. Only the links that just carried a message show, each with its
+  comet. At the first review the fixture drew 8 arcs and 5 edges across 7 nodes at once; this leaves 3 arcs, all live.
+- A busy link (`linkThick[0]` or more) stays drawn: `mix(LINK.idle, LINK.active, recency)`, brightening when a
+  message passes and decaying back to `LINK.idle` over `linkFadeMs`.
 - At `linkThick[0]` (5) messages it gets a second arc `busyArcOffset` (0.04) further out. At `linkThick[1]` (20) it also gets a soft pixel
   arc beneath (pixels blended 45% toward the link colour), so busy links read as thicker.
 - Comets run along the arc with the trail behind.
@@ -332,7 +338,14 @@ bottom and sides, and the label row sits below the ring rather than over it.
 
 **Labels.** One row below each node: the status glyph, a space, the name clipped to 12 characters, then ` !` if
 stuck (and ` ▶`-style trailing status for the lead, section 4). If the label would overlap another, fall back to the
-glyph alone; if that overlaps too, skip it (the chips and spotlight still name everyone).
+glyph alone (keeping the marks: `◆` before the lead's glyph, `!` after a stuck agent's); if that overlaps too, skip it (the chips and spotlight still name everyone). A label needs its span
+**plus one cell either side** clear of other labels and of cells holding node pixels; braille dots inside that padded
+span are cleared to a space (the cell keeps its background), so a label never runs into a line or a node.
+
+**Legibility guard.** If the closest two node centres are under 8 px apart (`2 × (minRadius + ringPx) + 2`, rounded
+up), nodes and halos overlap and the picture lies. The graph area then shows the indented tree (as in the tree step)
+instead of the graph; the chips and spotlight stay. At the first review this fired in the 80×21 case, where the three
+tree layers had only 5 px between them.
 
 ## 8. Size steps
 
@@ -402,13 +415,24 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
 ## 9. Spotlight card, timeline, feed, header, chips
 
 **Header** (`CANVAS_RAISED`, 2 rows; Task 8's layout holds):
-- Row 0: `◆` in `ACCENT`, swarm name `TEXT.primary`, topology `TEXT.dim`, `n agents` `TEXT.primary` then `k▶` in
-  `STATUS.running`, cost `TEXT.primary` (`+` when some agents have no price), tokens, burn and `ctx` in `TEXT.dim`
-  with the percentage in `contextColor`, `cc $x.xx` (Claude Code's own session cost) in `TEXT.dim`, `ended` in
-  `TEXT.dim` when it ended. Right-aligned: `⚠ n gaps` in `STATUS.warn`.
+- Row 0, in this order: `◆` in `ACCENT`, swarm name `TEXT.primary`, topology `TEXT.dim`, `n agents` `TEXT.primary`
+  then `k▶` in `STATUS.running` (`TEXT.dim` when k is 0), cost `TEXT.primary` (`+` when some agents have no price),
+  `ctx` in `TEXT.dim` with the percentage in `contextColor`, then tokens and burn in `TEXT.dim`, `cc $x.xx` (Claude
+  Code's own session cost) in `TEXT.dim`, `ended` in `TEXT.dim` when it ended. Right-aligned: `⚠ n gaps` in
+  `STATUS.warn`. Context comes before tokens because it is the figure to keep when the row runs out of room.
+- On a 1-row header (tree step) the topology is left out so `ctx` fits (`◆ auth refactor · 6 agents 4▶ · ≈$0.57+ · ctx 34%` at 60×13).
+- **Parts are whole or absent.** Each ` · value` group is drawn only if all of it fits before the right-aligned
+  notes; the row stops at the first group that doesn't. A cut figure (`cc $1.2` for `$1.20`) reads as a different
+  number. The same holds for the summary line.
 - Row 1: `tasks` `TEXT.dim`; the counts in `TEXT.primary`, except active > 0 in `STATUS.running` and failed > 0 in
-  `STATUS.failed`; `memory n` `TEXT.dim`; `! n clash(es)` in `STATUS.failed`. Right-aligned: the goal in `TEXT.dim`,
-  cut on the left if short of room.
+  `STATUS.failed`; `memory n` `TEXT.dim`; `! n clash(es)` in `STATUS.failed`. Right-aligned, in priority order:
+  1. the degraded note, `⚠ Swarm too large to draw (n agents)` or `⚠ Waiting for the swarm…`, in `STATUS.warn`;
+  2. `+n finished` (finished agents left out of the graph) in `TEXT.dim`;
+  3. the goal in `TEXT.dim`, only if all of it or at least 12 cells of it fit (clipped at its end with `…`), else
+     left out.
+  Notes are joined with ` · ` in `TEXT.faint`.
+- With a 1-row header (tree step) and on the summary line, the degraded note is drawn right-aligned on that row in
+  `STATUS.warn` as `⚠ too large` or `⚠ waiting`, before the gaps marker; `+n finished` and the goal are left out.
 - Separators ` · ` in `TEXT.faint`.
 
 **Spotlight card** (full: 6 rows on `CANVAS_RAISED`, left text from column 1, right text ending one column from the edge):
@@ -431,9 +455,13 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
 
 **Timeline** (on `CANVAS`, Task 8's layout holds): one row per non-placeholder agent in drawing order, then the axis.
 The label column is up to 14 cells: status glyph in its status colour, name in `TEXT.dim`. Bars run from the start
-to the finish (or now) on a shared scale, with sub-cell ends in left eighths. Bar colour: running = model colour,
-with its leading cell brightened (`mix(c, #ffffff, 0.35)`) as the live edge; waiting = model × 0.72; done =
-`mix(desaturate(model, 0.6), CANVAS, 0.45)`; failed = `STATUS.failed`, and a `✕` in the cell after the bar. Axis
+to the finish (or now) on a shared scale, every cell `▅`, the end rounded to the nearest cell (at least one cell).
+Each bar has a status colour: running = model colour; waiting = model × 0.72; done =
+`mix(desaturate(model, 0.6), CANVAS, 0.45)`; failed = `STATUS.failed`. The **body** is drawn at
+`mix(CANVAS, colour, 0.6)` (2.6-5.7:1) and the **last cell** at the full colour; a running bar's last cell is
+brightened further (`mix(c, #ffffff, 0.35)`) as the live edge. A failed bar gets a `✕` in `STATUS.failed` in the cell
+after it. A quiet body with a bright end keeps the timeline under the graph in weight: at the first review, full-height
+saturated blocks made it the heaviest thing on screen. Axis
 `└───` in `TEXT.faint`; `0s` and the span in `TEXT.dim`. Overflow: `… +n` in the label column of the axis row.
 
 **Feed** (on `CANVAS`, newest first, one event a row): age right-aligned in 4 cells in **`TEXT.dim`**, a space, the
@@ -463,11 +491,9 @@ quantised to a few fixed steps so a frame stays under it:
 | Node core shading, tool and error rims, stuck rim, comet trail | 4 |
 | Clash blink | 2 (on/off) |
 
-**Estimate, not measured,** for the full step with 7 nodes. Top grid: about 25-35 pairs per node (4 core shades,
-up to 4 glow levels, ring and its unfilled part, rim, all combined in vertical pairs), so 7 nodes come to roughly
-175-245; links, dots and comets about 30; labels about 10; the header about 10. That is roughly 230-300 of 700.
-Bottom grid: card about 25, timeline about 15, feed about 10, so roughly 50 of 300. `limitPairs` stays in as the
-safety net. Task 12's goldens should print `pairCount` for each case so Task 13 can see the real numbers. If Task 2
+**Measured in the goldens** (first review): top grid 72-152 pairs (full-mid 136, no-timeline-mid 152), bottom grid
+11-29. That is well under 700 and 300, and under my earlier estimate of 230-300 and 50. `limitPairs` stays in as the
+safety net. If Task 2
 finds the palette smaller than 1024, cut the glow to 4 steps first, then fade-in to 6.
 
 **Svg (desktop).** Where the surface offers `Svg` instead of `Raster`, the same two grids become a static SVG
@@ -503,3 +529,8 @@ To check on the goldens (Task 13):
 - [ ] A comet head is visible in the `mid` golden and no comet in `idle`.
 - [ ] Tool flicker on a same-hue node (edit on haiku) shows in the outer flare.
 - [ ] Task 2 confirms `▶` and `⚠` draw as narrow text in Windows Terminal; otherwise swap to `▸` and `▲`.
+- [ ] Every node label has a clear cell either side: no braille dot or node pixel touches a label.
+- [ ] No two node discs or halos overlap; where they would, the graph area shows the tree (legibility guard).
+- [ ] No header figure is cut part-way (`cc $1.2`); the goal shows whole, or at least 12 cells of it, or not at all.
+- [ ] A degraded read shows `⚠` and its note in `STATUS.warn`, not in dim text alone.
+- [ ] Timeline bars are `▅` with a quiet body and a full-colour end; the timeline weighs less than the graph.

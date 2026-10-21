@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import { foldAll } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, swarmTotals, type AgentStats } from '../../src/core/stats.ts'
 import { drawFeed, nameOf } from '../../src/render/feed.ts'
+import { mix } from '../../src/render/color.ts'
 import { fmtUsd } from '../../src/render/format.ts'
 import { Grid, gridText } from '../../src/render/grid.ts'
 import { drawHeader, drawSummary, summaryText } from '../../src/render/header.ts'
 import { drawTimeline } from '../../src/render/timeline.ts'
-import { CANVAS } from '../../src/render/tokens.ts'
+import { CANVAS, STATUS, TEXT, modelColor } from '../../src/render/tokens.ts'
 import { drawTree } from '../../src/render/tree.ts'
 import { rect } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../fixtures/swarm-five.ts'
@@ -29,7 +30,7 @@ test('the header shows name, topology, agents, cost, tokens, burn, context and t
   const [top, second] = gridText(g)
   assert.match(top!, /◆ auth refactor · hierarchical · 6 agents 4▶/)
   assert.ok(top!.includes(`${fmtUsd(totals.costUsd)}+`), 'a partial cost is marked +')
-  assert.match(top!, / tok · ≈\$[\d.]+\/min · ctx 34%/)
+  assert.match(top!, / · ctx 34% · \d+k tok · ≈\$[\d.]+\/min · cc \$1\.20/)
   assert.match(top!, /cc \$1\.20/)
   assert.match(second!, /tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash/)
 })
@@ -72,7 +73,8 @@ test('the timeline has a row per agent and an axis; failed rows end in a cross',
   assert.deepEqual(rows.slice(0, 6).map(r => /lead|architect|coder-1|coder-2|tester|reviewer/.exec(r)?.[0]), ['lead', 'architect', 'coder-1', 'coder-2', 'tester', 'reviewer'])
   const reviewer = rows[5]!
   assert.equal([...reviewer].filter(ch => ch === '✕').length, 2)
-  assert.match(rows[1]!, /█/)
+  assert.match(rows[1]!, /▅/)
+  assert.ok(!rows.join('').includes('█'))
   assert.match(rows[6]!, /0s.*30s/)
 })
 
@@ -184,12 +186,16 @@ test('timeline bars start and end where the lifetimes say', () => {
   const x0 = 15
   const arch = [...rows[1]!]
   assert.equal(arch[x0 + 1], ' ')
-  for (let x = 2; x <= 83; x++) assert.equal(arch[x0 + x], '█', `architect col ${x}`)
+  assert.equal(arch[x0 + 2], ' ')
+  for (let x = 3; x <= 83; x++) assert.equal(arch[x0 + x], '▅', `architect col ${x}`)
   const cod2 = [...rows[3]!]
-  for (let x = 14; x <= 59; x++) assert.equal(cod2[x0 + x], '█', `coder-2 col ${x}`)
+  for (let x = 14; x <= 61; x++) assert.equal(cod2[x0 + x], '▅', `coder-2 col ${x}`)
   assert.equal(cod2[x0 + 13], ' ')
-  assert.equal(cod2[x0 + 60], '▉')
-  assert.equal(cod2[x0 + 61], ' ')
+  assert.equal(cod2[x0 + 62], ' ')
+  // A quiet body and a full-colour last cell; a running bar's last cell is brighter still.
+  assert.equal(g.fg(x0 + 40, 3), mix(CANVAS, g.fg(x0 + 61, 3), 0.6))
+  assert.equal(g.fg(x0 + 82, 1), mix(CANVAS, modelColor('claude-opus-5-5'), 0.6))
+  assert.equal(g.fg(x0 + 83, 1), mix(modelColor('claude-opus-5-5'), 0xffffff, 0.35))
 })
 
 test('the timeline copes with thousands of agents', () => {
@@ -199,4 +205,65 @@ test('the timeline copes with thousands of agents', () => {
   const g = new Grid(100, 7, CANVAS)
   drawTimeline(g, rect(0, 0, 100, 7), s, mid)
   assert.match(gridText(g)[6]!, /… \+/)
+})
+
+test('header figures are whole or absent, and the row keeps the name and the first figures that fit', () => {
+  const s = state()
+  s.gaps = 2
+  const row = (w: number) => {
+    const g = new Grid(w, 2, CANVAS)
+    drawHeader(g, rect(0, 0, w, 2), s, swarmTotals(s, mid))
+    return gridText(g)[0]!
+  }
+  assert.match(row(140), /cc \$1\.20/)
+  for (let w = 40; w <= 140; w++) {
+    const body = row(w).trimEnd().replace(/\s*⚠ \d+ gaps?$/, '')
+    assert.ok(/^ ◆ /.test(body), body)
+    // Every group on the row is a complete one.
+    for (const part of body.split(' · ').slice(1)) {
+      assert.ok(/^(hierarchical|\d+ agents \d+▶|≈\$[\d.]+\+?|ctx (\d+%|–)|\S+ tok|≈\$[\d.]+\/min|cc \$\d+\.\d\d|ended)$/.test(part.trim()), `w${w}: "${part}"`)
+    }
+  }
+})
+
+test('the running count is dim at zero, green above', () => {
+  const s = state()
+  const g = new Grid(140, 2, CANVAS)
+  drawHeader(g, rect(0, 0, 140, 2), s, swarmTotals(s, mid))
+  assert.equal(g.fg(gridText(g)[0]!.indexOf('4▶'), 0), STATUS.running)
+  const idle = foldAll(FIVE_SWARM, fiveAgentEvents().slice(0, 1))
+  const g2 = new Grid(140, 2, CANVAS)
+  drawHeader(g2, rect(0, 0, 140, 2), idle, swarmTotals(idle, mid))
+  const at2 = gridText(g2)[0]!.indexOf('0▶')
+  assert.ok(at2 > 0)
+  assert.equal(g2.fg(at2, 0), TEXT.dim)
+})
+
+test('the goal shows whole, or at least 12 cells of it, or not at all; notes come first in the warn colour', () => {
+  const s = state()
+  const second = (w: number, goal: string, notes: { notes: [string, number][]; short: null } = { notes: [], short: null }) => {
+    s.swarm.goal = goal
+    const g = new Grid(w, 2, CANVAS)
+    drawHeader(g, rect(0, 0, w, 2), s, swarmTotals(s, mid), notes)
+    return { text: gridText(g)[1]!, g }
+  }
+  const tasks = ' tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash'.length
+  assert.match(second(160, 'move sessions').text, /move sessions $/)
+  assert.match(second(tasks + 3 + 14 + 1, 'move sessions to signed tokens in the new store').text, /move sessions…\s*$/)
+  assert.doesNotMatch(second(tasks + 3 + 8, 'move sessions to signed tokens').text, /move|…/)
+  const noted = second(160, 'goal here', { notes: [['⚠ Waiting for the swarm…', STATUS.warn], ['+3 finished', TEXT.dim]], short: null })
+  assert.match(noted.text, /⚠ Waiting for the swarm… · \+3 finished · goal here $/)
+  assert.equal(noted.g.fg(noted.text.indexOf('⚠'), 1), STATUS.warn)
+})
+
+test('a one-row header and the summary line show the short degraded note before the gaps marker', () => {
+  const s = state()
+  s.gaps = 3
+  const totals = swarmTotals(s, mid)
+  const g = new Grid(80, 1, CANVAS)
+  drawHeader(g, rect(0, 0, 80, 1), s, totals, { notes: [], short: ['⚠ too large', STATUS.warn] })
+  assert.match(gridText(g)[0]!, /⚠ too large · ⚠ 3 gaps $/)
+  const sg = new Grid(70, 1, CANVAS)
+  drawSummary(sg, rect(0, 0, 70, 1), s, totals, { notes: [], short: ['⚠ waiting', STATUS.warn] })
+  assert.match(gridText(sg)[0]!, /⚠ waiting ⚠ 3\s*$/)
 })

@@ -141,11 +141,11 @@ function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; col
       } else if (ring !== null && d <= n.r + GRAPH.ringPx) {
         let angle = Math.atan2(dx, -dy)
         if (angle < 0) angle += 2 * Math.PI
-        px.set(x, y, angle / (2 * Math.PI) <= ring.fill ? ring.color : mix(CANVAS, TEXT.faint, 0.6))
+        px.set(x, y, angle / (2 * Math.PI) <= ring.fill ? ring.color : mix(CANVAS, TEXT.faint, 0.35))
       } else if (d <= n.r + GRAPH.ringPx + GRAPH.glowPx) {
         if (glowK > 0) {
-          const k = quantise((1 - (d - n.r) / (GRAPH.ringPx + GRAPH.glowPx)) ** 2, 5) * glowK
-          px.light(x, y, n.fill, k * 0.55)
+          const k = quantise(1 - (d - n.r) / (GRAPH.ringPx + GRAPH.glowPx), 5) * glowK
+          px.light(x, y, n.fill, k * 0.8)
         }
         // One pixel band outside the ring, so a flicker the same hue as the node still shows.
         if (rim !== null && rim.flare && d > n.r + GRAPH.ringPx && d <= n.r + GRAPH.ringPx + 1) px.light(x, y, rim.color, 0.6 * rim.k)
@@ -163,8 +163,23 @@ function dotPath(dots: Dots, path: (t: number) => Point, length: number, color: 
   }
 }
 
+/** Cells holding a node's disc or ring: labels keep clear of them. */
+function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
+  const solid = new Uint8Array(area.w * area.h)
+  for (const n of nodes) {
+    const reach = n.r + GRAPH.ringPx
+    const y0 = Math.max(0, Math.floor((n.p.y - reach) / 2))
+    const y1 = Math.min(area.h - 1, Math.floor((n.p.y + reach) / 2))
+    const x0 = Math.max(0, Math.floor(n.p.x - reach))
+    const x1 = Math.min(area.w - 1, Math.floor(n.p.x + reach))
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) solid[y * area.w + x] = 1
+  }
+  return solid
+}
+
 function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
   const used = new Uint8Array(area.w * area.h)
+  const solid = solidCells(area, nodes)
   for (const n of nodes) {
     const row = Math.max(0, Math.min(area.h - 1, Math.floor((n.p.y + n.r + GRAPH.ringPx) / 2) + 1))
     const isLead = n.id === LEAD
@@ -177,12 +192,23 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
     const full: Part[] = isLead
       ? [[GLYPH.lead, ACCENT], [` ${name}`, nameColor], [` ${status}`, statusColor], ...stuck]
       : [[status, statusColor], [` ${name}`, nameColor], ...stuck]
-    const short: Part[] = isLead ? [[GLYPH.lead, ACCENT], [status, statusColor]] : [[status, statusColor]]
+    // The glyph-only form keeps the marks: the lead's diamond and a stuck agent's `!`.
+    const short: Part[] = [...(isLead ? ([[GLYPH.lead, ACCENT]] as Part[]) : []), [status, statusColor], ...(n.s.stuck ? ([[GLYPH.stuck, STATUS.warn]] as Part[]) : [])]
     for (const parts of [full, short]) {
       const cells = parts.flatMap(([text, color]) => [...text].map(ch => [ch, color] as const))
       if (cells.length > area.w) continue
       const x0 = Math.max(0, Math.min(area.w - cells.length, Math.round(n.p.x - cells.length / 2)))
-      if (cells.some((_, i) => used[row * area.w + x0 + i] === 1)) continue
+      // The span and one cell either side must be free of other labels and of node pixels.
+      const from = Math.max(0, x0 - 1)
+      const to = Math.min(area.w - 1, x0 + cells.length)
+      let clear = true
+      for (let x = from; x <= to && clear; x++) if (used[row * area.w + x] === 1 || solid[row * area.w + x] === 1) clear = false
+      if (!clear) continue
+      // Lines that run through the padded span are cleared to blanks; the cell keeps its background.
+      for (let x = from; x <= to; x++) {
+        const g = grid.glyph(area.x + x, area.y + row)
+        if (g > 0x2800 && g <= 0x28ff) grid.set(area.x + x, area.y + row, 0x20, grid.fg(area.x + x, area.y + row))
+      }
       cells.forEach(([ch, color], i) => {
         used[row * area.w + x0 + i] = 1
         grid.set(area.x + x0 + i, area.y + row, cp(ch), color)
@@ -269,18 +295,22 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   // 3. The swarm's shape: faint dotted edges.
   for (const e of input.edges ?? structuralEdges(state, state.swarm.topology)) {
     const seg = segment(e.from, e.to)
-    if (seg !== null) dots.line(toDots(seg[0]), toDots(seg[1]), mix(CANVAS, TEXT.faint, 0.9), 2)
+    if (seg !== null) dots.line(toDots(seg[0]), toDots(seg[1]), mix(CANVAS, TEXT.faint, 0.6), 2)
   }
 
   // 4. Message links as arcs: brighter for a while after each message, doubled once busy.
   for (const link of Object.values(state.links)) {
     const seg = segment(link.from, link.to)
     if (seg === null) continue
-    const color = mix(LINK.idle, LINK.active, recency(link.lastAt))
+    // A quiet link shows only while recent and fades out; a busy one stays and settles back to idle.
+    const rec = recency(link.lastAt)
+    const busy = link.count >= GRAPH.linkThick[0]
+    if (!busy && rec <= 0) continue
+    const color = busy ? mix(LINK.idle, LINK.active, rec) : mix(CANVAS, LINK.active, rec)
     const length = Math.hypot(seg[1].x - seg[0].x, seg[1].y - seg[0].y)
     const bend = bendOf(link.from, link.to, seg)
     dotPath(dots, arc(seg[0], seg[1], bend), length, color)
-    if (link.count >= GRAPH.linkThick[0]) dotPath(dots, arc(seg[0], seg[1], bend + GRAPH.busyArcOffset), length, color)
+    if (busy) dotPath(dots, arc(seg[0], seg[1], bend + GRAPH.busyArcOffset), length, color)
   }
 
   // 5. File clashes: a dashed red line between the agents editing the same file.

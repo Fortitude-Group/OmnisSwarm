@@ -8,20 +8,19 @@ import { orderAgents } from './layout.ts'
 import { CANVAS, GLYPH, STATUS, TEXT, modelColor, statusGlyph } from './tokens.ts'
 import type { Rect } from './types.ts'
 
-const FULL = 0x2588
-/** Left-aligned blocks, one eighth to seven eighths wide. */
-const LEFT_EIGHTHS = [0x2588, 0x258f, 0x258e, 0x258d, 0x258c, 0x258b, 0x258a, 0x2589] as const
+/** Five-eighths high, so the rows stay apart. */
+const BAR = 0x2585
 const AXIS = cp('─')
 const CORNER = cp('└')
 
-function bar(grid: Grid, x0: number, y: number, from: number, to: number, color: number): void {
-  const a = Math.floor(from)
-  const full = Math.floor(to)
-  const frac = Math.round((to - full) * 8)
-  for (let x = a; x < full; x++) grid.set(x0 + x, y, FULL, color)
-  if (frac >= 8) grid.set(x0 + full, y, FULL, color)
-  else if (frac > 0) grid.set(x0 + full, y, LEFT_EIGHTHS[frac]!, color)
-  else if (full === a) grid.set(x0 + a, y, LEFT_EIGHTHS[1], color)
+/** The bar's cells, the end rounded to the nearest cell and at least one cell: a quiet body, the last cell at full strength. Returns the last cell. */
+function bar(grid: Grid, x0: number, y: number, from: number, to: number, color: number, lastColor: number, maxCell: number): number {
+  const a = Math.min(maxCell, Math.round(from))
+  const last = Math.min(maxCell, Math.max(a, Math.round(to)))
+  const body = mix(CANVAS, color, 0.6)
+  for (let x = a; x < last; x++) grid.set(x0 + x, y, BAR, body)
+  grid.set(x0 + last, y, BAR, lastColor)
+  return last
 }
 
 export function drawTimeline(grid: Grid, area: Rect, state: SwarmState, now: number): void {
@@ -56,9 +55,9 @@ export function drawTimeline(grid: Grid, area: Rect, state: SwarmState, now: num
     const color = status === 'failed' ? STATUS.failed
       : status === 'done' ? mix(desaturate(base, 0.6), CANVAS, 0.45)
       : status === 'waiting' ? scale(base, 0.72) : base
-    bar(grid, x0, y, from, to, color)
-    if (status === 'running') grid.set(x0 + Math.min(width - 1, Math.floor(to)), y, FULL, mix(color, 0xffffff, 0.35))
-    if (status === 'failed') grid.set(x0 + Math.min(width - 1, Math.floor(to) + 1), y, cp(GLYPH.failed), STATUS.failed)
+    const edge = status === 'running' ? mix(color, 0xffffff, 0.35) : color
+    const last = bar(grid, x0, y, from, to, color, edge, width - 1)
+    if (status === 'failed') grid.set(x0 + Math.min(width - 1, last + 1), y, cp(GLYPH.failed), STATUS.failed)
   }
   const axisY = area.y + area.h - 1
   grid.set(x0 - 1, axisY, CORNER, TEXT.faint)

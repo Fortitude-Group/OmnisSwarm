@@ -14,6 +14,7 @@ test('fmtTokens', () => {
 
 test('fmtUsd is always approximate and shows unknown as a dash', () => {
   assert.equal(fmtUsd(null), '–')
+  assert.equal(fmtUsd(0), '≈$0')
   assert.equal(fmtUsd(0.0042), '≈$0.004')
   assert.equal(fmtUsd(1.234), '≈$1.23')
   assert.equal(fmtUsd(250.4), '≈$250')
