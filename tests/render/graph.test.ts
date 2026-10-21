@@ -5,6 +5,7 @@ import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.t
 import { pulsesFrom } from '../../src/mod/pane-model.ts'
 import { desaturate, mix, scale } from '../../src/render/color.ts'
 import { bendFor, drawGraph, nodeColor, nodeRadius, radiusCap } from '../../src/render/graph.ts'
+import { motionFor } from '../../src/render/fx.ts'
 import { Grid, gridText, pairCount } from '../../src/render/grid.ts'
 import { layoutNodes } from '../../src/render/layout.ts'
 import { CANVAS, GRAPH, LINK, MODEL, STATUS, TEXT } from '../../src/render/tokens.ts'
@@ -47,6 +48,21 @@ test('node colour follows status: running in the model colour, waiting dimmer, d
   const idle = statsOf(s, FIVE_AT.idle).stats
   assert.equal(nodeColor(idle['a-arch']!, s.agents['a-arch']!, FIVE_AT.idle), scale(MODEL.opus, 0.72))
   assert.equal(nodeColor(st['a-cod1']!, s.agents['a-cod1']!, s.agents['a-cod1']!.startedAt), CANVAS)
+})
+
+test('degraded, a ghost jumps to its end and a new node shows at full colour', () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const mid = FIVE_AT.mid
+  const st = statsOf(s, mid).stats
+  const cod2 = s.agents['a-cod2']!
+  const justDone = cod2.finishedAt! + 100
+  const ghost = mix(desaturate(MODEL.sonnet, 0.7), CANVAS, 0.55)
+  assert.notEqual(nodeColor(st['a-cod2']!, cod2, justDone), ghost)
+  assert.equal(nodeColor(st['a-cod2']!, cod2, justDone, motionFor(4.9)), ghost)
+  assert.notEqual(nodeColor(st['a-cod2']!, cod2, justDone, motionFor(5)), ghost)
+  const cod1 = s.agents['a-cod1']!
+  assert.equal(nodeColor(st['a-cod1']!, cod1, cod1.startedAt, motionFor(9.9)), MODEL.sonnet)
+  assert.equal(nodeColor(st['a-cod1']!, cod1, cod1.startedAt, motionFor(10)), CANVAS)
 })
 
 test('mid-swarm: every agent is labelled, comets fly, the clash is drawn and the failed node is red', () => {

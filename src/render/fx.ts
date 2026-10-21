@@ -1,7 +1,42 @@
 /** Motion maths at a given time: fades, glow, flashes, comets and the layout glide. Deterministic: no randomness. Pure. */
 import { clamp01 } from './color.ts'
-import { MOTION } from './tokens.ts'
+import { FPS, MOTION } from './tokens.ts'
 import type { Point, Tween } from './types.ts'
+
+/**
+ * Which motions the frame budget still pays for (pane.md section 6, graceful degradation). Each one off draws its
+ * steady form instead. `pulseHoldMs` is one frame at the cap: a pulse that cannot fade is held at least that long.
+ */
+export type Motion = {
+  breathe: boolean
+  slowFades: boolean
+  clashBlink: boolean
+  fadeIn: boolean
+  glide: boolean
+  pulseFade: boolean
+  comets: boolean
+  pulseHoldMs: number
+}
+
+export const FULL_MOTION: Readonly<Motion> = Object.freeze({
+  breathe: true, slowFades: true, clashBlink: true, fadeIn: true, glide: true, pulseFade: true, comets: true, pulseHoldMs: 0,
+})
+
+/** Under this cap fade-ins, glides and pulse fades go (pane.md section 6, steps 4 and 5). */
+const SMOOTH_FPS = 10
+
+/**
+ * The motions left at a budget cap of `capFps` frames a second, least meaningful dropped first: under FPS.glow
+ * breathing, slow fades and the clash blink; under 10 fade-ins, glides and pulse fades; under FPS.min the comets.
+ */
+export function motionFor(capFps: number): Motion {
+  if (!(capFps < SMOOTH_FPS)) return { ...FULL_MOTION }
+  const slow = capFps >= FPS.glow
+  return {
+    breathe: slow, slowFades: slow, clashBlink: slow, fadeIn: false, glide: false, pulseFade: false,
+    comets: capFps >= FPS.min, pulseHoldMs: capFps > 0 ? Math.ceil(1000 / capFps) : Number.POSITIVE_INFINITY,
+  }
+}
 
 export const easeOutCubic = (t: number): number => 1 - (1 - clamp01(t)) ** 3
 

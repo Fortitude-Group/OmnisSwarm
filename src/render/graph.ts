@@ -2,9 +2,9 @@
 import { LEAD, type AgentState, type SwarmState } from '../core/fold.ts'
 import type { AgentStats, Clash } from '../core/stats.ts'
 import { Dots, Pixels, compose, toDots } from './canvas.ts'
-import { desaturate, mix, quantise, scale } from './color.ts'
+import { add, clamp01, desaturate, mix, quantise, scale } from './color.ts'
 import { clipText } from './format.ts'
-import { arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit } from './fx.ts'
+import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
 import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
@@ -21,6 +21,8 @@ export type GraphInput = {
   tEff: number
   /** The swarm's structural edges, when the caller has them cached; otherwise worked out each frame. */
   edges?: readonly Edge[]
+  /** The motions the frame budget allows; all of them when not given. */
+  motion?: Readonly<Motion>
 }
 
 type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState }
@@ -41,14 +43,19 @@ export function nodeRadius(tokens: number, maxRadius: number): number {
   return Math.max(GRAPH.minRadius, Math.min(GRAPH.maxRadius, cap, r))
 }
 
-/** Running: the model colour. Waiting: dimmer. Done: fades to a ghost. Failed: red. Everything fades in from the canvas. */
-export function nodeColor(s: AgentStats, a: AgentState, now: number): number {
+/**
+ * Running: the model colour. Waiting: dimmer. Done: fades to a ghost. Failed: red. Everything fades in from the canvas.
+ * Degraded, the ghost fade jumps to its end and a new node shows at full colour at once.
+ */
+export function nodeColor(s: AgentStats, a: AgentState, now: number, motion: Readonly<Motion> = FULL_MOTION): number {
   const base = s.placeholder ? TEXT.faint : modelColor(s.model)
   let c = base
   if (s.status === 'failed') c = STATUS.failed
-  else if (s.status === 'done') c = mix(base, mix(desaturate(base, 0.7), CANVAS, 0.55), quantise(ghost(a.finishedAt, now), 6))
-  else if (s.status === 'waiting') c = scale(base, 0.72)
-  return mix(CANVAS, c, quantise(fadeIn(a.startedAt, now), 8))
+  else if (s.status === 'done') {
+    const k = motion.slowFades ? quantise(ghost(a.finishedAt, now), 6) : a.finishedAt !== null && now >= a.finishedAt ? 1 : 0
+    c = mix(base, mix(desaturate(base, 0.7), CANVAS, 0.55), k)
+  } else if (s.status === 'waiting') c = scale(base, 0.72)
+  return mix(CANVAS, c, motion.fadeIn ? quantise(fadeIn(a.startedAt, now), 8) : now >= a.startedAt ? 1 : 0)
 }
 
 /** The largest node radius for these centres: about 0.4 of the gap to the nearest neighbour, so dense layers shrink. */
@@ -117,38 +124,69 @@ function trimmed(a: Point, b: Point, ra: number, rb: number): [Point, Point] | n
   return [{ x: a.x + ux * ra, y: a.y + uy * ra }, { x: b.x - ux * rb, y: b.y - uy * rb }]
 }
 
-/** The strongest live pulse per agent: its colour and how far it has faded. */
-function pulseRims(view: View, tEff: number): Map<string, NonNullable<Rim>> {
+/**
+ * The strongest live pulse per agent: its colour and how far it has faded. Degraded, a pulse does not fade: it is
+ * drawn at full strength for its window, stretched to at least one frame at the cap so it is never skipped.
+ */
+function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<string, NonNullable<Rim>> {
   const out = new Map<string, NonNullable<Rim>>()
   for (const p of view.pulses) {
-    const k = quantise(flash(p.at, tEff, p.isError ? MOTION.errorPulseMs : MOTION.pulseMs), 4)
+    const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
+    const age = tEff - p.at
+    const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 4) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
     if (k <= 0 || (out.get(p.agent)?.k ?? 0) >= k) continue
     out.set(p.agent, { color: p.isError ? STATUS.failed : KIND[p.kind], k, flare: true })
   }
   return out
 }
 
+/**
+ * Disc, context ring, glow and rim for one node. It runs for every node on every frame, so it touches only pixels the
+ * node can draw (a squared-distance test first), writes the pixel array directly and works out the disc's four shades
+ * once. The colours are the same arithmetic as before, pixel for pixel.
+ */
 function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; color: number } | null, rim: Rim): void {
-  const reach = n.r + GRAPH.ringPx + GRAPH.glowPx + 1
-  for (let y = Math.floor(n.p.y - reach); y <= Math.ceil(n.p.y + reach); y++) {
-    for (let x = Math.floor(n.p.x - reach); x <= Math.ceil(n.p.x + reach); x++) {
+  const r = n.r
+  const ringOut = r + GRAPH.ringPx
+  const outer = r + GRAPH.ringPx + GRAPH.glowPx
+  const band = r + GRAPH.ringPx + 1
+  const flare = rim !== null && rim.flare
+  // The farthest a pixel is drawn: the glow, else the flare band, else the ring, else the disc.
+  const limit = glowK > 0 ? outer : flare ? Math.min(outer, band) : ring !== null ? ringOut : r
+  const limit2 = (limit + 1e-6) * (limit + 1e-6)
+  const reach = r + GRAPH.ringPx + GRAPH.glowPx + 1
+  const y0 = Math.max(0, Math.floor(n.p.y - reach))
+  const y1 = Math.min(px.height - 1, Math.ceil(n.p.y + reach))
+  const x0 = Math.max(0, Math.floor(n.p.x - reach))
+  const x1 = Math.min(px.width - 1, Math.ceil(n.p.x + reach))
+  const shade = [0, 1, 2, 3].map(q => mix(n.fill, WHITE, (q / 3) * 0.28))
+  // The halo's five levels (quantise(t, 5) is q / 4) laid over bare canvas, which is where nearly all of it falls.
+  const halo = [0, 1, 2, 3, 4].map(q => add(CANVAS, n.fill, (q / 4) * glowK * 0.8))
+  const dimRing = mix(CANVAS, TEXT.faint, 0.35)
+  const data = px.data
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - n.p.y
+    for (let x = x0; x <= x1; x++) {
       const dx = x + 0.5 - n.p.x
-      const dy = y + 0.5 - n.p.y
+      if (dx * dx + dy * dy > limit2) continue
       const d = Math.hypot(dx, dy)
-      if (d <= n.r) {
-        px.set(x, y, mix(n.fill, WHITE, quantise(1 - d / n.r, 4) * 0.28))
-        if (rim !== null && d > n.r - 1) px.blend(x, y, rim.color, rim.k)
-      } else if (ring !== null && d <= n.r + GRAPH.ringPx) {
+      const i = y * px.width + x
+      if (d <= r) {
+        // quantise(1 - d / r, 4) is one of q / 3 for q in 0..3.
+        data[i] = shade[Math.round(clamp01(1 - d / r) * 3)]!
+        if (rim !== null && d > r - 1) data[i] = mix(data[i]!, rim.color, rim.k)
+      } else if (ring !== null && d <= ringOut) {
         let angle = Math.atan2(dx, -dy)
         if (angle < 0) angle += 2 * Math.PI
-        px.set(x, y, angle / (2 * Math.PI) <= ring.fill ? ring.color : mix(CANVAS, TEXT.faint, 0.35))
-      } else if (d <= n.r + GRAPH.ringPx + GRAPH.glowPx) {
+        data[i] = angle / (2 * Math.PI) <= ring.fill ? ring.color : dimRing
+      } else if (d <= outer) {
         if (glowK > 0) {
-          const k = quantise(1 - (d - n.r) / (GRAPH.ringPx + GRAPH.glowPx), 5) * glowK
-          px.light(x, y, n.fill, k * 0.8)
+          const q = Math.round(clamp01(1 - (d - r) / (GRAPH.ringPx + GRAPH.glowPx)) * 4)
+          const under = data[i]!
+          data[i] = under === CANVAS ? halo[q]! : add(under, n.fill, (q / 4) * glowK * 0.8)
         }
         // One pixel band outside the ring, so a flicker the same hue as the node still shows.
-        if (rim !== null && rim.flare && d > n.r + GRAPH.ringPx && d <= n.r + GRAPH.ringPx + 1) px.light(x, y, rim.color, 0.6 * rim.k)
+        if (flare && d > ringOut && d <= band) data[i] = add(data[i]!, rim.color, 0.6 * rim.k)
       }
     }
   }
@@ -220,6 +258,7 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
 
 export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const { state, stats, positions, clashes, view, now, tEff } = input
+  const motion = input.motion ?? FULL_MOTION
   if (![full.x, full.y, full.w, full.h].every(v => !Number.isNaN(v))) return
   // A negative origin clips the area; the positions move left and up by what was cut off.
   const x = Math.floor(full.x)
@@ -246,7 +285,7 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   for (const { a, p, s } of placed) {
     const room = Math.min(p.y, area.h * 2 - 2 - p.y, p.x, area.w - p.x) - GRAPH.ringPx - 0.5
     const r = s.placeholder ? GRAPH.minRadius : nodeRadius(s.tokens.total, Math.min(maxR, Math.max(GRAPH.minRadius, room)))
-    nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now), s, a })
+    nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now, motion), s, a })
   }
   const segment = (from: string, to: string, gap = 1): [Point, Point] | null => {
     const a = nodes.get(from)
@@ -263,7 +302,11 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     bends.set(key, bend)
     return bend
   }
-  const recency = (lastAt: number): number => quantise(flash(lastAt, tEff, MOTION.linkFadeMs), 5)
+  // Degraded, a link stays fully lit for its fade window, then goes.
+  const recency = (lastAt: number): number => {
+    const k = flash(lastAt, tEff, MOTION.linkFadeMs)
+    return motion.slowFades ? quantise(k, 5) : k > 0 ? 1 : 0
+  }
 
   // 1. Busy links as dim pixel arcs, under the nodes.
   for (const link of Object.values(state.links)) {
@@ -280,15 +323,19 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   }
 
   // 2. Nodes, with glow, context ring and rim.
-  const rims = pulseRims(view, tEff)
+  const rims = pulseRims(view, tEff, motion)
   const flashing = new Set<string>()
-  for (const c of clashes) if (clashActive(state, c, now) && blink(now, MOTION.clashBlinkMs)) for (const id of c.agents) flashing.add(id)
+  for (const c of clashes) {
+    if (clashActive(state, c, now) && (!motion.clashBlink || blink(now, MOTION.clashBlinkMs))) for (const id of c.agents) flashing.add(id)
+  }
   for (const n of nodes.values()) {
     const seed = hashUnit(n.id)
+    // Degraded, breathing stops: the halo holds at 0.7 and a stuck rim at 0.6.
+    const stuckK = motion.breathe ? quantise(0.3 + 0.6 * glow(now, seed), 4) : 0.6
     const rim: Rim = flashing.has(n.id) ? { color: LINK.clash, k: 0.9, flare: false }
-      : rims.get(n.id) ?? (n.s.stuck ? { color: STATUS.warn, k: quantise(0.3 + 0.6 * glow(now, seed), 4), flare: false } : null)
+      : rims.get(n.id) ?? (n.s.stuck ? { color: STATUS.warn, k: stuckK, flare: false } : null)
     const fill = n.s.contextFill
-    const glowK = n.s.status === 'running' ? quantise(0.45 + 0.55 * glow(now, seed), 5) : 0
+    const glowK = n.s.status !== 'running' ? 0 : motion.breathe ? quantise(0.45 + 0.55 * glow(now, seed), 5) : 0.7
     paintNode(px, n, glowK, fill !== null && n.r >= 2.2 ? { fill, color: contextColor(fill) } : null, rim)
   }
 
@@ -322,8 +369,9 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   }
 
   // 6. Comets along the arcs of recent messages: every trail first, every head last, so a head is never painted over.
+  // Under FPS.min there are none: the link's own flash (step 4) shows the message.
   const heads: Point[] = []
-  for (const item of state.feed) {
+  for (const item of motion.comets ? state.feed : []) {
     if (item.kind !== 'message' || item.to === undefined) continue
     const seg = segment(item.agent, item.to)
     if (seg === null) continue

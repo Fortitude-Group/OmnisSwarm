@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT } from '../../src/render/color.ts'
 import {
-  Grid, decodeCells, fromBase64, gridText, limitPairs, pairCount, safeGlyph, toBase64, writeParts, writeRight,
+  Grid, decodeCells, fromBase64, gridText, limitPairs, pairCount, safeGlyph, sameCells, toBase64, writeParts, writeRight,
 } from '../../src/render/grid.ts'
 import { RASTER_MAX } from '../../src/render/tokens.ts'
 
@@ -49,6 +49,13 @@ test('base64 matches the standard alphabet and round-trips', () => {
   const bytes = Uint8Array.from({ length: 257 }, (_, i) => (i * 37) & 255)
   assert.equal(toBase64(bytes), Buffer.from(bytes).toString('base64'))
   assert.deepEqual([...fromBase64(toBase64(bytes))], [...bytes])
+})
+
+test('base64 of a whole large Raster matches Node, across every chunk boundary and tail length', () => {
+  for (const length of [0, 1, 2, 3, 6143, 6144, 6145, 24_576, 120 * 26 * 12, 512 * 256 * 12 + 2]) {
+    const bytes = Uint8Array.from({ length }, (_, i) => (i * 131 + (i >> 7)) & 255)
+    assert.equal(toBase64(bytes), Buffer.from(bytes).toString('base64'), `${length} bytes`)
+  }
 })
 
 test('encode packs little-endian [codePoint, fg, bg] triplets as the Raster expects', () => {
@@ -138,4 +145,37 @@ test('fromBase64 rejects characters outside the alphabet', () => {
 
 test('text reports the columns it advanced', () => {
   assert.equal(new Grid(5, 1).text(0, 0, 'abc😀', 0xffffff), 4)
+})
+
+test('sameCells is true only for the same size and every cell alike', () => {
+  const a = new Grid(4, 2, 0x0b0f17, 0xe6edf3)
+  const b = new Grid(4, 2, 0x0b0f17, 0xe6edf3)
+  assert.equal(sameCells(a, b), true)
+  b.set(3, 1, 0x41, 0xe6edf3)
+  assert.equal(sameCells(a, b), false)
+  a.set(3, 1, 0x41, 0xe6edf3)
+  assert.equal(sameCells(a, b), true)
+  a.set(0, 0, 0x20, 0xe6edf3, 0x131a26)
+  assert.equal(sameCells(a, b), false)
+  assert.equal(sameCells(new Grid(4, 2), new Grid(2, 4)), false)
+})
+
+test('pairCount agrees with a plain Set of pairs, for small, large and default-coloured grids', () => {
+  const bySet = (g: Grid) => {
+    const pairs = new Set<string>()
+    for (let i = 0; i < g.columns * g.rows; i++) pairs.add(`${g.cells[i * 3 + 1]} ${g.cells[i * 3 + 2]}`)
+    return pairs.size
+  }
+  for (const [w, h, colours] of [[1, 1, 1], [7, 3, 4], [120, 26, 40], [120, 26, 3000], [512, 256, 50_000]] as const) {
+    const g = new Grid(w, h)
+    let seed = w * 7919 + h
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+        const fg = seed % colours === 0 ? 0x01000000 : (seed % colours) * 0x010203
+        g.set(x, y, 0x41, fg & 0x1ffffff, ((seed >>> 8) % colours) * 0x030201)
+      }
+    }
+    assert.equal(pairCount(g), bySet(g), `${w}x${h}`)
+  }
 })

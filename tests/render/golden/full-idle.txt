@@ -1,4 +1,4 @@
-# full-idle: hierarchical at +400000 ms in 120x44; step full, fps 12, spotlight a-arch
+# full-idle: hierarchical at +400000 ms in 120x44; step full, fps 5, spotlight a-arch
 ## top 120x26 pairs 68 sha bc14bd00b193ef69
 ### glyphs
  ◆ auth refactor · hierarchical · 6 agents 0▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0/min · cc $1.20                       

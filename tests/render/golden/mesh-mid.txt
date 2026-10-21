@@ -1,5 +1,5 @@
-# mesh-mid: mesh at +30000 ms in 120x44; step full, fps 30, spotlight a-cod1
-## top 120x26 pairs 138 sha 692058ea5d45db02
+# mesh-mid: mesh at +30000 ms in 120x44; step full, fps 20, spotlight a-cod1
+## top 120x26 pairs 138 sha a02ea148e9285dd1
 ### glyphs
  ◆ auth refactor · mesh · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0.11/min · cc $1.20                            
  tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash                   move sessions to signed tokens 
@@ -64,16 +64,16 @@ f fg #7ee787 bg #131a26 x11
 g fg #f85149 bg #131a26 x9
 h fg #0b0f17 bg #0b0f17 x2372
 i fg #9ecbff bg #0b0f17 x75
-j fg #9ecbff bg #0f1624 x2
-k fg #9ecbff bg #17243e x6
-l fg #0b0f17 bg #131d31 x6
-m fg #131d31 bg #1a2b4a x10
-n fg #1a2b4a bg #223964 x3
-o fg #223964 bg #272d39 x4
+j fg #9ecbff bg #131d31 x2
+k fg #9ecbff bg #223964 x6
+l fg #0b0f17 bg #1a2b4a x6
+m fg #1a2b4a bg #2a477d x10
+n fg #2a477d bg #3964b0 x3
+o fg #3964b0 bg #272d39 x4
 p fg #272d39 bg #4d8dff x6
 q fg #9aa4b2 bg #4d8dff x2
-r fg #131d31 bg #131d31 x9
-s fg #1a2b4a bg #1a2b4a x9
+r fg #1a2b4a bg #1a2b4a x9
+s fg #2a477d bg #2a477d x9
 t fg #272d39 bg #272d39 x30
 u fg #4d8dff bg #4d8dff x5
 v fg #5e98ff bg #5e98ff x7
@@ -83,14 +83,14 @@ y fg #0b0f17 bg #10141e x2
 z fg #10141e bg #141924 x4
 A fg #141924 bg #191f2b x2
 B fg #10141e bg #10141e x3
-C fg #131d31 bg #0b0f17 x5
-D fg #1a2b4a bg #131d31 x11
-E fg #6d8cb2 bg #1e3257 x1
-F fg #3c4e64 bg #25334f x1
+C fg #1a2b4a bg #0b0f17 x5
+D fg #2a477d bg #1a2b4a x11
+E fg #6d8cb2 bg #325697 x1
+F fg #3c4e64 bg #304975 x1
 G fg #4d8dff bg #272d39 x5
-H fg #272d39 bg #223964 x1
-I fg #223964 bg #1a2b4a x1
-J fg #1a2b4a bg #272d39 x1
+H fg #272d39 bg #3964b0 x1
+I fg #3964b0 bg #2a477d x1
+J fg #2a477d bg #272d39 x1
 K fg #141924 bg #141924 x4
 L fg #191f2b bg #191f2b x2
 M fg #191f2b bg #2e3441 x1
@@ -100,8 +100,8 @@ P fg #9ecbff bg #121721 x1
 Q fg #9ecbff bg #0e121b x1
 R fg #799cc5 bg #0b0f17 x23
 S fg #6d8cb2 bg #0b0f17 x2
-T fg #799cc5 bg #0f1624 x1
-U fg #9ecbff bg #131d31 x1
+T fg #799cc5 bg #131d31 x1
+U fg #9ecbff bg #1a2b4a x1
 V fg #4d8dff bg #5e98ff x1
 W fg #424753 bg #1d2431 x1
 X fg #555a64 bg #424753 x2
@@ -111,26 +111,26 @@ Z fg #9ecbff bg #191f2b x1
 1 fg #b48cff bg #0b0f17 x1
 2 fg #e6edf3 bg #0b0f17 x31
 3 fg #7ee787 bg #0b0f17 x6
-4 fg #f5fbff bg #3a5684 x1
+4 fg #f5fbff bg #4d79be x1
 5 fg #5e98ff bg #4d8dff x4
 6 fg #6ea2ff bg #6ea2ff x1
 7 fg #7fadff bg #6ea2ff x1
 8 fg #141924 bg #10141e x2
 9 fg #191f2b bg #141924 x4
-! fg #272d39 bg #1a2b4a x5
+! fg #272d39 bg #2a477d x5
 $ fg #5e98ff bg #272d39 x1
 % fg #799cc5 bg #3a5d9c x1
 & fg #f5fbff bg #273344 x1
 * fg #f5fbff bg #0b0f17 x1
-+ fg #0b0f17 bg #1e3257 x1
-- fg #3c4e64 bg #17243e x1
-/ fg #0b0f17 bg #132423 x6
-: fg #132423 bg #1a392f x5
-; fg #799cc5 bg #172f29 x1
-< fg #f5fbff bg #3a6762 x1
-= fg #799cc5 bg #213334 x1
-> fg #1a392f bg #272d39 x3
-? fg #132423 bg #132423 x6
++ fg #0b0f17 bg #325697 x1
+- fg #3c4e64 bg #223964 x1
+/ fg #0b0f17 bg #1a392f x6
+: fg #1a392f bg #296248 x5
+; fg #799cc5 bg #224e3c x1
+< fg #f5fbff bg #4d9b81 x1
+= fg #799cc5 bg #284841 x1
+> fg #296248 bg #272d39 x3
+? fg #1a392f bg #1a392f x6
 @ fg #0b0f17 bg #f9615a x2
 ^ fg #0b0f17 bg #f85149 x1
 _ fg #4cd07a bg #5dd486 x2

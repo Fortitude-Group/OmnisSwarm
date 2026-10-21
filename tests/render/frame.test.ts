@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import { fold, foldAll } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.ts'
 import { contrast, hex, luminance } from '../../src/render/color.ts'
-import { chipColor, frameInterval, render, targetFps } from '../../src/render/frame.ts'
+import { MAX_INTERVAL_MS, budgetFps, chipColor, frameInterval, render, smoothRenderMs, targetFps } from '../../src/render/frame.ts'
+import { FULL_MOTION, motionFor } from '../../src/render/fx.ts'
+import { pulsesFrom } from '../../src/mod/pane-model.ts'
 import { gridText, pairCount, safeGlyph, type Grid } from '../../src/render/grid.ts'
-import { FPS, MODEL, PAIR_BUDGET } from '../../src/render/tokens.ts'
+import { FPS, LINK, MODEL, PAIR_BUDGET } from '../../src/render/tokens.ts'
 import { emptyView, type View } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents, quietEvents } from '../fixtures/swarm-five.ts'
 import { at, ev } from '../helpers.ts'
@@ -69,25 +71,153 @@ test('the frame rate: busy while things move, slow while only glows move, a tick
   assert.equal(fps(quiet, { ...emptyView(), pulses: [{ agent: 'a-arch', kind: 'read', at: FIVE_AT.idle - 100, isError: false }] }, FIVE_AT.idle), FPS.busy)
 })
 
-test('the frame interval backs off when frames are slow and recovers when they are fast', () => {
-  assert.equal(frameInterval(30, 0, 0), 33)
-  assert.equal(frameInterval(30, 33, 25), 66)
-  assert.equal(frameInterval(30, 66, 50), 132)
-  assert.equal(frameInterval(30, 132, 100), 250)
-  assert.equal(frameInterval(30, 250, 10), 125)
-  assert.equal(frameInterval(30, 125, 10), 63)
-  assert.equal(frameInterval(12, 33, 5), 83)
-  assert.equal(frameInterval(12, 100, 40), 100)
-  assert.equal(frameInterval(0, 33, 5), 0)
+test('the frame rate matches the design tokens: busy 20, glow 5, floor 4, tick 1', () => {
+  assert.deepEqual({ ...FPS }, { busy: 20, glow: 5, min: 4, tick: 1 })
 })
 
-test('the tick is exempt from the back-off floor: a slow frame never speeds it up', () => {
-  assert.equal(frameInterval(FPS.tick, 0, 0), 1000)
-  assert.equal(frameInterval(FPS.tick, 1000, 900), 1000)
-  assert.equal(frameInterval(FPS.tick, 1000, 5), 1000)
-  // After the idle tick, a rate change starts at its own base, not half the tick.
-  assert.equal(frameInterval(30, 1000, 5), 33)
-  assert.equal(frameInterval(12, 1000, 5), 83)
+test('ghost fades, link fades and the clash blink run at the glow rate, not busy', () => {
+  const quietAt = (mutate: (s: ReturnType<typeof five>) => void) => {
+    const s = foldAll(FIVE_SWARM, quietEvents())
+    mutate(s)
+    return fps(s, emptyView(), FIVE_AT.idle)
+  }
+  // A finished agent fading to its ghost.
+  assert.equal(quietAt(s => fold(s, ev('agent.finished', { outcome: 'answer', reason: 'answer' }, { agent: 'a-arch', atSec: 399.5, swarm: FIVE_SWARM }))), FPS.glow)
+  // A link two seconds after its last message: the comet has landed, the link is still fading.
+  assert.equal(quietAt(s => { for (const l of Object.values(s.links)) l.lastAt = FIVE_AT.idle - 2000 }), FPS.glow)
+  // Once the fade window has passed, only the tick is left.
+  assert.equal(quietAt(s => { for (const l of Object.values(s.links)) l.lastAt = FIVE_AT.idle - 3500 }), FPS.tick)
+  // Two agents edited the same file a second ago: the rims blink.
+  assert.equal(quietAt(s => { s.edits['x.ts'] = [{ agent: 'lead', at: FIVE_AT.idle - 1000 }, { agent: 'a-arch', at: FIVE_AT.idle - 900 }] }), FPS.glow)
+  // A fade-in is still busy.
+  assert.equal(quietAt(s => fold(s, ev('agent.started', { name: 'new', role: 'r', description: '', parent: 'lead' }, { agent: 'a-new', atSec: 399.8, swarm: FIVE_SWARM }))), FPS.busy)
+})
+
+test('pane.md section 11: each interval is at least 10x the last render, so render never takes more than 100 ms a second', () => {
+  assert.equal(frameInterval(20, 0), 50)
+  assert.equal(frameInterval(20, 5), 50)
+  assert.equal(frameInterval(20, 6), 60)
+  assert.equal(frameInterval(20, 25), 250)
+  assert.equal(frameInterval(FPS.glow, 10), 200)
+  assert.equal(frameInterval(FPS.glow, 25), 250)
+  assert.equal(frameInterval(FPS.tick, 25), 1000)
+  assert.equal(frameInterval(FPS.tick, 150), 1500)
+  assert.equal(frameInterval(0, 5), 0)
+  // A frame that comes in under the cap falls straight back to the target rate.
+  assert.equal(frameInterval(20, 2), 50)
+  for (const fps of [FPS.busy, FPS.glow, FPS.min, FPS.tick]) {
+    for (const renderMs of [0, 1, 3, 4.9, 5, 7.5, 12, 25, 40, 99, 250, 1000]) {
+      const interval = frameInterval(fps, renderMs)
+      assert.ok(interval >= 10 * renderMs, `${fps} fps, ${renderMs} ms`)
+      assert.ok(renderMs * (1000 / interval) <= 100 + 1e-9, `${fps} fps, ${renderMs} ms spends ${renderMs * (1000 / interval)} ms a second`)
+      assert.ok(interval >= Math.round(1000 / fps), 'never faster than the target')
+    }
+  }
+  assert.equal(frameInterval(20, Number.NaN), 50)
+})
+
+test('one freak frame never stretches the interval past 10 s', () => {
+  assert.equal(MAX_INTERVAL_MS, 10_000)
+  assert.equal(frameInterval(FPS.tick, 999), 9990)
+  assert.equal(frameInterval(FPS.tick, 5_000), 10_000)
+  assert.equal(frameInterval(FPS.busy, Number.MAX_VALUE), 10_000)
+})
+
+test('the motion cap follows an average of render times: one slow frame alone drops no motion', () => {
+  // Steady at 8 ms (cap 12.5 fps, every motion on), then one 14 ms frame: on its own it would cap at 7.1 fps.
+  let avg = 0
+  for (let i = 0; i < 40; i++) avg = smoothRenderMs(avg, 8)
+  assert.ok(Math.abs(avg - 8) < 0.01)
+  assert.equal(motionFor(budgetFps(14)).fadeIn, false)
+  avg = smoothRenderMs(avg, 14)
+  assert.equal(motionFor(budgetFps(avg)).fadeIn, true)
+  // Frames that stay slow do bring the cap down within a few frames.
+  for (let i = 0; i < 6; i++) avg = smoothRenderMs(avg, 14)
+  assert.equal(motionFor(budgetFps(avg)).fadeIn, false)
+  assert.equal(smoothRenderMs(Number.NaN, Number.NaN), 0)
+})
+
+test('the budget cap is 1000 / (10 x renderMs) frames a second', () => {
+  assert.equal(budgetFps(25), 4)
+  assert.equal(budgetFps(5), 20)
+  assert.equal(budgetFps(0), Number.POSITIVE_INFINITY)
+  assert.equal(budgetFps(Number.NaN), Number.POSITIVE_INFINITY)
+})
+
+test('pane.md section 6: motions drop in order as the cap falls, and come back in reverse', () => {
+  const on = (cap: number) => {
+    const m = motionFor(cap)
+    return [m.breathe, m.slowFades, m.clashBlink, m.fadeIn, m.glide, m.pulseFade, m.comets].map(b => (b ? 1 : 0)).join('')
+  }
+  assert.deepEqual(motionFor(Number.POSITIVE_INFINITY), FULL_MOTION)
+  assert.equal(on(Number.POSITIVE_INFINITY), '1111111')
+  assert.equal(on(20), '1111111')
+  assert.equal(on(10), '1111111')
+  assert.equal(on(9.99), '1110001')
+  assert.equal(on(5), '1110001')
+  assert.equal(on(4.99), '0000001')
+  assert.equal(on(4), '0000001')
+  assert.equal(on(3.99), '0000000')
+  assert.equal(on(0.5), '0000000')
+  // A pulse is held for at least one frame at the cap, never shorter than its own window.
+  assert.equal(motionFor(8).pulseHoldMs, 125)
+  assert.equal(motionFor(2).pulseHoldMs, 500)
+  assert.equal(FULL_MOTION.pulseHoldMs, 0)
+})
+
+test('a degraded frame asks only for what still moves: steady glows need only the tick', () => {
+  const s = five()
+  assert.equal(fps(s, emptyView(), FIVE_AT.idle), FPS.glow)
+  const clashes = fileClashes(s, FIVE_AT.idle)
+  const stats: Record<string, AgentStats> = {}
+  for (const id of Object.keys(s.agents)) stats[id] = agentStats(s, id, FIVE_AT.idle, clashes)!
+  assert.equal(targetFps(s, emptyView(), FIVE_AT.idle, stats, clashes, motionFor(4.9)), FPS.tick)
+  assert.equal(render(s, emptyView(), FIVE_AT.idle, FULL, {}, 4.9).fps, FPS.tick)
+  const quiet = foldAll(FIVE_SWARM, quietEvents())
+  const glide = { ...emptyView(), tween: { from: {}, at: FIVE_AT.idle - 100 } }
+  assert.equal(render(quiet, glide, FIVE_AT.idle, FULL, {}, 9.9).fps, FPS.tick)
+  assert.equal(render(quiet, glide, FIVE_AT.idle, FULL, {}, 10).fps, FPS.busy)
+})
+
+test('with no cap given, or an infinite one, the frame is the full-motion frame', () => {
+  const s = five()
+  const a = render(s, emptyView(), FIVE_AT.mid, FULL)
+  const b = render(s, emptyView(), FIVE_AT.mid, FULL, {}, Number.POSITIVE_INFINITY)
+  assert.equal(a.top.encode(), b.top.encode())
+})
+
+test('under 5 fps breathing, stuck rims and the clash blink hold steady', () => {
+  const s = five()
+  const view = { ...emptyView(), pulses: pulsesFrom(fiveAgentEvents()) }
+  // full-idle: three agents glow. Half a breath apart the graph differs at full motion and not when degraded.
+  const graph = (now: number, cap?: number) => render(s, view, now, FULL, {}, cap).top.encode()
+  assert.notEqual(graph(FIVE_AT.idle), graph(FIVE_AT.idle + 1000))
+  assert.equal(graph(FIVE_AT.idle, 4.9), graph(FIVE_AT.idle + 1000, 4.9))
+  assert.notEqual(graph(FIVE_AT.idle, 4.9), graph(FIVE_AT.idle, 5))
+})
+
+test('under 4 fps comets give way to the lit link; at 4 they still fly', () => {
+  const s = five()
+  const comet = (cap: number) => {
+    const g = render(s, emptyView(), FIVE_AT.mid, FULL, {}, cap).top
+    let n = 0
+    for (let y = 0; y < g.rows; y++) for (let x = 0; x < g.columns; x++) if (g.fg(x, y) === LINK.comet) n++
+    return n
+  }
+  assert.ok(comet(4) > 0)
+  assert.equal(comet(3.9), 0)
+})
+
+test('under 10 fps a pulse is drawn at full strength, not part-faded', () => {
+  const s = foldAll(FIVE_SWARM, quietEvents())
+  const pulse = (age: number) => ({ ...emptyView(), pulses: [{ agent: 'a-arch', kind: 'edit' as const, at: FIVE_AT.idle - age, isError: false }] })
+  const top = (age: number, cap?: number) => render(s, pulse(age), FIVE_AT.idle, FULL, {}, cap).top.encode()
+  assert.notEqual(top(0), top(300))
+  assert.equal(top(0, 9.9), top(300, 9.9))
+  assert.equal(top(0, 9.9), top(0))
+  // Held for one frame at the cap when that is longer than its own 350 ms window: at 2 fps, 500 ms.
+  assert.equal(top(400, 2), top(0, 2))
+  assert.notEqual(top(400, 9.9), top(0, 9.9))
 })
 
 test('every frame stays inside its colour-pair budget and the Raster limits', () => {

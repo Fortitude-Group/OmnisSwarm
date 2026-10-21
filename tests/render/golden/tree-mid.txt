@@ -1,4 +1,4 @@
-# tree-mid: hierarchical at +30000 ms in 60x13; step tree, fps 30, spotlight a-cod1
+# tree-mid: hierarchical at +30000 ms in 60x13; step tree, fps 20, spotlight a-cod1
 ## top 60x13 pairs 14 sha b236ef798c86f9fd
 ### glyphs
  ◆ auth refactor · 6 agents 4▶ · ≈$0.57+ · ctx 34%          

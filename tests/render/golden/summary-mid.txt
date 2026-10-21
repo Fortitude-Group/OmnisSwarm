@@ -1,4 +1,4 @@
-# summary-mid: hierarchical at +30000 ms in 40x5; step summary, fps 30, spotlight a-cod1
+# summary-mid: hierarchical at +30000 ms in 40x5; step summary, fps 20, spotlight a-cod1
 ## top 40x1 pairs 2 sha 693db98fa30f056f
 ### glyphs
  ◆ auth refactor · 6 agents 4▶ · ≈$0.57+

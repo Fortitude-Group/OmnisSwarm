@@ -3,7 +3,7 @@
  * links, and braille dots (2x4 a cell) for fine lines and particles. compose() paints both into cells. Pure.
  */
 import { add, mix } from './color.ts'
-import type { Grid } from './grid.ts'
+import { safeGlyph, type Grid } from './grid.ts'
 import type { Point, Rect } from './types.ts'
 
 const UPPER_HALF = 0x2580
@@ -103,10 +103,51 @@ export class Dots {
 /** Pixel space to dot space: a pixel is one cell wide and half a cell tall, a dot half a cell wide and a quarter tall. */
 export const toDots = (p: Point): Point => ({ x: p.x * 2, y: p.y * 2 })
 
-/** Paints both layers into `grid` at `area`. A cell with dots shows braille over the mean of its two pixels. */
+/** The glyph for each braille dot pattern and the half block, as Grid.set would store them. */
+const BRAILLE_GLYPH = Uint16Array.from({ length: 256 }, (_, bits) => safeGlyph(BRAILLE + bits))
+const UPPER_GLYPH = safeGlyph(UPPER_HALF)
+const SPACE_GLYPH = safeGlyph(SPACE)
+
+/**
+ * Paints both layers into `grid` at `area`. A cell with dots shows braille over the mean of its two pixels. It runs
+ * on every frame over the whole graph, so it writes the typed arrays directly; an area off the grid's whole cells
+ * takes the plain path through Grid.set.
+ */
 export function compose(grid: Grid, area: Rect, pixels: Pixels, dots: Dots): void {
   const w = Math.min(area.w, pixels.width, dots.columns)
   const h = Math.min(area.h, Math.floor(pixels.height / 2), dots.rows)
+  if (!Number.isInteger(area.x) || !Number.isInteger(area.y) || area.x < 0 || area.y < 0) {
+    composeBySet(grid, area, pixels, dots, w, h)
+    return
+  }
+  const cw = Math.min(w, grid.columns - area.x)
+  const ch = Math.min(h, grid.rows - area.y)
+  const px = pixels.data
+  const pw = pixels.width
+  const cells = grid.cells
+  for (let cy = 0; cy < ch; cy++) {
+    const p0 = cy * 2 * pw
+    const d0 = cy * dots.columns
+    const g0 = ((area.y + cy) * grid.columns + area.x) * 3
+    for (let cx = 0; cx < cw; cx++) {
+      const top = px[p0 + cx]!
+      const bottom = px[p0 + pw + cx]!
+      const bits = dots.bits[d0 + cx]!
+      const at = g0 + cx * 3
+      if (bits !== 0) {
+        cells[at] = BRAILLE_GLYPH[bits]!
+        cells[at + 1] = dots.colors[d0 + cx]!
+        cells[at + 2] = mix(top, bottom, 0.5)
+      } else {
+        cells[at] = top === bottom ? SPACE_GLYPH : UPPER_GLYPH
+        cells[at + 1] = top
+        cells[at + 2] = bottom
+      }
+    }
+  }
+}
+
+function composeBySet(grid: Grid, area: Rect, pixels: Pixels, dots: Dots, w: number, h: number): void {
   for (let cy = 0; cy < h; cy++) {
     for (let cx = 0; cx < w; cx++) {
       const top = pixels.get(cx, cy * 2)

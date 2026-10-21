@@ -1,112 +1,8 @@
-import { expect, mock, test, type TestBody } from 'claude-code/testing'
-import type { On } from 'claude-code'
-import { foldAll } from '../core/fold.ts'
-import { Grid, decodeCells, gridText } from '../render/grid.ts'
+import { expect, mock, test } from 'claude-code/testing'
+import { Grid } from '../render/grid.ts'
 import { svgSource } from './pane.ts'
-import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../../tests/fixtures/swarm-five.ts'
-
-const SERVER = 'plugin:omnis-swarm:omnis-swarm'
-const INIT = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_init'
-const PANE = {
-  plugin: 'omnis-swarm',
-  component: 'Pane',
-  requestId: 'omnis-swarm',
-  props: { title: 'Swarm', isFocused: false, bodyColumns: 120, placement: 'dock', scroll: { offset: 0, bodyRows: 44 }, view: {} },
-} as const
-const RUN = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
-
-type Feed = 'ok' | 'error' | 'garbage' | 'late' | 'throw'
-/** What the stub saw, and its switches: `shown` (the pane placed but hidden when false), `feed` (how omnis_feed answers), `connectOk`. */
-type Seen = {
-  calls: Array<{ tool: string; args: Record<string, unknown> }>
-  opens: number
-  blits: number
-  invalidates: number
-  panes: number
-  connects: number
-  shown: boolean
-  feed: Feed
-  connectOk: boolean
-  /** How a 'late' feed waits before it answers (a test's clock.sleep: the kit's clock does not wait on it). */
-  late: () => Promise<void>
-  /** The kit draws a mount's tree but never paints a blit: the last top blit, and when it and the last redraw came (by count). */
-  topBlit: { cells: string; columns: number; rows: number; at: number } | null
-  redrawnAt: number
-  seq: number
-}
-/** Faults beneath session.start: ui.panes or command.register that never answer. */
-type Faults = { panes?: 'hang'; register?: 'hang' }
-const never = <T>(): Promise<T> => new Promise<T>(() => {})
-
-/** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
-function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults = {}): Seen {
-  const seen: Seen = { calls: [], opens: 0, blits: 0, invalidates: 0, panes: 0, connects: 0, shown: true, feed: 'ok', connectOk: true,
-    topBlit: null, redrawnAt: 0, seq: 0, late: () => Promise.resolve() }
-  const state = foldAll(FIVE_SWARM, fiveAgentEvents())
-  let open = false
-  on('command.register', (_, e) => (faults.register === 'hang' ? never() : { value: { command: e.name } }))
-  on('ui.open', () => {
-    seen.opens++
-    if (openAs === 'throw') throw new Error('no room for the pane')
-    if (openAs === 'hang') return new Promise<never>(() => {})
-    open = true
-    return { value: { isPlaced: true } }
-  })
-  on('ui.close', () => {
-    open = false
-    return { value: undefined }
-  })
-  on('ui.panes', () => {
-    seen.panes++
-    if (faults.panes === 'hang') return never()
-    return { value: open ? [{ id: 'omnis-swarm', title: 'Swarm', isShown: seen.shown, isFocused: false, isPlaced: true }] : [] }
-  })
-  on('ui.blit', (_, e) => {
-    seen.blits++
-    if (e.key === 'top' && 'cells' in e) seen.topBlit = { cells: String(e.cells), columns: Number(e.columns), rows: Number(e.rows), at: ++seen.seq }
-    return { value: {} }
-  })
-  on('ui.invalidate', () => {
-    seen.invalidates++
-    seen.redrawnAt = ++seen.seq
-    return { value: undefined }
-  })
-  on('mcp.connect', () => {
-    seen.connects++
-    return { value: seen.connectOk ? { isConnected: true, server: SERVER } : { isConnected: false, reason: 'unlisted', message: 'not listed' } }
-  })
-  on('mcp.call', async (_, e) => {
-    seen.calls.push({ tool: e.tool, args: e.args })
-    if (e.tool !== 'omnis_feed') return { value: { content: [{ type: 'text', text: '{}' }], isError: false } }
-    if (seen.feed === 'late') await seen.late()
-    if (seen.feed === 'throw') throw new Error('Connection closed')
-    if (seen.feed === 'error') return { value: { content: [{ type: 'text', text: 'omnis_feed failed' }], isError: true } }
-    // Past the MCP output cap the engine hands back a notice in place of the reply.
-    if (seen.feed === 'garbage') return { value: { content: [{ type: 'text', text: 'Output too large (61.2KB), saved to a file.' }], isError: false } }
-    const text = JSON.stringify({ v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 100, state })
-    return { value: { content: [{ type: 'text', text }], isError: false } }
-  })
-  on('session.id', () => ({ value: 'test-session' }))
-  on('agent.list', () => ({ value: [] }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  return seen
-}
-
-/** The auto-open runs in the background after the tool call returns: these wait for it, by microtask yields. */
-async function until(cond: () => boolean, max = 20000): Promise<void> {
-  for (let i = 0; i < max; i++) {
-    if (cond()) return
-    await Promise.resolve()
-  }
-  throw new Error(`until: the condition still did not hold after ${max} microtask yields`)
-}
-async function settle(): Promise<void> {
-  for (let i = 0; i < 2000; i++) await Promise.resolve()
-}
-
-const feedCalls = (seen: Seen) => seen.calls.filter(c => c.tool === 'omnis_feed')
-const rasterText = (el: { props: Record<string, unknown> } | undefined): string[] =>
-  el === undefined ? [] : gridText(decodeCells(String(el.props.cells), Number(el.props.columns), Number(el.props.rows)))
+import { INIT, PANE, RUN, engine, feedCalls, never, opened, rasterText, settle, until, untilBlit } from './test-engine.ts'
+import { FIVE_AT } from '../../tests/fixtures/swarm-five.ts'
 
 test('/omnis pane opens the pane, pulls omnis_feed and draws the swarm in two Rasters with pin chips', async ($, on) => {
   const seen = engine(on)
@@ -265,28 +161,10 @@ for (const openAs of ['throw', 'hang'] as const) {
   })
 }
 
-/** Opens the pane on the terminal, lets the first pull land and mounts it. */
-/** `small` mounts an 80 x 24 pane: the long-clock tests render every frame for real, and a smaller grid keeps them quick. */
-async function opened($: Parameters<TestBody>[0], on: On, small = false) {
-  const seen = engine(on)
-  const clock = mock.clock(on, { now: FIVE_AT.mid })
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
-  await clock.settle()
-  const props = small ? { ...PANE.props, bodyColumns: 80, scroll: { offset: 0, bodyRows: 24 } } : PANE.props
-  const ui = await $.ui.mount({ ...PANE, props, surface: 'terminal' })
-  // What the top Raster shows now: the last blit when it came after the last redraw, otherwise the drawn tree.
-  const top = async (): Promise<string> => {
-    const b = seen.topBlit
-    if (b !== null && b.at > seen.redrawnAt) return gridText(decodeCells(b.cells, b.columns, b.rows)).join('\n')
-    return rasterText(await ui.find({ type: 'Raster', key: 'top' })).join('\n')
-  }
-  return { seen, clock, ui, top }
-}
 
 test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the panes about once a second, and resumes when shown', async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
-  await clock.advance(1000)
+  await untilBlit(seen, clock)
   expect(seen.blits).toBeGreaterThan(0)
   seen.shown = false
   await clock.advance(300)
@@ -303,6 +181,58 @@ test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the p
   const back = feedCalls(seen).length
   await clock.advance(1000)
   expect(feedCalls(seen).length - back).toBeLessThanOrEqual(4)
+  await ui.unmount()
+})
+
+test('a Raster whose cells have not changed is not blitted again', async ($, on) => {
+  const { seen, clock, ui } = await opened($, on)
+  await untilBlit(seen, clock)
+  await clock.advance(3000)
+  expect(seen.blits).toBeGreaterThan(0)
+  expect(seen.repeats).toBe(0)
+  await ui.unmount()
+})
+
+test('a refused blit is sent again by the next frame, even when its cells have not changed', async ($, on) => {
+  const { seen, clock, ui } = await opened($, on)
+  await untilBlit(seen, clock)
+  seen.refuse = 1
+  for (let i = 0; i < 400 && seen.blitLog.filter(b => !b.ok).length === 0; i++) await clock.advance(250)
+  const refused = seen.blitLog.find(b => !b.ok)
+  expect(refused).toBeDefined()
+  const at = seen.blitLog.indexOf(refused!)
+  // The next blit of that Raster carries the refused cells again: the frame after a refusal is usually the same picture.
+  const sameRaster = () => seen.blitLog.slice(at + 1).filter(b => b.key === refused!.key)
+  for (let i = 0; i < 400 && sameRaster().length === 0; i++) await clock.advance(50)
+  expect(sameRaster()[0]?.cells).toBe(refused!.cells)
+  expect(sameRaster()[0]?.ok).toBe(true)
+  await ui.unmount()
+})
+
+test('off the terminal, news redraws the Svg no faster than the budget allows, and the latest news is drawn', async ($, on) => {
+  const seen = engine(on)
+  const clock = mock.clock(on, { now: FIVE_AT.mid })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // Every pull answers a whole state, which counts as news: about 4 a second.
+  const before = seen.invalidates
+  const pulls = feedCalls(seen).length
+  await clock.advance(3000)
+  expect(feedCalls(seen).length - pulls).toBeGreaterThanOrEqual(8)
+  // At most one redraw a second (the tick rate, or slower when the Svg is slow), plus one held back to the end.
+  expect(seen.invalidates - before).toBeGreaterThanOrEqual(1)
+  expect(seen.invalidates - before).toBeLessThanOrEqual(4)
+  // The news stops (the next pull never answers). The redraw held back for the last news still comes, after it.
+  // (The kit does not draw the mount again on a redraw, so this checks the order of the asks, not the picture.)
+  seen.feed = 'late'
+  seen.late = never
+  const lastNews = seen.newsAt
+  // The Svg is dear to draw (often over 100 ms real in the engine), so the held redraw can be a few seconds off.
+  await clock.advance(8000)
+  expect(seen.newsAt).toBe(lastNews)
+  expect(seen.redrawnAt).toBeGreaterThan(lastNews)
   await ui.unmount()
 })
 
@@ -390,8 +320,28 @@ test('a pull that does not settle shows the degraded note after 5 s, and a new p
   expect(await top()).toContain('⚠ Waiting')
   expect(feedCalls(seen).length).toBe(stuck)
   seen.feed = 'ok'
-  await clock.advance(25_000)
+  // Given up at 30 s, then the 5 s wait before connecting afresh.
+  await clock.advance(30_000)
   expect(feedCalls(seen).length).toBeGreaterThan(stuck)
+  await ui.unmount()
+})
+
+test('giving up on a hung pull drops the server and backs off before connecting again', { timeoutMs: 30_000 }, async ($, on) => {
+  const { seen, clock, ui } = await opened($, on, true)
+  await clock.advance(300)
+  seen.late = never
+  seen.feed = 'late'
+  await clock.advance(300)
+  const stuck = feedCalls(seen).length
+  const connects = seen.connects
+  // Given up at 30 s: no call is stacked on the hung server, and no connect comes before the 5 s wait.
+  await clock.advance(31_000)
+  expect(feedCalls(seen).length).toBe(stuck)
+  expect(seen.connects).toBe(connects)
+  // After the wait the pane connects afresh, then pulls.
+  await clock.advance(5_000)
+  expect(seen.connects).toBe(connects + 1)
+  expect(feedCalls(seen).length).toBe(stuck + 1)
   await ui.unmount()
 })
 

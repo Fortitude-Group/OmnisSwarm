@@ -33,11 +33,11 @@ export const GLYPH = {
 } as const
 
 export const MOTION = {
-  fadeInMs: 600, ghostMs: 1500, glowPeriodMs: 1600, cometMs: 900, trailMs: 450, trailDots: 6, linkFadeMs: 3000,
+  fadeInMs: 600, ghostMs: 1500, glowPeriodMs: 2000, cometMs: 900, trailMs: 450, trailDots: 6, linkFadeMs: 3000,
   pulseMs: 350, errorPulseMs: 900, clashFlashMs: 4000, clashBlinkMs: 400, tweenMs: 400,
 } as const
 
-export const FPS = { busy: 30, glow: 12, min: 4, tick: 1 } as const
+export const FPS = { busy: 20, glow: 5, min: 4, tick: 1 } as const
 
 /** Graph geometry in canvas pixels (a half-block pixel is about square). */
 export const GRAPH = { minRadius: 1.6, maxRadius: 6, glowPx: 2.5, ringPx: 1.2, linkThick: [5, 20], linkBend: 0.18, linkBendMax: 0.5, busyArcOffset: 0.04 } as const

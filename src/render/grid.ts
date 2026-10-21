@@ -24,9 +24,20 @@ const WIDE: ReadonlyArray<readonly [number, number]> = [
 /** Marks (zero width), controls, format characters, surrogates, private use, unassigned, line and paragraph separators. */
 const NOT_A_CELL = /[\p{M}\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u
 
+/** safeGlyph's answer per BMP code point, worked out on first use; 0 means not yet (no answer is 0). */
+const glyphs = new Uint16Array(0x10000)
+
 /** The code point if the Raster accepts it (printable, one cell wide, in the BMP), otherwise '?'. */
 export function safeGlyph(cp: number): number {
   if (!Number.isInteger(cp) || cp < SPACE || cp > 0xffff) return REPLACEMENT
+  const known = glyphs[cp]!
+  if (known !== 0) return known
+  const out = checkGlyph(cp)
+  glyphs[cp] = out
+  return out
+}
+
+function checkGlyph(cp: number): number {
   if (cp >= 0xd800 && cp <= 0xdfff) return REPLACEMENT
   if (NOT_A_CELL.test(String.fromCharCode(cp))) return REPLACEMENT
   for (const [lo, hi] of WIDE) if (cp >= lo && cp <= hi) return REPLACEMENT
@@ -62,11 +73,21 @@ export class Grid {
     return cx < 0 || cy < 0 || cx >= this.columns || cy >= this.rows ? -1 : (cy * this.columns + cx) * 3
   }
 
-  /** Writes one cell. Leaves the background as it is when `bg` is not given. */
+  /**
+   * Writes one cell. Leaves the background as it is when `bg` is not given. Called for nearly every cell drawn, so a
+   * whole-number position and an already checked glyph skip the general paths (#at and safeGlyph) for the same answer.
+   */
   set(x: number, y: number, codePoint: number, fg: number, bg?: number): void {
-    const at = this.#at(x, y)
-    if (at < 0) return
-    this.cells[at] = safeGlyph(codePoint)
+    let at: number
+    if ((x | 0) === x && (y | 0) === y) {
+      if (x < 0 || y < 0 || x >= this.columns || y >= this.rows) return
+      at = (y * this.columns + x) * 3
+    } else {
+      at = this.#at(x, y)
+      if (at < 0) return
+    }
+    const known = (codePoint | 0) === codePoint && codePoint >= SPACE && codePoint <= 0xffff ? glyphs[codePoint]! : 0
+    this.cells[at] = known !== 0 ? known : safeGlyph(codePoint)
     this.cells[at + 1] = fg >>> 0
     if (bg !== undefined) this.cells[at + 2] = bg >>> 0
   }
@@ -92,15 +113,26 @@ export class Grid {
     const y0 = Math.max(0, Math.floor(y))
     const x1 = Math.min(this.columns, x + w)
     const y1 = Math.min(this.rows, y + h)
-    for (let cy = y0; cy < y1; cy++) for (let cx = x0; cx < x1; cx++) this.set(cx, cy, SPACE, bg, bg)
+    const c = bg >>> 0
+    for (let cy = y0; cy < y1; cy++) {
+      for (let cx = x0; cx < x1; cx++) {
+        const at = (cy * this.columns + cx) * 3
+        this.cells[at] = SPACE
+        this.cells[at + 1] = c
+        this.cells[at + 2] = c
+      }
+    }
   }
 
   /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the columns advanced. */
   text(x: number, y: number, s: string, fg: number, bg?: number, max = Number.POSITIVE_INFINITY): number {
     let n = 0
-    for (const ch of s) {
+    // By code point, as for...of would walk it, without the iterator.
+    for (let i = 0; i < s.length;) {
       if (n >= max || x + n >= this.columns) break
-      this.set(x + n, y, cp(ch), fg, bg)
+      const c = s.codePointAt(i)!
+      this.set(x + n, y, c, fg, bg)
+      i += c > 0xffff ? 2 : 1
       n++
     }
     return n
@@ -116,21 +148,42 @@ export class Grid {
   }
 }
 
+const B64_CODES = Uint8Array.from(B64, ch => ch.charCodeAt(0))
+const PAD = 0x3d
+/** Characters handed to String.fromCharCode at once: well under any engine's argument limit, and the fastest size measured. */
+const CHUNK = 2048
+
+/** Base64 written as character codes into a typed array, then turned into a string a chunk at a time. */
 export function toBase64(bytes: Uint8Array): string {
-  let out = ''
+  const n = bytes.length
+  const out = new Uint8Array(Math.ceil(n / 3) * 4)
+  let o = 0
   let i = 0
-  for (; i + 2 < bytes.length; i += 3) {
-    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!
-    out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]! + B64[(n >> 6) & 63]! + B64[n & 63]!
+  for (; i + 2 < n; i += 3) {
+    const v = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = B64_CODES[(v >> 6) & 63]!
+    out[o + 3] = B64_CODES[v & 63]!
+    o += 4
   }
-  if (bytes.length - i === 1) {
-    const n = bytes[i]! << 16
-    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}==`
-  } else if (bytes.length - i === 2) {
-    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8)
-    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}${B64[(n >> 6) & 63]}=`
+  if (n - i === 1) {
+    const v = bytes[i]! << 16
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = PAD
+    out[o + 3] = PAD
+  } else if (n - i === 2) {
+    const v = (bytes[i]! << 16) | (bytes[i + 1]! << 8)
+    out[o] = B64_CODES[(v >> 18) & 63]!
+    out[o + 1] = B64_CODES[(v >> 12) & 63]!
+    out[o + 2] = B64_CODES[(v >> 6) & 63]!
+    out[o + 3] = PAD
   }
-  return out
+  let text = ''
+  // apply takes the typed array as it is; a spread would walk it through an iterator, several times slower.
+  for (let k = 0; k < out.length; k += CHUNK) text += String.fromCharCode.apply(null, out.subarray(k, k + CHUNK) as unknown as number[])
+  return text
 }
 
 export function fromBase64(text: string): Uint8Array {
@@ -173,9 +226,32 @@ export function gridText(grid: Grid): string[] {
   return rows
 }
 
+/** Whether two grids are the same size and hold the same cells, so a blit of one over the other would change nothing. */
+export function sameCells(a: Grid, b: Grid): boolean {
+  if (a.columns !== b.columns || a.rows !== b.rows) return false
+  const x = a.cells
+  const y = b.cells
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
+  return true
+}
+
+/**
+ * How many distinct fg/bg pairs the grid holds. It runs on every frame; most cells repeat the cell before them (runs
+ * of blank canvas), and those are already counted, so only the others reach the Set.
+ */
 export function pairCount(grid: Grid): number {
   const pairs = new Set<number>()
-  for (let i = 0; i < grid.columns * grid.rows; i++) pairs.add(grid.cells[i * 3 + 1]! * 0x2000000 + grid.cells[i * 3 + 2]!)
+  const cells = grid.cells
+  let lastFg = -1
+  let lastBg = -1
+  for (let i = 0; i < grid.columns * grid.rows; i++) {
+    const fg = cells[i * 3 + 1]!
+    const bg = cells[i * 3 + 2]!
+    if (fg === lastFg && bg === lastBg) continue
+    lastFg = fg
+    lastBg = bg
+    pairs.add(fg * 0x2000000 + bg)
+  }
   return pairs.size
 }
 
