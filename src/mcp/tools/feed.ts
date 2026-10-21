@@ -1,8 +1,8 @@
 /**
  * omnis_feed: how the pane reads the swarm. Internal: the mod refuses the model's calls at tool.check and defers the
- * tool. It only reads and never adopts a swarm, so pulling it cannot change which swarm this session owns.
+ * tool. It never appends events or changes which swarm the session owns (it can write a snapshot cache).
  */
-import { existsSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readSync } from 'node:fs'
 import { isValidSwarmId } from '../../core/events.ts'
 import { FEED_MAX_EVENTS, type FeedReply } from '../../core/feed-reply.ts'
 import { readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
@@ -12,6 +12,17 @@ import type { ToolContext } from '../tools.ts'
 import { InputError, optString } from '../validate.ts'
 
 const SWARM_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
+/** True when the byte before `offset` is a newline, so `offset` starts a line. */
+function atLineStart(file: string, offset: number): boolean {
+  const fd = openSync(file, 'r')
+  try {
+    const buf = Buffer.alloc(1)
+    return readSync(fd, buf, 0, 1, offset - 1) === 1 && buf[0] === 0x0a
+  } finally {
+    closeSync(fd)
+  }
+}
+
 const FAILED = 'Could not read the swarm files in .omnis-swarm/ (see the server log).'
 
 function optOffset(args: Args, key: string): number | undefined {
@@ -38,7 +49,7 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
 
   const tool: ToolDef = {
     name: 'omnis_feed',
-    description: 'Internal to the OmnisSwarm pane, which reads swarm state with it. Not for the model: calls from the model are refused.',
+    description: 'Internal to the OmnisSwarm pane. When the OmnisSwarm mod is loaded it refuses calls from the model.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -57,6 +68,7 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
         const held = session.state(id)
         if (hint !== id || since === 0 || since > held.offset) return fresh(id, held)
         if (since === held.offset) return answer({ v: 1, kind: 'events', swarm: id, offset: since, events: [], bad: 0 })
+        if (!atLineStart(swarmLogPath(root, id), since)) return fresh(id, held)
         const read = readEvents(swarmLogPath(root, id), since)
         if (read.reset || read.events.length > FEED_MAX_EVENTS || read.offset < held.offset) return fresh(id, session.state(id))
         return answer({ v: 1, kind: 'events', swarm: id, offset: read.offset, events: sortEvents(read.events), bad: read.bad })

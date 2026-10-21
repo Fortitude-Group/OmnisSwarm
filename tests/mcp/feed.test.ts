@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { appendEvent, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
 import { parseFeedReply, type FeedReply } from '../../src/core/feed-reply.ts'
+import { loadState } from '../../src/core/snapshot.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createFeedTools } from '../../src/mcp/tools/feed.ts'
 import { createTools } from '../../src/mcp/tools.ts'
@@ -129,4 +130,21 @@ test('a failure inside answers a fixed message that names no path', () => {
   writeCurrent(root, 'x')
   assert.throws(() => feed.handler({}), (err: unknown) =>
     err instanceof Error && !(err instanceof InputError) && /Could not read the swarm files/.test(err.message) && !/secret/.test(err.message))
+})
+
+test('an offset in the middle of a line answers a fresh state', () => {
+  const { root, call, pull, started } = setup()
+  call('omnis_swarm_init', { name: 'Feed', topology: 'mesh' })
+  for (let i = 0; i < 3; i++) appendEvent(root, started(1 + i, `a${i}`))
+  assert.equal(pull({ since: 1, swarm: 'feed' }).kind, 'state')
+})
+
+test('hinting at several old swarms keeps at most one of them held', () => {
+  const loads: string[] = []
+  const { root, pull } = setup(r => new Session(r, (rt, id) => { loads.push(id); return loadState(rt, id) }))
+  for (const id of ['old1', 'old2', 'old3']) appendEvent(root, ev('agent.started', { name: 'a', role: 'r', description: '', parent: 'lead' }, { swarm: id, agent: 'a' }))
+  for (const id of ['old1', 'old2', 'old3', 'old3']) assert.equal(pull({ swarm: id }).kind, 'state')
+  assert.deepEqual(loads, ['old1', 'old2', 'old3'])
+  pull({ swarm: 'old1' })
+  assert.deepEqual(loads, ['old1', 'old2', 'old3', 'old1'])
 })

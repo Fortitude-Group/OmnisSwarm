@@ -31,6 +31,8 @@ export class Session {
     const held = this.#held.get(id)
     if (held === undefined) {
       const loaded = this.#load(this.root, id)
+      // Keep this session's live swarm for good, but at most one other (a pane may hint at old swarms).
+      for (const key of [...this.#held.keys()]) if (key !== this.#mine) this.#held.delete(key)
       this.#held.set(id, loaded)
       return loaded
     }
