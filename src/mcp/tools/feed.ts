@@ -3,9 +3,9 @@
  * tool. It never appends events or changes which swarm the session owns (it can write a snapshot cache).
  */
 import { closeSync, existsSync, openSync, readSync } from 'node:fs'
-import { isValidSwarmId } from '../../core/events.ts'
-import { FEED_MAX_EVENTS, type FeedReply } from '../../core/feed-reply.ts'
-import { readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
+import { LIMITS, isValidSwarmId, parseLine } from '../../core/events.ts'
+import { FEED_MAX_EVENTS, fitEvents, freshReply, type FeedReply } from '../../core/feed-reply.ts'
+import { MAX_READ_BYTES, readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
 import type { Loaded } from '../../core/snapshot.ts'
 import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
@@ -18,6 +18,38 @@ function atLineStart(file: string, offset: number): boolean {
   try {
     const buf = Buffer.alloc(1)
     return readSync(fd, buf, 0, 1, offset - 1) === 1 && buf[0] === 0x0a
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/**
+ * Where the log stands just after the `count`th event line at or beyond `since`, and how many bad lines came before it.
+ * Walks the lines the way readEvents does, so the two agree on what is an event.
+ */
+function offsetAfter(file: string, since: number, count: number): { offset: number; bad: number } {
+  const fd = openSync(file, 'r')
+  try {
+    const buf = Buffer.alloc(MAX_READ_BYTES)
+    const data = buf.subarray(0, readSync(fd, buf, 0, buf.length, since))
+    let from = 0
+    let seen = 0
+    let bad = 0
+    for (let nl = data.indexOf(0x0a, from); nl !== -1; nl = data.indexOf(0x0a, from)) {
+      const raw = data.subarray(from, nl)
+      from = nl + 1
+      if (raw.length > LIMITS.line) {
+        bad++
+        continue
+      }
+      const line = raw.toString('utf8')
+      if (line.trim() === '') continue
+      const parsed = parseLine(line)
+      if (parsed.ok) {
+        if (++seen === count) return { offset: since + from, bad }
+      } else if (parsed.reason !== 'version') bad++
+    }
+    throw new Error('the log changed under the feed')
   } finally {
     closeSync(fd)
   }
@@ -45,7 +77,16 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
     return current
   }
   const answer = (reply: FeedReply) => ({ text: JSON.stringify(reply) })
-  const fresh = (id: string, held: Loaded) => answer({ v: 1, kind: 'state', swarm: id, offset: held.offset, state: held.state })
+  // The last too-large answer, so an unchanged swarm is not trimmed again on every poll.
+  let tooLarge: { key: string; text: string } | null = null
+  const fresh = (id: string, held: Loaded) => {
+    const key = `${id}@${held.offset}`
+    if (tooLarge !== null && tooLarge.key === key) return { text: tooLarge.text }
+    const reply = freshReply(id, held.offset, held.state)
+    const out = answer(reply)
+    tooLarge = reply.kind === 'too-large' ? { key, text: out.text } : null
+    return out
+  }
 
   const tool: ToolDef = {
     name: 'omnis_feed',
@@ -71,7 +112,11 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
         if (!atLineStart(swarmLogPath(root, id), since)) return fresh(id, held)
         const read = readEvents(swarmLogPath(root, id), since)
         if (read.reset || read.events.length > FEED_MAX_EVENTS || read.offset < held.offset) return fresh(id, session.state(id))
-        return answer({ v: 1, kind: 'events', swarm: id, offset: read.offset, events: sortEvents(read.events), bad: read.bad })
+        const fit = fitEvents(read.events, id)
+        if (fit === read.events.length) return answer({ v: 1, kind: 'events', swarm: id, offset: read.offset, events: sortEvents(read.events), bad: read.bad })
+        // Too much for one reply: send the first events that fit and let the next pull carry on from after them.
+        const cut = offsetAfter(swarmLogPath(root, id), since, fit)
+        return answer({ v: 1, kind: 'events', swarm: id, offset: cut.offset, events: sortEvents(read.events.slice(0, fit)), bad: cut.bad })
       } catch (err) {
         // The detail may hold paths, so it goes to stderr only.
         process.stderr.write(`omnis: omnis_feed failed: ${err instanceof Error ? err.message : String(err)}\n`)
