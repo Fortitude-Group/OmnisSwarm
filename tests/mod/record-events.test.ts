@@ -100,7 +100,7 @@ test('agentUsage puts all cache writes in the 5-minute bucket and cleans the num
     { type: 'agent.usage', agent: 'a1', data: { model: 'claude-opus-5-5', input: 2, output: 210, cacheRead: 0, cacheWrite5m: 42374, cacheWrite1h: 0 } },
   )
   const odd = agentUsage({ input_tokens: -5, output_tokens: 3.7, cache_read_input_tokens: Number.NaN, cache_creation_input_tokens: 1e15, model: 'm' }, 'lead')
-  assert.deepEqual(odd.data, { model: 'm', input: 0, output: 3, cacheRead: 0, cacheWrite5m: 1e12, cacheWrite1h: 0 })
+  assert.deepEqual(odd.data, { model: 'm', input: 0, output: 3, cacheRead: 0, cacheWrite5m: 1e9, cacheWrite1h: 0 })
 })
 
 test('toolEvent', () => {

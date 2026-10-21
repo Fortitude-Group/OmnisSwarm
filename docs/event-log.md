@@ -25,6 +25,10 @@ only writer to the file: it stamps `v`, `swarm` and `src`. The recorder mod can'
 has no Node), so it hands each event to the server's internal `omnis_record` tool, which checks it
 and appends it with `src: "recorder"`.
 
+The server can't tell whether the recorder mod is installed, so it always offers `omnis_record`. When
+mods are off the internal tools are unguarded. That is accepted: the log is a display record, and the
+same user could edit `.omnis-swarm` directly.
+
 | Field | Type | Notes |
 |---|---|---|
 | `v` | int | Schema version, stamped by the server. Readers skip lines with a higher `v` than they know |

@@ -6,6 +6,8 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { once } from 'node:events'
 import { fileURLToPath } from 'node:url'
+import { readEvents, swarmLogPath } from '../../src/core/log.ts'
+import { sessionKey } from '../../src/core/swarm.ts'
 import { tmpRoot } from '../helpers.ts'
 
 const SERVER = fileURLToPath(new URL('../../src/mcp/server.ts', import.meta.url))
@@ -57,7 +59,7 @@ test('the server speaks MCP over stdio and writes the swarm log', async () => {
 
     const list = await s.call(2, 'tools/list')
     assert.deepEqual(list.result.tools.map((t: { name: string }) => t.name).sort(), [
-      'omnis_memory_get', 'omnis_memory_list', 'omnis_memory_put', 'omnis_swarm_end',
+      'omnis_memory_get', 'omnis_memory_list', 'omnis_memory_put', 'omnis_record', 'omnis_swarm_end',
       'omnis_swarm_init', 'omnis_swarm_status', 'omnis_task_create', 'omnis_task_update',
     ])
 
@@ -108,4 +110,24 @@ test('server.ts imports the stdio guard before anything else', () => {
   const source = readFileSync(SERVER, 'utf8')
   const firstImport = source.split(/\r?\n/).map(l => l.trim()).find(l => /^(import|export)\b/.test(l))
   assert.match(firstImport ?? '', /^import '\.\/stdio-guard\.ts'/)
+})
+
+test('omnis_record over stdio starts the session swarm and appends the event as the recorder wrote it', async () => {
+  const root = tmpRoot()
+  const s = start(SERVER, { OMNIS_PROJECT_DIR: root })
+  try {
+    await s.call(1, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0' } })
+    const sessionId = 'abcdef12-3456-7890-abcd-ef1234567890'
+    const ts = new Date().toISOString()
+    const data = { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false }
+    const ok = await s.call(2, 'tools/call', { name: 'omnis_record', arguments: { sessionId, ts, type: 'agent.tool', agent: 'lead', data } })
+    assert.equal(ok.result.isError, false)
+    const refused = await s.call(3, 'tools/call', { name: 'omnis_record', arguments: { sessionId, ts, type: 'memory.put', data: {} } })
+    assert.equal(refused.result.isError, true)
+    const events = readEvents(swarmLogPath(root, `session-${sessionKey(sessionId).slice(0, 8)}`)).events
+    assert.deepEqual(events.map(e => [e.type, e.src]), [['swarm.started', 'mcp'], ['agent.tool', 'recorder']])
+    assert.deepEqual(events[1]?.data, data)
+  } finally {
+    await s.stop()
+  }
 })

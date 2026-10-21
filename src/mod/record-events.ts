@@ -15,6 +15,8 @@ export type Measure = { context: { tokens?: number; window: number; percent?: nu
 
 const CONTROL = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu
 const MAX_TOKENS = 1e12
+/** The server refuses per-call usage counts above this, so the builder clamps to it. */
+const MAX_USAGE = 1e9
 
 /** Hook payloads are untrusted: anything that isn't a plain object reads as an empty one. */
 const isObj = (x: unknown): Fields => (typeof x === 'object' && x !== null && !Array.isArray(x) ? (x as Fields) : {})
@@ -105,7 +107,7 @@ export function toolSubject(tool: string, rawArgs: Fields): string {
 }
 
 const agentId = (x: unknown): string | null => (typeof x === 'string' && NAME.test(x) && isSafeKey(x) ? x : null)
-const tokens = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.min(Math.floor(x), MAX_TOKENS) : 0)
+const tokens = (x: unknown, max = MAX_TOKENS): number => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.min(Math.floor(x), max) : 0)
 
 /** Who an event belongs to: the lead when the engine gave no agent id, the agent when the recorder saw it spawn, otherwise nobody (an engine fork). */
 export function whoOf(id: unknown, seen: ReadonlySet<string>): string | null {
@@ -144,10 +146,10 @@ export function agentUsage(rawUsage: StepUsage, agent: string): RecordBody<'agen
     agent,
     data: {
       model: cleanText(usage.model, 80),
-      input: tokens(usage.input_tokens),
-      output: tokens(usage.output_tokens),
-      cacheRead: tokens(usage.cache_read_input_tokens),
-      cacheWrite5m: tokens(usage.cache_creation_input_tokens),
+      input: tokens(usage.input_tokens, MAX_USAGE),
+      output: tokens(usage.output_tokens, MAX_USAGE),
+      cacheRead: tokens(usage.cache_read_input_tokens, MAX_USAGE),
+      cacheWrite5m: tokens(usage.cache_creation_input_tokens, MAX_USAGE),
       cacheWrite1h: 0,
     },
   }
