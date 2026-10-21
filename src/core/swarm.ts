@@ -1,7 +1,7 @@
 /** Naming swarms and making sure one is running. */
-import { closeSync, openSync } from 'node:fs'
-import { makeEvent, type Source } from './events.ts'
-import { appendEvent, ensureLogDirs, isValidSwarmId, readCurrent, swarmLogPath, writeCurrent } from './log.ts'
+import { closeSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { makeEvent, parseLine, type Source } from './events.ts'
+import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, swarmLogPath, writeCurrent } from './log.ts'
 
 /** Lower-case letters, digits, dots and dashes; no leading or trailing punctuation; no dot runs; at most 64 characters. */
 export function slugify(name: string): string {
@@ -40,11 +40,8 @@ export function uniqueSwarmId(root: string, base: string): string {
   throw new Error('no free swarm id')
 }
 
-/** The current swarm id, starting an implicit hierarchical swarm named after `idHint` if none is running. */
-export function ensureSwarm(root: string, input: { idHint: string; src: Source; now?: Date }): string {
-  const current = readCurrent(root)
-  if (current !== null) return current
-  const id = uniqueSwarmId(root, input.idHint)
+/** Appends the swarm.started event to a swarm whose id was claimed with uniqueSwarmId. */
+export function announceSwarm(root: string, id: string, input: { src: Source; now?: Date }): void {
   appendEvent(root, makeEvent({
     type: 'swarm.started',
     swarm: id,
@@ -52,7 +49,48 @@ export function ensureSwarm(root: string, input: { idHint: string; src: Source; 
     data: { name: id, topology: 'hierarchical', implicit: true },
     ...(input.now !== undefined && { now: input.now }),
   }))
-  writeCurrent(root, id)
-  // If another writer started a swarm at the same moment, go with whichever name `current` ended up holding.
-  return readCurrent(root) ?? id
+}
+
+/** True if the swarm's log holds nothing but its own swarm.started line. */
+function onlyStarted(root: string, id: string): boolean {
+  try {
+    const lines = readFileSync(swarmLogPath(root, id), 'utf8').split(/\r?\n/).filter(l => l.trim() !== '')
+    if (lines.length !== 1) return false
+    const parsed = parseLine(lines[0]!)
+    return parsed.ok && parsed.event.type === 'swarm.started' && parsed.event.swarm === id
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Makes `id` the current swarm, but only if nobody else got there first: `current` is created with `wx`.
+ * A loser drops its own empty swarm and returns the winner's id. A `current` holding junk is overwritten.
+ */
+export function publishCurrent(root: string, id: string): string {
+  ensureLogDirs(root)
+  const { current } = logPaths(root)
+  if (lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink() === true) throw new Error(`refusing to write through a link: ${current}`)
+  try {
+    writeFileSync(current, id + '\n', { flag: 'wx' })
+    return id
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
+  const winner = readCurrent(root)
+  if (winner === null) {
+    writeCurrent(root, id)
+    return id
+  }
+  if (winner !== id && onlyStarted(root, id)) rmSync(swarmLogPath(root, id), { force: true })
+  return winner
+}
+
+/** The current swarm id, starting an implicit hierarchical swarm named after `idHint` if none is running. */
+export function ensureSwarm(root: string, input: { idHint: string; src: Source; now?: Date }): string {
+  const current = readCurrent(root)
+  if (current !== null) return current
+  const id = uniqueSwarmId(root, input.idHint)
+  announceSwarm(root, id, input)
+  return publishCurrent(root, id)
 }
