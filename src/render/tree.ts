@@ -10,31 +10,47 @@ import type { Rect } from './types.ts'
 const MAX_INDENT = 8
 
 export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Readonly<Record<string, AgentStats>>): void {
+  if (area.h < 1) return
   const parents = parentsOf(state)
   const agents = orderAgents(state)
+  const has = (id: string): boolean => Object.hasOwn(stats, id)
+  let total = 0
   const kids = new Map<string, string[]>()
   const roots: string[] = []
   for (const a of agents) {
+    if (has(a.id)) total++
     const p = parents.get(a.id) ?? null
     if (p === null) roots.push(a.id)
-    else kids.set(p, [...(kids.get(p) ?? []), a.id])
+    else {
+      const list = kids.get(p)
+      if (list === undefined) kids.set(p, [a.id])
+      else list.push(a.id)
+    }
   }
+  const room = area.h
+  const cap = total > room ? room - 1 : room
   const rows: Array<{ id: string; depth: number }> = []
   const seen = new Set<string>()
-  const walk = (id: string, depth: number): void => {
-    if (seen.has(id)) return
-    seen.add(id)
-    rows.push({ id, depth })
-    for (const k of kids.get(id) ?? []) walk(k, depth + 1)
+  // Explicit stack: a very deep parent chain must not overflow the call stack. Stops once the visible rows are full.
+  const stack: Array<{ id: string; depth: number }> = []
+  const start = [...roots, ...agents.map(a => a.id)]
+  for (const first of start) {
+    if (rows.length >= cap) break
+    stack.push({ id: first, depth: 0 })
+    while (stack.length > 0 && rows.length < cap) {
+      const { id, depth } = stack.pop()!
+      if (seen.has(id)) continue
+      seen.add(id)
+      const visible = has(id)
+      if (visible) rows.push({ id, depth })
+      const list = kids.get(id)
+      if (list !== undefined) for (let i = list.length - 1; i >= 0; i--) stack.push({ id: list[i]!, depth: visible ? depth + 1 : depth })
+    }
+    stack.length = 0
   }
-  for (const r of roots) walk(r, 0)
-  for (const a of agents) walk(a.id, 0)
-  const room = area.h
-  const shown = rows.length > room ? rows.slice(0, Math.max(0, room - 1)) : rows
   const maxX = area.x + area.w - 1
-  shown.forEach((row, i) => {
-    const s = Object.hasOwn(stats, row.id) ? stats[row.id]! : null
-    if (s === null) return
+  rows.forEach((row, i) => {
+    const s = stats[row.id]!
     const nameColor = s.status === 'failed' ? STATUS.failed : s.placeholder ? TEXT.dim : modelColor(s.model)
     writeParts(grid, area.x + 1, area.y + i, [
       ['  '.repeat(Math.min(row.depth, MAX_INDENT)), TEXT.dim],
@@ -44,5 +60,5 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
       [s.model === null ? '– tok · –' : `${fmtTokens(s.tokens.total)} tok · ${fmtUsd(s.costUsd)}`, TEXT.dim],
     ], maxX)
   })
-  if (rows.length > room && room > 0) writeParts(grid, area.x + 1, area.y + room - 1, [[`… ${rows.length - shown.length} more`, TEXT.dim]], maxX)
+  if (total > room) writeParts(grid, area.x + 1, area.y + room - 1, [[`… ${total - rows.length} more`, TEXT.dim]], maxX)
 }

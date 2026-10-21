@@ -1,5 +1,5 @@
 /** The timeline: one row per agent showing its current run across the swarm's lifetime; running rows grow live. Pure. */
-import type { SwarmState } from '../core/fold.ts'
+import type { AgentState, SwarmState } from '../core/fold.ts'
 import { agentStatus } from '../core/stats.ts'
 import { desaturate, mix, scale } from './color.ts'
 import { clipText, fmtDuration } from './format.ts'
@@ -26,15 +26,25 @@ function bar(grid: Grid, x0: number, y: number, from: number, to: number, color:
 
 export function drawTimeline(grid: Grid, area: Rect, state: SwarmState, now: number): void {
   if (area.h < 2 || area.w < 20) return
-  const agents = orderAgents(state).filter(a => !a.placeholder)
+  const ordered = orderAgents(state)
+  const limit = area.h - 1
+  const agents: AgentState[] = []
+  let count = 0
+  let earliest = now
+  for (const a of ordered) {
+    if (a.placeholder) continue
+    count++
+    if (a.startedAt < earliest) earliest = a.startedAt
+    if (agents.length < limit) agents.push(a)
+  }
   const labelW = Math.min(14, Math.floor(area.w / 4))
   const x0 = area.x + labelW + 1
   const width = area.x + area.w - 1 - x0
   if (width < 4) return
-  const start = state.swarm.startedAt ?? Math.min(now, ...agents.map(a => a.startedAt))
+  const start = state.swarm.startedAt ?? earliest
   const span = Math.max(1000, now - start)
   const toX = (t: number): number => ((Math.max(start, Math.min(now, t)) - start) / span) * (width - 1)
-  const rows = Math.min(agents.length, area.h - 1)
+  const rows = agents.length
   for (let i = 0; i < rows; i++) {
     const a = agents[i]!
     const y = area.y + i
@@ -55,5 +65,5 @@ export function drawTimeline(grid: Grid, area: Rect, state: SwarmState, now: num
   for (let x = 0; x < width; x++) grid.set(x0 + x, axisY, AXIS, TEXT.faint)
   writeParts(grid, x0, axisY, [['0s', TEXT.dim]], x0 + width)
   writeRight(grid, axisY, [[fmtDuration(span), TEXT.dim]], x0 + 3, x0 + width)
-  if (agents.length > rows) writeParts(grid, area.x + 1, axisY, [[`… +${agents.length - rows}`, TEXT.dim]], x0 - 1)
+  if (count > rows) writeParts(grid, area.x + 1, axisY, [[`… +${count - rows}`, TEXT.dim]], x0 - 1)
 }

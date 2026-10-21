@@ -1,7 +1,7 @@
 /** The header (two rows: the swarm and its totals, then tasks and memory) and the one-line summary. Pure. */
 import type { SwarmState } from '../core/fold.ts'
 import type { SwarmTotals } from '../core/stats.ts'
-import { fmtPercent, fmtTokens, fmtUsd } from './format.ts'
+import { clipText, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
 import { type Grid, type Part, writeParts, writeRight } from './grid.ts'
 import { ACCENT, CANVAS_RAISED, GLYPH, STATUS, TEXT, contextColor } from './tokens.ts'
 import type { Rect } from './types.ts'
@@ -27,7 +27,7 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   if (totals.sessionCostUsd !== null) parts.push(SEP, [`cc $${totals.sessionCostUsd.toFixed(2)}`, TEXT.dim])
   if (state.swarm.endedAt !== null) parts.push(SEP, ['ended', TEXT.dim])
   writeParts(grid, x, area.y, parts, maxX, bg)
-  if (state.gaps > 0) writeRight(grid, area.y, [[`${GLYPH.gap} ${state.gaps} gaps`, STATUS.warn]], x, maxX, bg)
+  if (state.gaps > 0) writeRight(grid, area.y, [[`${GLYPH.gap} ${state.gaps} gap${state.gaps === 1 ? '' : 's'}`, STATUS.warn]], x, maxX, bg)
   if (area.h < 2) return
   const t = totals.tasks
   const second: Part[] = [
@@ -37,7 +37,7 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   ]
   if (totals.clashes > 0) second.push(SEP, [`${GLYPH.clash} ${totals.clashes} clash${totals.clashes === 1 ? '' : 'es'}`, STATUS.failed])
   const end = writeParts(grid, x, area.y + 1, second, maxX, bg)
-  if (state.swarm.goal !== null && end + 4 < maxX) writeRight(grid, area.y + 1, [[state.swarm.goal, TEXT.dim]], end + 3, maxX, bg)
+  if (state.swarm.goal !== null && end + 4 < maxX) writeRight(grid, area.y + 1, [[clipText(state.swarm.goal, maxX - end - 3), TEXT.dim]], end + 3, maxX, bg)
 }
 
 /** The one-line summary, also the words an Svg says for readers that cannot see it. */
