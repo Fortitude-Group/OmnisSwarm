@@ -18,7 +18,7 @@ export const AGENT_OUTCOMES = ['answer', 'aborted', 'failed'] as const
 export type AgentOutcome = (typeof AGENT_OUTCOMES)[number]
 
 export type EventData = {
-  'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean }
+  'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean; session?: string }
   'swarm.ended': { outcome?: string }
   'agent.started': { name: string; role: string; description: string; parent: string }
   'agent.finished': { outcome: AgentOutcome; reason?: string }

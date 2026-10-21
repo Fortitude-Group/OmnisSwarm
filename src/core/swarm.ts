@@ -1,7 +1,7 @@
 /** Naming swarms and making sure one is running. */
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { makeEvent, parseLine, type Source } from './events.ts'
-import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, swarmLogPath, writeCurrent } from './log.ts'
+import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, readEvents, swarmLogPath, writeCurrent } from './log.ts'
 
 /** Lower-case letters, digits, dots and dashes; no leading or trailing punctuation; no dot runs; at most 64 characters. */
 export function slugify(name: string): string {
@@ -58,15 +58,30 @@ export function uniqueSwarmId(root: string, base: string, onAttempt?: () => void
   throw new Error('no free swarm id')
 }
 
-/** Appends the swarm.started event to a swarm whose id was claimed with uniqueSwarmId. */
-export function announceSwarm(root: string, id: string, input: { src: Source; now?: Date }): void {
+/** Appends the swarm.started event to a swarm whose id was claimed with uniqueSwarmId. `session` is the Claude Code session that started it. */
+export function announceSwarm(root: string, id: string, input: { src: Source; now?: Date; session?: string }): void {
   appendEvent(root, makeEvent({
     type: 'swarm.started',
     swarm: id,
     src: input.src,
-    data: { name: id, topology: 'hierarchical', implicit: true },
+    data: { name: id, topology: 'hierarchical', implicit: true, ...(input.session !== undefined && { session: input.session }) },
     ...(input.now !== undefined && { now: input.now }),
   }))
+}
+
+/**
+ * The Claude Code session that started swarm `id`: the `session` of its first swarm.started, or null.
+ * Later swarm.started lines (renames) don't change it. The log is a display record, so this only
+ * decides whether this server may end or rename the swarm.
+ */
+export function swarmOwner(root: string, id: string): string | null {
+  try {
+    const first = readEvents(swarmLogPath(root, id)).events.find(e => e.type === 'swarm.started')
+    const session = first?.type === 'swarm.started' ? first.data.session : undefined
+    return typeof session === 'string' ? session : null
+  } catch {
+    return null
+  }
 }
 
 /** True if the swarm's log holds nothing but its own swarm.started line. */
