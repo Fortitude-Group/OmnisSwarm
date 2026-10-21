@@ -4,7 +4,7 @@ import { agentStats, fileClashes, swarmTotals, type AgentStats, type Clash } fro
 import { luminance, scale } from './color.ts'
 import { drawFeed } from './feed.ts'
 import { clipText } from './format.ts'
-import { tween } from './fx.ts'
+import { FULL_MOTION, motionFor, tween, type Motion } from './fx.ts'
 import { clashActive, drawGraph } from './graph.ts'
 import { Grid, limitPairs, writeParts, type Part } from './grid.ts'
 import { drawHeader, drawSummary, summaryText, type HeaderNotes } from './header.ts'
@@ -47,35 +47,41 @@ export function chipColor(c: number): number {
 
 /**
  * pane.md section 6. FPS.busy while a comet, fade-in, pulse or glide is live; FPS.glow while a glow, stuck rim, ghost
- * fade, link fade or clash blink is; otherwise FPS.tick, because ages and live bars follow the clock. The pane stops
- * its loop itself when it is hidden.
+ * fade, link fade or clash blink is; otherwise FPS.tick, because ages and live bars follow the clock. A motion the
+ * budget has dropped (`motion`) is drawn steady, so it asks for nothing. The pane stops its loop when it is hidden.
  */
-export function targetFps(state: SwarmState, view: View, nowMs: number, stats: Readonly<Record<string, AgentStats>>, clashes: readonly Clash[]): number {
+export function targetFps(
+  state: SwarmState, view: View, nowMs: number, stats: Readonly<Record<string, AgentStats>>, clashes: readonly Clash[], motion: Readonly<Motion> = FULL_MOTION,
+): number {
   const t = nowMs - lagOf(view)
-  for (const item of state.feed) if (item.kind === 'message' && t >= item.at && t - item.at <= MOTION.cometMs + MOTION.trailMs) return FPS.busy
-  for (const a of Object.values(state.agents)) if (nowMs >= a.startedAt && nowMs - a.startedAt < MOTION.fadeInMs) return FPS.busy
+  if (motion.comets) for (const item of state.feed) if (item.kind === 'message' && t >= item.at && t - item.at <= MOTION.cometMs + MOTION.trailMs) return FPS.busy
+  if (motion.fadeIn) for (const a of Object.values(state.agents)) if (nowMs >= a.startedAt && nowMs - a.startedAt < MOTION.fadeInMs) return FPS.busy
   for (const p of view.pulses) if (t >= p.at && t - p.at <= (p.isError ? MOTION.errorPulseMs : MOTION.pulseMs)) return FPS.busy
-  if (view.tween !== null && nowMs - view.tween.at < MOTION.tweenMs) return FPS.busy
-  for (const s of Object.values(stats)) if (!s.placeholder && (s.status === 'running' || s.stuck)) return FPS.glow
-  for (const a of Object.values(state.agents)) if (a.finishedAt !== null && nowMs >= a.finishedAt && nowMs - a.finishedAt < MOTION.ghostMs) return FPS.glow
-  for (const l of Object.values(state.links)) if (t >= l.lastAt && t - l.lastAt < MOTION.linkFadeMs) return FPS.glow
-  if (clashes.some(c => clashActive(state, c, nowMs))) return FPS.glow
+  if (motion.glide && view.tween !== null && nowMs - view.tween.at < MOTION.tweenMs) return FPS.busy
+  if (motion.breathe) for (const s of Object.values(stats)) if (!s.placeholder && (s.status === 'running' || s.stuck)) return FPS.glow
+  if (motion.slowFades) {
+    for (const a of Object.values(state.agents)) if (a.finishedAt !== null && nowMs >= a.finishedAt && nowMs - a.finishedAt < MOTION.ghostMs) return FPS.glow
+    for (const l of Object.values(state.links)) if (t >= l.lastAt && t - l.lastAt < MOTION.linkFadeMs) return FPS.glow
+  }
+  if (motion.clashBlink && clashes.some(c => clashActive(state, c, nowMs))) return FPS.glow
   return FPS.tick
 }
 
+/** The pane may spend at most a tenth of the main thread on render (pane.md section 6): an interval is at least this many renders. */
+const BUDGET_FACTOR = 10
+
+/** The most frames a second the budget allows after a frame that took `renderMs`; unlimited when it took no measurable time. */
+export const budgetFps = (renderMs: number): number =>
+  Number.isFinite(renderMs) && renderMs > 0 ? 1000 / (BUDGET_FACTOR * renderMs) : Number.POSITIVE_INFINITY
+
 /**
- * The next frame interval in ms. A frame that took more than 60% of the interval doubles it (down to FPS.min, unless
- * the target is already slower); one that took under a quarter halves it again, never faster than `fps` asks. 0 means stop.
+ * The next frame interval in ms: the target rate's, but at least 10 x the last frame's render time, so render never
+ * takes more than 100 ms of a second. A frame under the cap falls straight back to the target rate. 0 means stop.
  */
-export function frameInterval(fps: number, previousMs: number, renderMs: number): number {
-  if (fps <= 0) return 0
-  const base = Math.round(1000 / fps)
-  const slowest = Math.max(base, Math.round(1000 / FPS.min))
-  // A previous interval slower than the back-off floor was the idle tick: a rate change starts fresh at its base.
-  if (previousMs <= 0 || previousMs > slowest) return base
-  if (renderMs > previousMs * 0.6) return Math.min(slowest, Math.max(base, previousMs * 2))
-  if (renderMs < previousMs * 0.25) return Math.max(base, Math.round(previousMs / 2))
-  return Math.max(base, previousMs)
+export function frameInterval(fps: number, renderMs: number): number {
+  if (!(fps > 0)) return 0
+  const spent = Number.isFinite(renderMs) && renderMs > 0 ? renderMs : 0
+  return Math.max(Math.round(1000 / fps), Math.ceil(BUDGET_FACTOR * spent))
 }
 
 /**
@@ -136,7 +142,12 @@ function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Sized 
   return entry
 }
 
-export function render(state: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}): Frame {
+/**
+ * The frame at `nowMs`. `capFps` is the budget cap from the last frame's render time (budgetFps); under it the motions
+ * pane.md section 6 lists are drawn steady. With no cap, everything moves.
+ */
+export function render(state: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}, capFps = Number.POSITIVE_INFINITY): Frame {
+  const motion = motionFor(capFps)
   const clashes = fileClashes(state, nowMs)
   const totals = swarmTotals(state, nowMs, clashes)
   const stats: Record<string, AgentStats> = {}
@@ -167,10 +178,10 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
     if (regions.tree !== null) drawTree(top, regions.tree, state, stats)
     if (regions.graph !== null) {
       const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2)
-      positions = tween(target.positions, view.tween, nowMs)
+      positions = tween(target.positions, motion.glide ? view.tween : null, nowMs)
       // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead.
       if (target.crowded) drawTree(top, regions.graph, state, stats)
-      else drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges })
+      else drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges, motion })
     }
   }
 
@@ -205,6 +216,6 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
   ].join('|')
   return {
     step: regions.step, top, bottom, chips, treeKey, nodesKey: cached.key, positions,
-    fps: targetFps(state, view, nowMs, stats, clashes), spotlight, alt: summaryText(state, totals),
+    fps: targetFps(state, view, nowMs, stats, clashes, motion), spotlight, alt: summaryText(state, totals),
   }
 }

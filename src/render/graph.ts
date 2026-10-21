@@ -4,7 +4,7 @@ import type { AgentStats, Clash } from '../core/stats.ts'
 import { Dots, Pixels, compose, toDots } from './canvas.ts'
 import { desaturate, mix, quantise, scale } from './color.ts'
 import { clipText } from './format.ts'
-import { arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit } from './fx.ts'
+import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
 import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
@@ -21,6 +21,8 @@ export type GraphInput = {
   tEff: number
   /** The swarm's structural edges, when the caller has them cached; otherwise worked out each frame. */
   edges?: readonly Edge[]
+  /** The motions the frame budget allows; all of them when not given. */
+  motion?: Readonly<Motion>
 }
 
 type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState }
@@ -41,14 +43,19 @@ export function nodeRadius(tokens: number, maxRadius: number): number {
   return Math.max(GRAPH.minRadius, Math.min(GRAPH.maxRadius, cap, r))
 }
 
-/** Running: the model colour. Waiting: dimmer. Done: fades to a ghost. Failed: red. Everything fades in from the canvas. */
-export function nodeColor(s: AgentStats, a: AgentState, now: number): number {
+/**
+ * Running: the model colour. Waiting: dimmer. Done: fades to a ghost. Failed: red. Everything fades in from the canvas.
+ * Degraded, the ghost fade jumps to its end and a new node shows at full colour at once.
+ */
+export function nodeColor(s: AgentStats, a: AgentState, now: number, motion: Readonly<Motion> = FULL_MOTION): number {
   const base = s.placeholder ? TEXT.faint : modelColor(s.model)
   let c = base
   if (s.status === 'failed') c = STATUS.failed
-  else if (s.status === 'done') c = mix(base, mix(desaturate(base, 0.7), CANVAS, 0.55), quantise(ghost(a.finishedAt, now), 6))
-  else if (s.status === 'waiting') c = scale(base, 0.72)
-  return mix(CANVAS, c, quantise(fadeIn(a.startedAt, now), 8))
+  else if (s.status === 'done') {
+    const k = motion.slowFades ? quantise(ghost(a.finishedAt, now), 6) : a.finishedAt !== null && now >= a.finishedAt ? 1 : 0
+    c = mix(base, mix(desaturate(base, 0.7), CANVAS, 0.55), k)
+  } else if (s.status === 'waiting') c = scale(base, 0.72)
+  return mix(CANVAS, c, motion.fadeIn ? quantise(fadeIn(a.startedAt, now), 8) : now >= a.startedAt ? 1 : 0)
 }
 
 /** The largest node radius for these centres: about 0.4 of the gap to the nearest neighbour, so dense layers shrink. */
@@ -117,11 +124,16 @@ function trimmed(a: Point, b: Point, ra: number, rb: number): [Point, Point] | n
   return [{ x: a.x + ux * ra, y: a.y + uy * ra }, { x: b.x - ux * rb, y: b.y - uy * rb }]
 }
 
-/** The strongest live pulse per agent: its colour and how far it has faded. */
-function pulseRims(view: View, tEff: number): Map<string, NonNullable<Rim>> {
+/**
+ * The strongest live pulse per agent: its colour and how far it has faded. Degraded, a pulse does not fade: it is
+ * drawn at full strength for its window, stretched to at least one frame at the cap so it is never skipped.
+ */
+function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<string, NonNullable<Rim>> {
   const out = new Map<string, NonNullable<Rim>>()
   for (const p of view.pulses) {
-    const k = quantise(flash(p.at, tEff, p.isError ? MOTION.errorPulseMs : MOTION.pulseMs), 4)
+    const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
+    const age = tEff - p.at
+    const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 4) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
     if (k <= 0 || (out.get(p.agent)?.k ?? 0) >= k) continue
     out.set(p.agent, { color: p.isError ? STATUS.failed : KIND[p.kind], k, flare: true })
   }
@@ -220,6 +232,7 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
 
 export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const { state, stats, positions, clashes, view, now, tEff } = input
+  const motion = input.motion ?? FULL_MOTION
   if (![full.x, full.y, full.w, full.h].every(v => !Number.isNaN(v))) return
   // A negative origin clips the area; the positions move left and up by what was cut off.
   const x = Math.floor(full.x)
@@ -246,7 +259,7 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   for (const { a, p, s } of placed) {
     const room = Math.min(p.y, area.h * 2 - 2 - p.y, p.x, area.w - p.x) - GRAPH.ringPx - 0.5
     const r = s.placeholder ? GRAPH.minRadius : nodeRadius(s.tokens.total, Math.min(maxR, Math.max(GRAPH.minRadius, room)))
-    nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now), s, a })
+    nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now, motion), s, a })
   }
   const segment = (from: string, to: string, gap = 1): [Point, Point] | null => {
     const a = nodes.get(from)
@@ -263,7 +276,11 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     bends.set(key, bend)
     return bend
   }
-  const recency = (lastAt: number): number => quantise(flash(lastAt, tEff, MOTION.linkFadeMs), 5)
+  // Degraded, a link stays fully lit for its fade window, then goes.
+  const recency = (lastAt: number): number => {
+    const k = flash(lastAt, tEff, MOTION.linkFadeMs)
+    return motion.slowFades ? quantise(k, 5) : k > 0 ? 1 : 0
+  }
 
   // 1. Busy links as dim pixel arcs, under the nodes.
   for (const link of Object.values(state.links)) {
@@ -280,15 +297,19 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   }
 
   // 2. Nodes, with glow, context ring and rim.
-  const rims = pulseRims(view, tEff)
+  const rims = pulseRims(view, tEff, motion)
   const flashing = new Set<string>()
-  for (const c of clashes) if (clashActive(state, c, now) && blink(now, MOTION.clashBlinkMs)) for (const id of c.agents) flashing.add(id)
+  for (const c of clashes) {
+    if (clashActive(state, c, now) && (!motion.clashBlink || blink(now, MOTION.clashBlinkMs))) for (const id of c.agents) flashing.add(id)
+  }
   for (const n of nodes.values()) {
     const seed = hashUnit(n.id)
+    // Degraded, breathing stops: the halo holds at 0.7 and a stuck rim at 0.6.
+    const stuckK = motion.breathe ? quantise(0.3 + 0.6 * glow(now, seed), 4) : 0.6
     const rim: Rim = flashing.has(n.id) ? { color: LINK.clash, k: 0.9, flare: false }
-      : rims.get(n.id) ?? (n.s.stuck ? { color: STATUS.warn, k: quantise(0.3 + 0.6 * glow(now, seed), 4), flare: false } : null)
+      : rims.get(n.id) ?? (n.s.stuck ? { color: STATUS.warn, k: stuckK, flare: false } : null)
     const fill = n.s.contextFill
-    const glowK = n.s.status === 'running' ? quantise(0.45 + 0.55 * glow(now, seed), 5) : 0
+    const glowK = n.s.status !== 'running' ? 0 : motion.breathe ? quantise(0.45 + 0.55 * glow(now, seed), 5) : 0.7
     paintNode(px, n, glowK, fill !== null && n.r >= 2.2 ? { fill, color: contextColor(fill) } : null, rim)
   }
 
@@ -322,8 +343,9 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   }
 
   // 6. Comets along the arcs of recent messages: every trail first, every head last, so a head is never painted over.
+  // Under FPS.min there are none: the link's own flash (step 4) shows the message.
   const heads: Point[] = []
-  for (const item of state.feed) {
+  for (const item of motion.comets ? state.feed : []) {
     if (item.kind !== 'message' || item.to === undefined) continue
     const seg = segment(item.agent, item.to)
     if (seg === null) continue

@@ -9,7 +9,7 @@ import type { Elements, EngineInterface, On, PluginOptions, RenderElement, Timer
 import { parseFeedReply } from '../core/feed-reply.ts'
 import type { SwarmState } from '../core/fold.ts'
 import { hex } from '../render/color.ts'
-import { frameInterval, render } from '../render/frame.ts'
+import { budgetFps, frameInterval, render } from '../render/frame.ts'
 import type { Grid } from '../render/grid.ts'
 import { chooseSpotlight } from '../render/spotlight.ts'
 import { CELL_W, SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
@@ -91,9 +91,8 @@ type Runtime = {
   pullTimer: Timer | null; pullMs: number
   /** Connect retries: no try while a backoff wait runs; the next wait doubles after each failure. */
   connectWait: Timer | null; connectBackoffMs: number
-  frameTimer: Timer | null
-  frameMs: number
-  renderMs: number
+  /** The frame loop, its period, and how long the last frame took to draw and hand over on any path (it sets the budget cap). */
+  frameTimer: Timer | null; frameMs: number; renderMs: number
   spot: Spot | null
   tween: Tween | null
   pinned: string | null
@@ -127,7 +126,7 @@ const waitingText = (): string =>
     ? '⚠ Waiting for the swarm…'
     : rt.model.swarm === null ? 'No swarm yet. One starts with the first agent, or with omnis_swarm_init.' : 'Reading the swarm…'
 
-/** The frame at `now`, after choosing the spotlight. Starts a glide when the node set changed. Null until there is a state and a size. */
+/** The frame at `now` under the budget cap, after choosing the spotlight. Starts a glide when the nodes changed. Null until there is a state and a size. */
 function frameAt(now: number): Frame | null {
   const state = rt.model.state
   if (state === null || rt.size === null) return null
@@ -135,7 +134,7 @@ function frameAt(now: number): Frame | null {
   const pinned = pinOf(state)
   rt.spot = chooseSpotlight(rt.spot, pinned, state, rt.model.pulses, now)
   const { degraded, degradedAgents, hiddenFinished } = rt.model
-  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished })
+  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished }, budgetFps(rt.renderMs))
   if (rt.last !== null && frame.nodesKey !== rt.last.nodesKey) rt.tween = { from: rt.last.positions, at: now }
   return frame
 }
@@ -154,13 +153,13 @@ function stopFrames(): void {
   rt.frameMs = 0
 }
 
-/** Runs the frame loop at `fps`, slower while frames are slow; stops it at 0, when closed, or off the terminal. */
+/** Runs the frame loop at `fps`, held to the render budget; stops it at 0, when closed, or off the terminal. */
 function animate(host: Host, fps: number): void {
   if (fps <= 0 || !rt.open || !rt.shown || rt.surface !== 'terminal') {
     stopFrames()
     return
   }
-  const interval = frameInterval(fps, rt.frameMs, rt.renderMs)
+  const interval = frameInterval(fps, rt.renderMs)
   if (rt.frameTimer !== null && interval === rt.frameMs) return
   rt.frameTimer?.cancel()
   rt.frameMs = interval
@@ -187,6 +186,7 @@ function tick(host: Host): void {
 
 /** After news: blit when the element tree still fits, otherwise ask for a redraw. */
 function show(host: Host, now: number): void {
+  const started = Date.now()
   const frame = frameAt(now)
   if (frame === null || rt.last === null || rt.surface !== 'terminal' || frame.treeKey !== rt.last.treeKey) {
     host.invalidate()
@@ -194,6 +194,7 @@ function show(host: Host, now: number): void {
   }
   blitFrame(host, frame)
   rt.last = frame
+  rt.renderMs = Date.now() - started
   animate(host, frame.fps)
 }
 
@@ -448,7 +449,8 @@ export function registerPane(on: On, options: PluginOptions): void {
       rows: Math.max(1, Math.floor(Number(e.props.scroll.bodyRows) || 1)),
     }
     if (rt.host !== null) startPulling(rt.host)
-    const frame = frameAt(Date.now())
+    const started = Date.now()
+    const frame = frameAt(started)
     rt.last = frame
     if (e.surface === 'terminal') {
       const { Box, Text, Button, Raster } = $.ui.resolve(e)
@@ -457,8 +459,7 @@ export function registerPane(on: On, options: PluginOptions): void {
         return Text({ dimColor: true, children: waitingText() })
       }
       rt.mounted = { top: sizeKey(frame.top), bottom: frame.bottom === null ? null : sizeKey(frame.bottom) }
-      if (rt.host !== null) animate(rt.host, frame.fps)
-      return Box({
+      const tree = Box({
         flexDirection: 'column',
         children: [
           Raster(frame.top.toRaster('top')),
@@ -466,6 +467,9 @@ export function registerPane(on: On, options: PluginOptions): void {
           ...(frame.bottom === null ? [] : [Raster(frame.bottom.toRaster('bottom'))]),
         ],
       })
+      rt.renderMs = Date.now() - started
+      if (rt.host !== null) animate(rt.host, frame.fps)
+      return tree
     }
     const { Box, Text, Button, Svg } = $.ui.resolve(e)
     rt.mounted = { top: null, bottom: null }
