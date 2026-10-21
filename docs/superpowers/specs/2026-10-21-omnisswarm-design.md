@@ -202,7 +202,7 @@ recording its own traffic. The model's calls to the public `omnis_*` tools (`omn
 event and every pane pull runs every installed mod's `tool.call` and `tool.check` hooks, ours
 included. `$.mcp.call` also raises classic `PreToolUse` command hooks, once per call (verified in
 phase 2, [docs/spikes/2026-10-21-recorder-live.md](../../spikes/2026-10-21-recorder-live.md) item 3),
-so anyone with a catch-all `PreToolUse` hook starts a process per recorded event. Phase 4's README says
+so anyone with a catch-all `PreToolUse` hook starts a process per recorded event and per pane pull. Phase 4's README says
 so and gives a matcher that excludes us. A killed server answers in-flight calls with `isError` ("Connection
 closed"), and Claude Code restarts it on the next call. That call's event and any in flight are lost.
 
