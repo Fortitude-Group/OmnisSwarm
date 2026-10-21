@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { foldAll } from '../../src/core/fold.ts'
+import { fold, foldAll } from '../../src/core/fold.ts'
 import { agentStats, fileClashes, type AgentStats } from '../../src/core/stats.ts'
 import { contrast, hex, luminance } from '../../src/render/color.ts'
 import { chipColor, frameInterval, render, targetFps } from '../../src/render/frame.ts'
@@ -85,6 +85,9 @@ test('the tick is exempt from the back-off floor: a slow frame never speeds it u
   assert.equal(frameInterval(FPS.tick, 0, 0), 1000)
   assert.equal(frameInterval(FPS.tick, 1000, 900), 1000)
   assert.equal(frameInterval(FPS.tick, 1000, 5), 1000)
+  // After the idle tick, a rate change starts at its own base, not half the tick.
+  assert.equal(frameInterval(30, 1000, 5), 33)
+  assert.equal(frameInterval(12, 1000, 5), 83)
 })
 
 test('every frame stays inside its colour-pair budget and the Raster limits', () => {
@@ -136,6 +139,7 @@ test('the layout is reused while the nodes stay the same and rebuilt when they c
   const a = render(s, emptyView(), FIVE_AT.mid, FULL)
   const b = render(s, emptyView(), FIVE_AT.idle, FULL)
   assert.deepEqual(a.positions, b.positions)
+  assert.equal(a.positions.lead, b.positions.lead)
   const wider = render(s, emptyView(), FIVE_AT.mid, { columns: 100, rows: 40 })
   assert.notDeepEqual(a.positions, wider.positions)
   const fewer = render(foldAll(FIVE_SWARM, fiveAgentEvents().slice(0, 12)), emptyView(), FIVE_AT.mid, FULL)
@@ -145,8 +149,10 @@ test('the layout is reused while the nodes stay the same and rebuilt when they c
 test('a failed read and hidden finished agents are said in the header', () => {
   const s = five()
   const header = (n: Parameters<typeof render>[4]) => gridText(render(s, emptyView(), FIVE_AT.mid, FULL, n).top).slice(0, 2).join('\n')
-  assert.match(header({ degraded: 'too-large' }), /Swarm too large to draw \(6 agents\)/)
-  assert.match(header({ degraded: 'unreadable' }), /Waiting for the swarm…/)
+  assert.match(header({ degraded: 'too-large' }), /⚠ Swarm too large to draw \(6 agents\)/)
+  assert.match(header({ degraded: 'too-large', degradedAgents: 900 }), /\(900 agents\)/)
+  assert.match(header({ degraded: 'unreadable' }), /⚠ Waiting for the swarm…/)
+  assert.match(header({ degraded: 'unreadable', hiddenFinished: 2 }), /Waiting for the swarm… · \+2 finished/)
   assert.match(header({ hiddenFinished: 3 }), /\+3 finished/)
   assert.doesNotMatch(header({}), /finished|too large|Waiting/)
   assert.doesNotMatch(header({ hiddenFinished: 0, degraded: null }), /finished/)
@@ -168,4 +174,43 @@ test('hostile names and summaries never put a cell the Raster would refuse', () 
 test('an empty swarm renders', () => {
   const f = render(foldAll('s1', []), emptyView(), at(0), FULL)
   assert.deepEqual([f.spotlight, f.chips.length, f.fps], [null, 0, FPS.tick])
+})
+
+test('the one-row steps say a failed read in short form', () => {
+  const s = five()
+  const top = (size: { columns: number; rows: number }, d: 'too-large' | 'unreadable') => gridText(render(s, emptyView(), FIVE_AT.mid, size, { degraded: d }).top)[0]!
+  assert.match(top({ columns: 60, rows: 13 }, 'too-large'), /⚠ too large/)
+  assert.match(top({ columns: 60, rows: 13 }, 'unreadable'), /⚠ waiting/)
+  assert.match(top({ columns: 60, rows: 5 }, 'unreadable'), /⚠ waiting/)
+})
+
+test('a cached state object whose events change is laid out again', () => {
+  const events = fiveAgentEvents()
+  const s = foldAll(FIVE_SWARM, events.slice(0, 12))
+  const before = render(s, emptyView(), FIVE_AT.mid, FULL)
+  for (const e of events.slice(12, 30)) fold(s, e)
+  const after = render(s, emptyView(), FIVE_AT.mid, FULL)
+  assert.notEqual(before.nodesKey, after.nodesKey)
+  assert.ok(Object.keys(after.positions).length > Object.keys(before.positions).length)
+})
+
+test('labels keep a clear cell either side: no line runs into them', () => {
+  const f = render(five(), emptyView(), FIVE_AT.mid, FULL)
+  const rows = gridText(f.top)
+  const braille = (g: number) => g > 0x2800 && g <= 0x28ff
+  for (const name of ['architect', 'tester', 'coder-1']) {
+    const y = rows.findIndex((r, i) => i >= 2 && r.includes(` ${name}`))
+    assert.ok(y >= 0, name)
+    const x = rows[y]!.indexOf(` ${name}`) - 1
+    const end = x + name.length + 2
+    assert.ok(!braille(f.top.glyph(x - 1, y)) && !braille(f.top.glyph(end + 1, y)), `${name} at ${x},${y}`)
+  }
+})
+
+test('when two nodes would overlap the graph area shows the tree', () => {
+  const crowded = render(five(), emptyView(), FIVE_AT.mid, { columns: 80, rows: 21 })
+  assert.match(gridText(crowded.top).join('\n'), /architect\s+\S+ tok · /)
+  assert.ok(gridText(crowded.top).slice(2).every(r => ![...r].some(ch => ch > '⠀' && ch <= '⣿')))
+  const roomy = render(five(), emptyView(), FIVE_AT.mid, FULL)
+  assert.doesNotMatch(gridText(roomy.top).slice(2).join('\n'), /\S+ tok · /)
 })

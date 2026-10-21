@@ -6,13 +6,13 @@ import { drawFeed } from './feed.ts'
 import { clipText } from './format.ts'
 import { tween } from './fx.ts'
 import { clashActive, drawGraph } from './graph.ts'
-import { Grid, limitPairs, writeParts } from './grid.ts'
-import { drawHeader, drawSummary, summaryText } from './header.ts'
+import { Grid, limitPairs, writeParts, type Part } from './grid.ts'
+import { drawHeader, drawSummary, summaryText, type HeaderNotes } from './header.ts'
 import { layoutNodes, nodesKey, orderAgents, structuralEdges, type Edge } from './layout.ts'
 import { planRegions } from './regions.ts'
 import { busiest, drawSpotlight } from './spotlight.ts'
 import { drawTimeline } from './timeline.ts'
-import { CANVAS, CANVAS_RAISED, FPS, MOTION, PAIR_BUDGET, TEXT, modelColor } from './tokens.ts'
+import { CANVAS, CANVAS_RAISED, FPS, GRAPH, MOTION, PAIR_BUDGET, STATUS, TEXT, modelColor } from './tokens.ts'
 import { drawTree } from './tree.ts'
 import type { Chip, Frame, Point, Size, View } from './types.ts'
 
@@ -23,7 +23,7 @@ const CHIP_LUMINANCE = 0.18
 const lagOf = (view: View): number => Math.max(0, Math.min(MAX_LAG_MS, Number.isFinite(view.lagMs) ? view.lagMs : 0))
 
 /** What the pane knows about the last read beyond the swarm state; both come from the pane model. */
-export type Notes = { degraded?: 'too-large' | 'unreadable' | null; hiddenFinished?: number }
+export type Notes = { degraded?: 'too-large' | 'unreadable' | null; degradedAgents?: number; hiddenFinished?: number }
 
 const chipColors = new Map<number, number>()
 /** The model colour scaled down (halving the interval 20 times) until its luminance is at most CHIP_LUMINANCE. */
@@ -71,21 +71,46 @@ export function frameInterval(fps: number, previousMs: number, renderMs: number)
   if (fps <= 0) return 0
   const base = Math.round(1000 / fps)
   const slowest = Math.max(base, Math.round(1000 / FPS.min))
-  if (previousMs <= 0) return base
+  // A previous interval slower than the back-off floor was the idle tick: a rate change starts fresh at its base.
+  if (previousMs <= 0 || previousMs > slowest) return base
   if (renderMs > previousMs * 0.6) return Math.min(slowest, Math.max(base, previousMs * 2))
   if (renderMs < previousMs * 0.25) return Math.max(base, Math.round(previousMs / 2))
   return Math.max(base, previousMs)
 }
 
-/** Layout work that depends only on the nodes (nodesKey), cached until they change: order, edges, positions per canvas size. */
+/**
+ * Layout work that depends only on the nodes, cached until they change: order, edges, positions per canvas size.
+ * A state object is checked first by its event count (the pane folds events into the same object, and hands the same
+ * object back when nothing arrived); otherwise the nodes' key decides, so a fresh state with the same nodes reuses it.
+ */
 type Shape = { key: string; ids: string[]; edges: Edge[]; sized: Map<string, Record<string, Point>> }
-let shape: Shape | null = null
+const shapeOfState = new WeakMap<SwarmState, { events: number; shape: Shape }>()
+let lastShape: Shape | null = null
 
-function shapeFor(state: SwarmState, key: string): Shape {
-  if (shape === null || shape.key !== key) {
-    shape = { key, ids: orderAgents(state).map(a => a.id), edges: structuralEdges(state, state.swarm.topology), sized: new Map() }
+function shapeFor(state: SwarmState): Shape {
+  const known = shapeOfState.get(state)
+  if (known !== undefined && known.events === state.events) return known.shape
+  const key = nodesKey(state)
+  if (lastShape === null || lastShape.key !== key) {
+    lastShape = { key, ids: orderAgents(state).map(a => a.id), edges: structuralEdges(state, state.swarm.topology), sized: new Map() }
   }
-  return shape
+  shapeOfState.set(state, { events: state.events, shape: lastShape })
+  return lastShape
+}
+
+/** Node centres closer than this (2 x (minRadius + ringPx) + 2, rounded up) overlap, discs and halos. */
+const MIN_GAP = Math.ceil(2 * (GRAPH.minRadius + GRAPH.ringPx) + 2)
+
+/** The distance between the two closest points: a sweep along x, so it is near-linear for a spread-out layout. */
+function closest(positions: Readonly<Record<string, Point>>): number {
+  const pts = Object.values(positions).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x)
+  let best = Number.POSITIVE_INFINITY
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length && pts[j]!.x - pts[i]!.x < Math.min(best, MIN_GAP); j++) {
+      best = Math.min(best, Math.hypot(pts[j]!.x - pts[i]!.x, pts[j]!.y - pts[i]!.y))
+    }
+  }
+  return best
 }
 
 function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Record<string, Point> {
@@ -107,30 +132,33 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
     const s = agentStats(state, id, nowMs, clashes)
     if (s !== null) stats[id] = s
   }
-  const key = nodesKey(state)
-  const cached = shapeFor(state, key)
+  const cached = shapeFor(state)
   // Placeholders are read fresh: whether a name has been seen is not part of the nodes' key.
   const real = cached.ids.flatMap(id => { const a = state.agents[id]; return a === undefined || a.placeholder ? [] : [a] })
   const realIds = new Set(real.map(a => a.id))
   const regions = planRegions(size, real.length)
   const top = new Grid(regions.top.columns, regions.top.rows, CANVAS, TEXT.primary)
 
-  // A failed read keeps the last good state. Say so in the header's goal slot: right-aligned, dim, clipped at its end.
-  const note = [
-    notes.degraded === 'too-large' ? `Swarm too large to draw (${real.length} agents)` : notes.degraded === 'unreadable' ? 'Waiting for the swarm…' : null,
-    notes.hiddenFinished !== undefined && notes.hiddenFinished > 0 ? `+${notes.hiddenFinished} finished` : null,
-    state.swarm.goal,
-  ].filter((t): t is string => t !== null).join(' · ')
-  const shown = note === (state.swarm.goal ?? '') ? state : { ...state, swarm: { ...state.swarm, goal: note } }
+  // A failed read keeps the last good state; say so in the header (warn colour, with a glyph, never colour alone).
+  const count = notes.degradedAgents !== undefined && notes.degradedAgents > 0 ? notes.degradedAgents : real.length
+  const noteParts: Part[] = []
+  if (notes.degraded === 'too-large') noteParts.push([`⚠ Swarm too large to draw (${count} agents)`, STATUS.warn])
+  else if (notes.degraded === 'unreadable') noteParts.push(['⚠ Waiting for the swarm…', STATUS.warn])
+  if (notes.hiddenFinished !== undefined && notes.hiddenFinished > 0) noteParts.push([`+${notes.hiddenFinished} finished`, TEXT.dim])
+  const short: Part | null = notes.degraded === 'too-large' ? ['⚠ too large', STATUS.warn] : notes.degraded === 'unreadable' ? ['⚠ waiting', STATUS.warn] : null
+  const hn: HeaderNotes = { notes: noteParts, short }
 
   let positions: Record<string, Point> = {}
-  if (regions.step === 'summary') drawSummary(top, regions.header, state, totals)
+  if (regions.step === 'summary') drawSummary(top, regions.header, state, totals, hn)
   else {
-    drawHeader(top, regions.header, shown, totals)
+    drawHeader(top, regions.header, state, totals, hn)
     if (regions.tree !== null) drawTree(top, regions.tree, state, stats)
     if (regions.graph !== null) {
-      positions = tween(positionsFor(state, cached, regions.graph.w, regions.graph.h * 2), view.tween, nowMs)
-      drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges })
+      const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2)
+      positions = tween(target, view.tween, nowMs)
+      // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead.
+      if (closest(target) < MIN_GAP) drawTree(top, regions.graph, state, stats)
+      else drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges })
     }
   }
 
@@ -164,7 +192,7 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
     ...chips.map(c => `${c.id}:${c.label}:${c.color}:${c.pinned ? 1 : 0}`),
   ].join('|')
   return {
-    step: regions.step, top, bottom, chips, treeKey, nodesKey: key, positions,
+    step: regions.step, top, bottom, chips, treeKey, nodesKey: cached.key, positions,
     fps: targetFps(state, view, nowMs, stats, clashes), spotlight, alt: summaryText(state, totals),
   }
 }

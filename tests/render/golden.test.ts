@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hex } from '../../src/render/color.ts'
-import { type Grid, gridText } from '../../src/render/grid.ts'
+import { type Grid, gridText, pairCount } from '../../src/render/grid.ts'
 import type { Frame } from '../../src/render/types.ts'
 import { FIVE_T0 } from '../fixtures/swarm-five.ts'
 import { GOLDEN_CASES, goldenFrame, type GoldenCase } from './golden-cases.ts'
@@ -39,7 +39,7 @@ function snapshot(c: GoldenCase, f: Frame): string {
   const part = (label: string, g: Grid): string[] => {
     const { map, legend } = colours(g)
     const sha = createHash('sha256').update(g.encode()).digest('hex').slice(0, 16)
-    return [`## ${label} ${g.columns}x${g.rows} sha ${sha}`, '### glyphs', ...gridText(g), '### colours', ...map, '### legend', ...legend]
+    return [`## ${label} ${g.columns}x${g.rows} pairs ${pairCount(g)} sha ${sha}`, '### glyphs', ...gridText(g), '### colours', ...map, '### legend', ...legend]
   }
   return [
     `# ${c.name}: ${c.topology} at +${c.at - FIVE_T0} ms in ${c.size.columns}x${c.size.rows}; step ${f.step}, fps ${f.fps}, spotlight ${f.spotlight}`,

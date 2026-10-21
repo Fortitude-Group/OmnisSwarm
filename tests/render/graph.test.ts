@@ -140,7 +140,7 @@ test('caller-supplied edges replace the per-frame structural edges', () => {
   const s = foldAll(FIVE_SWARM, fiveAgentEvents())
   const { stats, clashes } = statsOf(s, FIVE_AT.idle)
   const positions = layoutNodes(s, s.swarm.topology, 120, 48)
-  const faint = mix(CANVAS, TEXT.faint, 0.9)
+  const faint = mix(CANVAS, TEXT.faint, 0.6)
   const count = (edges?: { from: string; to: string }[]) => {
     const g = new Grid(120, 24, CANVAS)
     drawGraph(g, rect(0, 0, 120, 24), { state: s, stats, positions, clashes, view: emptyView(), now: FIVE_AT.idle, tEff: FIVE_AT.idle, ...(edges ? { edges } : {}) })
@@ -229,4 +229,16 @@ test('a negative area origin clips the graph instead of shifting it right', { ti
   const home = at(0, 20)
   assert.ok(home >= 0)
   assert.equal(at(-5, 25), home)
+})
+
+test('a quiet link shows only while recent; at rest the graph holds no message arcs', () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const draw = (now: number) => {
+    const { stats, clashes } = statsOf(s, now)
+    const g = new Grid(120, 24, CANVAS)
+    drawGraph(g, rect(0, 0, 120, 24), { state: s, stats, positions: layoutNodes(s, s.swarm.topology, 120, 48), clashes, view: emptyView(), now, tEff: now, edges: [] })
+    return cells(g).filter(c => c.glyph > 0x2800 && c.fg !== LINK.clash).length
+  }
+  assert.ok(draw(FIVE_AT.mid) > 0)
+  assert.equal(draw(FIVE_AT.idle), 0)
 })

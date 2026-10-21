@@ -15,6 +15,7 @@ export function fmtTokens(n: number): string {
 
 export function fmtUsd(x: number | null): string {
   if (x === null || !Number.isFinite(x) || x < 0) return DASH
+  if (x === 0) return '≈$0'
   if (x < 0.01) return Number(x.toFixed(3)) >= 0.01 ? '≈$0.01' : `≈$${x.toFixed(3)}`
   if (x < 99.995) return `≈$${x.toFixed(2)}`
   return `≈$${Math.round(x)}`
