@@ -7,6 +7,9 @@ import { costOf, type Usage } from './prices.ts'
 
 export const LEAD = 'lead'
 
+/** Names that address the lead in message.sent. */
+export const LEAD_ALIASES: readonly string[] = Object.freeze(['main', 'lead', 'team-lead'])
+
 /** Memory keys the fold accepts. Anything else is skipped, never truncated. */
 export const MEMORY_KEY = /^[A-Za-z0-9._/-]{1,128}$/
 
@@ -28,6 +31,8 @@ export type AgentState = {
   placeholder: boolean
   startedAt: number
   finishedAt: number | null
+  runs: number
+  activeMs: number
   outcome: AgentOutcome | null
   reason: string | null
   model: string | null
@@ -59,8 +64,17 @@ export type SwarmInfo = {
   startedAt: number | null; endedAt: number | null; outcome: string | null
 }
 
+export type SessionMeasure = {
+  contextTokens: number | null
+  contextWindow: number | null
+  contextPercent: number | null
+  costUsd: number | null
+  at: number | null
+}
+
 export type SwarmState = {
   swarm: SwarmInfo
+  session: SessionMeasure
   agents: Record<string, AgentState>
   byName: Record<string, string>
   links: Record<string, LinkState>
@@ -77,6 +91,7 @@ export type SwarmState = {
 export function emptyState(id: string): SwarmState {
   return {
     swarm: { id, name: id, topology: 'hierarchical', goal: null, implicit: true, startedAt: null, endedAt: null, outcome: null },
+    session: { contextTokens: null, contextWindow: null, contextPercent: null, costUsd: null, at: null },
     agents: {}, byName: {}, links: {}, memory: {}, tasks: {}, feed: [], edits: {}, spend: [],
     events: 0, lastAt: 0, gaps: 0,
   }
@@ -103,7 +118,7 @@ function agentOf(state: SwarmState, id: string, at: number, name?: string): Agen
   if (found !== undefined) return found
   const created: AgentState = {
     id, name: name ?? id, role: id === LEAD ? 'lead' : 'unknown', description: '', parent: id === LEAD ? '' : LEAD,
-    placeholder: false, startedAt: at, finishedAt: null, outcome: null, reason: null, model: null,
+    placeholder: false, startedAt: at, finishedAt: null, runs: 1, activeMs: 0, outcome: null, reason: null, model: null,
     tokens: zeroUsage(), costUsd: 0, costKnown: true, calls: 0, lastPrompt: 0, samples: [],
     tools: zeroTools(), openTools: 0, errors: 0, errorsInRow: 0, files: [], messagesIn: 0, messagesOut: 0,
     lastActivity: at,
@@ -115,13 +130,24 @@ function agentOf(state: SwarmState, id: string, at: number, name?: string): Agen
 
 /** SendMessage addresses agents by name; the graph is keyed by id. Unknown names get a placeholder node. */
 function resolve(state: SwarmState, rawName: string, at: number): string {
-  const name = isSafeKey(rawName) ? rawName : 'unknown'
-  if (name === LEAD) return agentOf(state, LEAD, at).id
-  if (Object.hasOwn(state.byName, name)) return state.byName[name] as string
+  const stripped = rawName.replace(/\s+\[[^\]\s]+\]$/, '').trim()
+  const name = isSafeKey(stripped) ? stripped : 'unknown'
   if (Object.hasOwn(state.agents, name)) return name
+  if (LEAD_ALIASES.includes(name)) return agentOf(state, LEAD, at).id
+  if (Object.hasOwn(state.byName, name)) return state.byName[name] as string
   const id = `?${name}`
   if (!Object.hasOwn(state.agents, id)) agentOf(state, id, at, name).placeholder = true
   return id
+}
+
+/** An agent.started or a tool start from an agent that had finished begins another run. Late usage does not. */
+function revive(a: AgentState, at: number): void {
+  if (a.outcome === null && a.finishedAt === null) return
+  a.outcome = null
+  a.reason = null
+  a.finishedAt = null
+  a.startedAt = at
+  a.runs++
 }
 
 function feed(state: SwarmState, item: FeedItem): void {
@@ -155,13 +181,13 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'agent.started': {
       const d = e.data
       const a = agentOf(state, who, at)
+      revive(a, at)
       a.name = text(d.name, 64) || a.name
       a.role = text(d.role, 64) || a.role
       a.description = text(d.description, 120)
       a.parent = text(d.parent, 64) || LEAD
       if (a.parent === a.id) a.parent = a.id === LEAD ? '' : LEAD
       a.placeholder = false
-      a.startedAt = at
       a.lastActivity = at
       if (isSafeKey(a.name)) state.byName[a.name] = a.id
       feed(state, { at, kind: 'agent', agent: a.id, text: `${a.name} started` })
@@ -169,6 +195,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     }
     case 'agent.finished': {
       const a = agentOf(state, who, at)
+      if (a.finishedAt === null) a.activeMs += Math.max(0, at - a.startedAt)
       a.outcome = isOneOf(AGENT_OUTCOMES, e.data.outcome) ? e.data.outcome : 'failed'
       a.reason = text(e.data.reason, 80) || null
       a.finishedAt = at
@@ -208,6 +235,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'agent.tool': {
       const d = e.data
       const a = agentOf(state, who, at)
+      if (d.phase === 'start') revive(a, at)
       const kind: ToolKind = isOneOf(TOOL_KINDS, d.kind) ? d.kind : 'other'
       const subject = text(d.subject, 80)
       if (d.phase === 'start') {
@@ -271,6 +299,23 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
         createdAt: at, updatedAt: at, note: null,
       }
       feed(state, { at, kind: 'task', agent: who, text: `task ${id} created: ${state.tasks[id]!.title}` })
+      break
+    }
+    case 'session.measure': {
+      const d = e.data
+      const known = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? num(x) : null)
+      const window = known(d.contextWindow)
+      const percent = known(d.contextPercent)
+      const prev = state.session
+      const tokens = known(d.contextTokens)
+      const cost = known(d.costUsd)
+      state.session = {
+        contextTokens: tokens ?? prev.contextTokens,
+        contextWindow: window === null || window === 0 ? prev.contextWindow : window,
+        contextPercent: percent !== null ? Math.min(100, percent) : tokens !== null ? null : prev.contextPercent,
+        costUsd: cost ?? prev.costUsd,
+        at,
+      }
       break
     }
     case 'task.updated': {

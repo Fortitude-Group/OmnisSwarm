@@ -227,3 +227,96 @@ test('an assignee that is empty after cleaning becomes null on update', () => {
   ])
   assert.equal(s.tasks.t1!.assignee, null)
 })
+
+test('session.measure: latest wins, numbers are clamped, missing fields are null', () => {
+  const m = (data: Parameters<typeof ev<'session.measure'>>[1], atSec: number) => ev('session.measure', data, { atSec })
+  const s = run([m({ contextTokens: 50_000, contextWindow: 200_000, contextPercent: 25, costUsd: 1.5 }, 1)])
+  assert.deepEqual(s.session, { contextTokens: 50_000, contextWindow: 200_000, contextPercent: 25, costUsd: 1.5, at: at(1) })
+  const t = run([m({ contextWindow: 200_000, contextPercent: 250 }, 1), m({ contextWindow: 1_000_000, contextPercent: 140 }, 2)])
+  assert.deepEqual(t.session, { contextTokens: null, contextWindow: 1_000_000, contextPercent: 100, costUsd: null, at: at(2) })
+  const bad = run([m({ contextWindow: -5, contextPercent: Number.NaN, contextTokens: 1e99, costUsd: -1 }, 1)])
+  assert.equal(bad.session.contextWindow, null)
+  assert.equal(bad.session.contextPercent, null)
+  assert.equal(bad.session.contextTokens, 1e12)
+  assert.equal(bad.session.costUsd, null)
+  assert.deepEqual(emptyState('s1').session, { contextTokens: null, contextWindow: null, contextPercent: null, costUsd: null, at: null })
+})
+
+test('an agent that finished runs again on a tool start', () => {
+  const s = run([
+    coder,
+    ev('agent.finished', { outcome: 'answer', reason: 'ok' }, { agent: 'a1', atSec: 11 }),
+    ev('agent.tool', { phase: 'start', tool: 'Read', kind: 'read', subject: 'a.ts', isError: false }, { agent: 'a1', atSec: 20 }),
+  ])
+  const a = s.agents.a1!
+  assert.equal(a.outcome, null)
+  assert.equal(a.reason, null)
+  assert.equal(a.finishedAt, null)
+  assert.equal(a.runs, 2)
+  assert.equal(a.activeMs, 10_000)
+  assert.equal(a.startedAt, at(20))
+  const again = run([
+    coder,
+    ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 }),
+    ev('agent.started', { name: 'coder', role: 'coder', description: '', parent: LEAD }, { agent: 'a1', atSec: 20 }),
+    ev('agent.finished', { outcome: 'failed' }, { agent: 'a1', atSec: 25 }),
+  ]).agents.a1!
+  assert.equal(again.runs, 2)
+  assert.equal(again.activeMs, 15_000)
+  assert.equal(again.outcome, 'failed')
+})
+
+test('lead aliases and a trailing [ref] resolve in message.sent', () => {
+  const send = (to: string, n: number) => ev('message.sent', { to, summary: 'x' }, { agent: 'a1', atSec: n })
+  const s = run([coder, send('main', 2), send('team-lead', 3), send('lead', 4), send('coder [3fa9c1]', 5), send('a1', 6), send('ghost [ab12]', 7)])
+  assert.equal(s.links['a1->lead']!.count, 3)
+  assert.equal(s.links['a1->a1']!.count, 2)
+  assert.ok(s.agents['?ghost'])
+  assert.equal(s.agents['?ghost [ab12]'], undefined)
+})
+
+test('late usage after finish adds tokens but leaves the agent finished; a tool start re-opens it', () => {
+  const fin = ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 })
+  const use = ev('agent.usage', { model: 'claude-sonnet-5-5', input: 10, output: 5, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 12 })
+  const late = run([coder, fin, use]).agents.a1!
+  assert.equal(late.outcome, 'answer')
+  assert.equal(late.runs, 1)
+  assert.equal(late.tokens.input, 10)
+  assert.equal(late.samples.length, 1)
+  const endOnly = run([coder, fin, ev('agent.tool', { phase: 'end', tool: 'Read', kind: 'read', subject: '', isError: false }, { agent: 'a1', atSec: 12 })]).agents.a1!
+  assert.equal(endOnly.outcome, 'answer')
+  const back = run([coder, fin, use, ev('agent.tool', { phase: 'start', tool: 'Read', kind: 'read', subject: 'a.ts', isError: false }, { agent: 'a1', atSec: 13 })]).agents.a1!
+  assert.equal(back.outcome, null)
+  assert.equal(back.runs, 2)
+})
+
+test('session.measure merges: omitted fields keep their previous value', () => {
+  const s = run([
+    ev('session.measure', { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10, costUsd: 1 }, { atSec: 1 }),
+    ev('session.measure', { contextWindow: 200_000, costUsd: 2 }, { atSec: 2 }),
+  ])
+  assert.deepEqual(s.session, { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10, costUsd: 2, at: at(2) })
+})
+
+test('a known agent id wins over another agent that has that name', () => {
+  const a2named = ev('agent.started', { name: 'a2', role: 'x', description: '', parent: LEAD }, { agent: 'a1', atSec: 1 })
+  const a2 = ev('agent.started', { name: 'other', role: 'x', description: '', parent: LEAD }, { agent: 'a2', atSec: 2 })
+  const s = run([a2named, a2, ev('message.sent', { to: 'a2', summary: 'x' }, { agent: 'a1', atSec: 3 })])
+  assert.equal(s.links['a1->a2']!.count, 1)
+  assert.equal(s.agents.a2!.messagesIn, 1)
+})
+
+test('two agent.finished in a row leave activeMs unchanged', () => {
+  const s = run([coder, ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 }), ev('agent.finished', { outcome: 'failed' }, { agent: 'a1', atSec: 50 })])
+  assert.equal(s.agents.a1!.activeMs, 10_000)
+  assert.equal(s.agents.a1!.outcome, 'failed')
+})
+
+test('session.measure with tokens but no percent clears a stale percent', () => {
+  const s = run([
+    ev('session.measure', { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10 }, { atSec: 1 }),
+    ev('session.measure', { contextTokens: 100_000, contextWindow: 200_000 }, { atSec: 2 }),
+  ])
+  assert.equal(s.session.contextPercent, null)
+  assert.equal(s.session.contextTokens, 100_000)
+})

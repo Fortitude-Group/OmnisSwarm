@@ -159,3 +159,31 @@ test('context fill is capped at 1', () => {
   const s = foldAll('s1', [start('a1', 'coder'), usage('a1', 1, { input: 50_000_000 })])
   assert.equal(agentStats(s, 'a1', at(2))!.contextFill, 1)
 })
+
+test('a resumed agent is running again and its lifetime adds up its runs', () => {
+  const s = foldAll('s1', [
+    start('a1', 'coder'),
+    ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 }),
+    edit('a1', 'a.ts', 30),
+  ])
+  assert.equal(agentStats(s, 'a1', at(32))!.status, 'running')
+  assert.equal(agentStats(s, 'a1', at(32))!.lifetimeMs, 11_000 + 2_000)
+})
+
+test('swarm totals carry session cost and context percent, null when unknown', () => {
+  assert.equal(swarmTotals(foldAll('s1', []), at(1)).contextPercent, null)
+  assert.equal(swarmTotals(foldAll('s1', []), at(1)).sessionCostUsd, null)
+  const t = swarmTotals(foldAll('s1', [ev('session.measure', { contextTokens: 100_000, contextWindow: 400_000, costUsd: 2 }, { atSec: 1 })]), at(2))
+  assert.equal(t.contextPercent, 25)
+  assert.equal(t.sessionCostUsd, 2)
+  const c = swarmTotals(foldAll('s1', [ev('session.measure', { contextWindow: 10, contextPercent: 999 }, { atSec: 1 })]), at(2))
+  assert.equal(c.contextPercent, 100)
+})
+
+test('context percent falls back to tokens over window, and tokens above the window give 100', () => {
+  const m = (data: Parameters<typeof ev<'session.measure'>>[1], atSec: number) => ev('session.measure', data, { atSec })
+  const stale = foldAll('s1', [m({ contextTokens: 1000, contextWindow: 200_000, contextPercent: 10 }, 1), m({ contextTokens: 100_000, contextWindow: 200_000 }, 2)])
+  assert.equal(swarmTotals(stale, at(3)).contextPercent, 50)
+  const over = foldAll('s1', [m({ contextTokens: 300_000, contextWindow: 200_000 }, 1)])
+  assert.equal(swarmTotals(over, at(2)).contextPercent, 100)
+})

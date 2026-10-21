@@ -104,7 +104,7 @@ export function agentStats(state: SwarmState, id: string, nowMs: number, clashes
     model: a.model,
     status: agentStatus(a, nowMs),
     placeholder: a.placeholder,
-    lifetimeMs: (a.finishedAt ?? nowMs) - a.startedAt,
+    lifetimeMs: a.activeMs + (a.finishedAt === null ? Math.max(0, nowMs - a.startedAt) : 0),
     tokens: { ...a.tokens, total: totalTokens(a.tokens) },
     costUsd: a.costKnown ? a.costUsd : null,
     contextFill: contextFill(a),
@@ -126,6 +126,10 @@ export type SwarmTotals = {
   running: number
   tokens: number
   costUsd: number
+  /** Cost reported by the session itself (session.measure), null when unknown. */
+  sessionCostUsd: number | null
+  /** Lead context fill, 0-100, null when unknown. */
+  contextPercent: number | null
   /** True when some usage came from a model missing from the price table. */
   costPartial: boolean
   burnPerMin: number
@@ -133,6 +137,13 @@ export type SwarmTotals = {
   mostExpensive: string | null
   tasks: Record<TaskState, number>
   clashes: number
+}
+
+function sessionPercent(state: SwarmState): number | null {
+  const s = state.session
+  if (s.contextPercent !== null) return s.contextPercent
+  if (s.contextTokens === null || s.contextWindow === null) return null
+  return Math.min(100, (s.contextTokens / s.contextWindow) * 100)
 }
 
 export function swarmTotals(state: SwarmState, nowMs: number, clashes: Clash[] = fileClashes(state, nowMs)): SwarmTotals {
@@ -161,6 +172,8 @@ export function swarmTotals(state: SwarmState, nowMs: number, clashes: Clash[] =
     running,
     tokens,
     costUsd: cost,
+    sessionCostUsd: state.session.costUsd,
+    contextPercent: sessionPercent(state),
     costPartial: partial,
     burnPerMin: recentSpend / (BURN_WINDOW_MS / 60_000),
     busiestLink: busiest,
