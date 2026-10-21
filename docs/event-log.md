@@ -43,7 +43,7 @@ same user could edit `.omnis-swarm` directly.
 
 | Type | Writer | `data` |
 |---|---|---|
-| `swarm.started` | mcp | `name`, `topology` (`hierarchical`\|`mesh`\|`star`), `goal?`, `implicit` (bool), `session?` (the Claude Code session id that started it). A second one for the same swarm renames it. The first one's `session` says which session owns the swarm, so a restarted server can tell its own swarm from another session's |
+| `swarm.started` | mcp | `name`, `topology` (`hierarchical`\|`mesh`\|`star`), `goal?`, `implicit` (bool), `session?` (the sessionKey of the session that started it: the first 16 hex characters of sha256 of the Claude Code session id, never the raw id). A second one for the same swarm renames it. The first one's `session` says which session owns the swarm, so a restarted server can tell its own swarm from another session's |
 | `swarm.ended` | mcp | `outcome?` |
 | `agent.started` | recorder | `name`, `role`, `description` (≤120), `parent` (agent id or `lead`) |
 | `agent.finished` | recorder | `outcome` (`answer`\|`aborted`\|`failed`), `reason?` (≤80) |
