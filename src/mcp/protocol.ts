@@ -28,6 +28,21 @@ export const rpcResult = (id: Id, result: unknown): RpcReply => ({ jsonrpc: '2.0
 export const rpcError = (id: Id, code: number, message: string): RpcReply => ({ jsonrpc: '2.0', id, error: { code, message } })
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const MAX_ARG_DEPTH = 32
+
+/** Copies parsed JSON with null prototypes and without prototype-pollution keys; anything past MAX_ARG_DEPTH becomes null. */
+function cleanValue(value: unknown, depth: number): unknown {
+  if (Array.isArray(value)) return depth >= MAX_ARG_DEPTH ? null : value.map(v => cleanValue(v, depth + 1))
+  if (isObj(value)) {
+    if (depth >= MAX_ARG_DEPTH) return null
+    const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+    for (const key of Object.keys(value)) {
+      if (!FORBIDDEN_KEYS.has(key)) out[key] = cleanValue(value[key], depth + 1)
+    }
+    return out
+  }
+  return value
+}
 
 export function handleMessage(msg: unknown, tools: readonly ToolDef[], info: ServerInfo): RpcReply | null {
   if (!isObj(msg)) return rpcError(null, -32600, 'Invalid Request')
@@ -57,16 +72,14 @@ export function handleMessage(msg: unknown, tools: readonly ToolDef[], info: Ser
       if (tool === undefined) {
         return rpcError(id, -32602, typeof params.name === 'string' ? `Unknown tool: ${params.name.slice(0, 100)}` : 'Unknown tool')
       }
-      const args: Args = Object.create(null) as Args
-      if (isObj(params.arguments)) {
-        for (const key of Object.keys(params.arguments)) {
-          if (!FORBIDDEN_KEYS.has(key)) args[key] = params.arguments[key]
-        }
-      }
+      const args = (isObj(params.arguments) ? cleanValue(params.arguments, 0) : Object.create(null)) as Args
       const fail = (text: string) => rpcResult(id, { content: [{ type: 'text', text }], isError: true })
       try {
         const result: unknown = tool.handler(args)
-        if (isObj(result) && typeof result.then === 'function') return fail('Tool handlers must be synchronous')
+        if (isObj(result) && typeof result.then === 'function') {
+          ;(result.then as (a: undefined, b: () => void) => unknown).call(result, undefined, () => {}) // swallow a later rejection
+          return fail('Tool handlers must be synchronous')
+        }
         if (!isObj(result) || typeof result.text !== 'string') return fail('Tool returned no text')
         return rpcResult(id, { content: [{ type: 'text', text: result.text }], isError: result.isError === true })
       } catch (err) {
@@ -149,7 +162,7 @@ export function runStdio(
       if (!skipping && len > 0) processLine(Buffer.concat(parts).toString('utf8'))
       finish()
     })
-    input.once('error', finish)
+    input.on('error', finish)
     output.on('error', finish)
   })
 }

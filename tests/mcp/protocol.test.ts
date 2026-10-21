@@ -148,3 +148,31 @@ test('fix 7: an output error ends the loop cleanly', async () => {
   await done
   input.write(`${JSON.stringify(req(1, 'ping'))}\n`)
 })
+
+test('round 2 A: a rejecting async handler does not crash; the next request is answered', async () => {
+  const rejecting: ToolDef = { name: 'rej', description: 'd', inputSchema: {}, handler: (() => Promise.reject(new Error('late'))) as unknown as ToolDef['handler'] }
+  const out = await serve([`${JSON.stringify(req(1, 'tools/call', { name: 'rej' }))}\n`, `${JSON.stringify(req(2, 'ping'))}\n`], [rejecting])
+  await new Promise(r => setTimeout(r, 20))
+  assert.equal(out.length, 2)
+  assert.deepEqual(out[1], { jsonrpc: '2.0', id: 2, result: {} })
+})
+
+test('round 2 B: nested arguments are cleaned and depth is capped', () => {
+  let seen: Record<string, unknown> = {}
+  const spy: ToolDef = { name: 'spy', description: 'd', inputSchema: {}, handler: a => { seen = a; return { text: 'ok' } } }
+  const params: unknown = JSON.parse('{"name":"spy","arguments":{"opts":{"__proto__":{"polluted":1},"k":[{"constructor":1,"v":2}]}}}')
+  handleMessage(req(1, 'tools/call', params), [spy], info)
+  const opts = seen.opts as Record<string, unknown>
+  assert.equal(Object.getPrototypeOf(opts), null)
+  assert.equal(Object.hasOwn(opts, '__proto__'), false)
+  const inner = (opts.k as Record<string, unknown>[])[0] as Record<string, unknown>
+  assert.deepEqual(Object.keys(inner), ['v'])
+  let deep: unknown = 1
+  for (let i = 0; i < 40; i++) deep = { d: deep }
+  handleMessage(req(2, 'tools/call', { name: 'spy', arguments: deep }), [spy], info)
+  let node: unknown = seen
+  let levels = 0
+  while (node !== null && typeof node === 'object') { node = (node as Record<string, unknown>).d; levels++ }
+  assert.ok(levels <= 33)
+  assert.equal(node, null)
+})
