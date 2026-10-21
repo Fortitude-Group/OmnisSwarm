@@ -48,11 +48,18 @@ export function ensureGitignore(root: string): void {
   }
 }
 
-/** Creates `dir` if missing, then insists it is a real directory inside the project. */
+/**
+ * Creates `dir` if missing, then insists it is a real directory inside the project.
+ * Another process may create it at the same moment, so EEXIST is fine: whatever is there gets the same checks.
+ */
 function checkedDir(root: string, dir: string): void {
   let stat = lstatSync(dir, { throwIfNoEntry: false })
   if (stat === undefined) {
-    mkdirSync(dir)
+    try {
+      mkdirSync(dir)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
     stat = lstatSync(dir)
   }
   if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`log folder is not a plain directory: ${dir}`)

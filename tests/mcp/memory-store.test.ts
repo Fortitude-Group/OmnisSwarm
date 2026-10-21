@@ -145,6 +145,24 @@ test('fix 2: two processes writing at once lose nothing', { timeout: 60_000 }, a
   assert.equal(Object.keys(readMemory(root, 's1')).length, 200)
 })
 
+test('several processes making the first write to a fresh project all succeed', { timeout: 120_000 }, async () => {
+  const script = fileURLToPath(new URL('./fixtures/first-put.ts', import.meta.url))
+  const run = (root: string, prefix: string, startAt: number) => new Promise<{ code: number | null; err: string }>(resolve => {
+    const child = spawn(process.execPath, [script, root, prefix, String(startAt)], { stdio: ['ignore', 'ignore', 'pipe'] })
+    let err = ''
+    child.stderr.on('data', d => { err += String(d) })
+    child.on('close', code => resolve({ code, err }))
+  })
+  const writers = ['a', 'b', 'c', 'd', 'e', 'f']
+  for (let round = 0; round < 4; round++) {
+    const root = tmpRoot()
+    const startAt = Date.now() + 1500
+    const results = await Promise.all(writers.map(w => run(root, w, startAt)))
+    assert.deepEqual(results, writers.map(() => ({ code: 0, err: '' })), `round ${round}`)
+    assert.equal(Object.keys(readMemory(root, 's1')).length, writers.length)
+  }
+})
+
 test('fix 3: reads refuse a linked memory folder', t => {
   const root = tmpRoot()
   const outside = tmpRoot()
