@@ -17,13 +17,13 @@ Swarm ids match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and never contain `..`.
 
 ## Envelope
 
-Each line is one JSON object, then `\n`, at most 2048 bytes. The server is the only writer to the
-file: it stamps `v`, `swarm` and `src`. The mod stamps `ts`.
+Each line is one JSON object, then `\n`, at most 2048 bytes. Within one session the server is the
+only writer to the file: it stamps `v`, `swarm` and `src`.
 
 | Field | Type | Notes |
 |---|---|---|
 | `v` | int | Schema version, stamped by the server. Readers skip lines with a higher `v` than they know |
-| `ts` | string | ISO-8601 UTC, millisecond precision, stamped by the mod |
+| `ts` | string | ISO-8601 UTC, millisecond precision, stamped by the mod for recorder events, by the server for mcp events |
 | `swarm` | string | Swarm id, stamped by the server |
 | `src` | `"mcp"` \| `"recorder"` \| `"transcripts"` | Which source, stamped by the server. `transcripts` is reserved: nothing writes it now, but it stays valid so old logs parse |
 | `type` | string | Event type, below |
@@ -44,7 +44,7 @@ file: it stamps `v`, `swarm` and `src`. The mod stamps `ts`.
 | `memory.put` | mcp | `key`, `bytes`, `preview` (≤80) |
 | `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?` |
 | `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200) |
-| `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. The latest one wins |
+| `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. Merged into the session figures: a field left out keeps its previous value. Percent is clamped to 0-100 |
 
 ## Reading rules
 
@@ -52,14 +52,15 @@ file: it stamps `v`, `swarm` and `src`. The mod stamps `ts`.
 2. If the file is now shorter than your offset, it was replaced: start again from 0 with empty state.
 3. A line that doesn't parse or has the wrong shape is skipped and counted as a gap. A line with a newer `v` is skipped too, but is not a gap.
 4. Order events by `ts`, then `src` (`mcp` < `recorder` < `transcripts`), then file position.
-5. `message.sent.to` is a name. Resolve it to the most recently started agent with that name, or
-   `lead`. `main`, `lead` and `team-lead` mean the lead. A trailing ` [ref]` (a space and a
-   bracketed token, such as `coder [3fa9c1]`) is stripped first. An agent id matches directly. If
-   nothing matches, show a placeholder node `?<name>`.
+5. `message.sent.to` is a name. A trailing ` [ref]` (a space and a bracketed token, such as
+   `coder [3fa9c1]`) is stripped first. Then resolve it in this order: a known agent id; the lead
+   aliases `main`, `lead` and `team-lead`; the most recently started agent with that name; otherwise
+   a placeholder node `?<name>`.
 6. Snapshots are an optimisation. Loading a snapshot then replaying from its `offset` must give
    the same state as replaying the whole file.
-7. An agent that has finished runs again on any later `agent.started`, `agent.usage` or `agent.tool`
-   for it. Its outcome clears and its run count goes up.
+7. An agent that has finished runs again on a later `agent.started` or `agent.tool` with phase
+   `start`. Its outcome clears and its run count goes up. A later `agent.usage` adds its tokens and
+   cost but leaves it finished.
 
 ## What is never in the log
 

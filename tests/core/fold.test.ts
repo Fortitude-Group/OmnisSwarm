@@ -297,3 +297,26 @@ test('session.measure merges: omitted fields keep their previous value', () => {
   ])
   assert.deepEqual(s.session, { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10, costUsd: 2, at: at(2) })
 })
+
+test('a known agent id wins over another agent that has that name', () => {
+  const a2named = ev('agent.started', { name: 'a2', role: 'x', description: '', parent: LEAD }, { agent: 'a1', atSec: 1 })
+  const a2 = ev('agent.started', { name: 'other', role: 'x', description: '', parent: LEAD }, { agent: 'a2', atSec: 2 })
+  const s = run([a2named, a2, ev('message.sent', { to: 'a2', summary: 'x' }, { agent: 'a1', atSec: 3 })])
+  assert.equal(s.links['a1->a2']!.count, 1)
+  assert.equal(s.agents.a2!.messagesIn, 1)
+})
+
+test('two agent.finished in a row leave activeMs unchanged', () => {
+  const s = run([coder, ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 }), ev('agent.finished', { outcome: 'failed' }, { agent: 'a1', atSec: 50 })])
+  assert.equal(s.agents.a1!.activeMs, 10_000)
+  assert.equal(s.agents.a1!.outcome, 'failed')
+})
+
+test('session.measure with tokens but no percent clears a stale percent', () => {
+  const s = run([
+    ev('session.measure', { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10 }, { atSec: 1 }),
+    ev('session.measure', { contextTokens: 100_000, contextWindow: 200_000 }, { atSec: 2 }),
+  ])
+  assert.equal(s.session.contextPercent, null)
+  assert.equal(s.session.contextTokens, 100_000)
+})

@@ -8,7 +8,7 @@ import { costOf, type Usage } from './prices.ts'
 export const LEAD = 'lead'
 
 /** Names that address the lead in message.sent. */
-export const LEAD_ALIASES = ['main', 'lead', 'team-lead']
+export const LEAD_ALIASES: readonly string[] = Object.freeze(['main', 'lead', 'team-lead'])
 
 /** Memory keys the fold accepts. Anything else is skipped, never truncated. */
 export const MEMORY_KEY = /^[A-Za-z0-9._/-]{1,128}$/
@@ -132,9 +132,9 @@ function agentOf(state: SwarmState, id: string, at: number, name?: string): Agen
 function resolve(state: SwarmState, rawName: string, at: number): string {
   const stripped = rawName.replace(/\s+\[[^\]\s]+\]$/, '').trim()
   const name = isSafeKey(stripped) ? stripped : 'unknown'
+  if (Object.hasOwn(state.agents, name)) return name
   if (LEAD_ALIASES.includes(name)) return agentOf(state, LEAD, at).id
   if (Object.hasOwn(state.byName, name)) return state.byName[name] as string
-  if (Object.hasOwn(state.agents, name)) return name
   const id = `?${name}`
   if (!Object.hasOwn(state.agents, id)) agentOf(state, id, at, name).placeholder = true
   return id
@@ -312,7 +312,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       state.session = {
         contextTokens: tokens ?? prev.contextTokens,
         contextWindow: window === null || window === 0 ? prev.contextWindow : window,
-        contextPercent: percent === null ? prev.contextPercent : Math.min(100, percent),
+        contextPercent: percent !== null ? Math.min(100, percent) : tokens !== null ? null : prev.contextPercent,
         costUsd: cost ?? prev.costUsd,
         at,
       }

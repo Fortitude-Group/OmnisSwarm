@@ -179,3 +179,11 @@ test('swarm totals carry session cost and context percent, null when unknown', (
   const c = swarmTotals(foldAll('s1', [ev('session.measure', { contextWindow: 10, contextPercent: 999 }, { atSec: 1 })]), at(2))
   assert.equal(c.contextPercent, 100)
 })
+
+test('context percent falls back to tokens over window, and tokens above the window give 100', () => {
+  const m = (data: Parameters<typeof ev<'session.measure'>>[1], atSec: number) => ev('session.measure', data, { atSec })
+  const stale = foldAll('s1', [m({ contextTokens: 1000, contextWindow: 200_000, contextPercent: 10 }, 1), m({ contextTokens: 100_000, contextWindow: 200_000 }, 2)])
+  assert.equal(swarmTotals(stale, at(3)).contextPercent, 50)
+  const over = foldAll('s1', [m({ contextTokens: 300_000, contextWindow: 200_000 }, 1)])
+  assert.equal(swarmTotals(over, at(2)).contextPercent, 100)
+})
