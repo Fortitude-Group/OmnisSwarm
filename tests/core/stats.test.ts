@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { foldAll, LEAD } from '../../src/core/fold.ts'
-import { agentStats, fileClashes, swarmTotals } from '../../src/core/stats.ts'
+import { agentStats, fileClashes, swarmTotals, STALE_TOOL_MS } from '../../src/core/stats.ts'
 import { at, ev } from '../helpers.ts'
 
 const near = (a: number | null, b: number) => assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`)
@@ -93,4 +93,69 @@ test('swarmTotals adds up the swarm', () => {
   assert.equal(t.mostExpensive, 'a1')
   assert.deepEqual(t.tasks, { pending: 1, active: 0, done: 1, failed: 0 })
   assert.equal(t.clashes, 0)
+})
+
+const toolStart = (id: string, atSec: number) => ev('agent.tool', { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'sleep', isError: false }, { agent: id, atSec })
+const toolEnd = (id: string, atSec: number, isError: boolean) => ev('agent.tool', { phase: 'end', tool: 'Bash', kind: 'bash', subject: 'npm test', isError }, { agent: id, atSec })
+
+test('an open tool call stops counting as running once it is stale', () => {
+  const s = foldAll('s1', [start('a1', 'coder'), toolStart('a1', 0)])
+  assert.equal(STALE_TOOL_MS, 300_000)
+  assert.equal(agentStats(s, 'a1', at(60))!.status, 'running')
+  assert.equal(agentStats(s, 'a1', at(301))!.status, 'waiting')
+})
+
+test('an agent that has finished is not stuck', () => {
+  const s = foldAll('s1', [start('a1', 'coder'), toolEnd('a1', 1, true), toolEnd('a1', 2, true), toolEnd('a1', 3, true), ev('agent.finished', { outcome: 'failed' }, { agent: 'a1', atSec: 4 })])
+  assert.equal(agentStats(s, 'a1', at(5))!.stuck, false)
+})
+
+test('stuck needs exactly three failures in a row', () => {
+  const run = (...evs: ReturnType<typeof toolEnd>[]) => agentStats(foldAll('s1', [start('a1', 'coder'), ...evs]), 'a1', at(10))!.stuck
+  assert.equal(run(toolEnd('a1', 1, true), toolEnd('a1', 2, true)), false)
+  assert.equal(run(toolEnd('a1', 1, true), toolEnd('a1', 2, true), toolEnd('a1', 3, true)), true)
+  assert.equal(run(toolEnd('a1', 1, true), toolEnd('a1', 2, true), toolEnd('a1', 3, false), toolEnd('a1', 4, true)), false)
+})
+
+test('clashes: old ones drop when now is given, the 600 s boundary counts, and a precomputed list is used', () => {
+  const two = (gap: number) => foldAll('s1', [start('a1', 'coder'), start('a2', 'tester'), edit('a1', 'f.ts', 10), edit('a2', 'f.ts', 10 + gap)])
+  assert.equal(fileClashes(two(600)).length, 1)
+  assert.equal(fileClashes(two(601)).length, 0)
+  const s = two(5)
+  assert.equal(fileClashes(s, at(3600)).length, 0)
+  assert.equal(fileClashes(s, at(100)).length, 1)
+  assert.equal(fileClashes(s).length, 1)
+  assert.deepEqual(agentStats(s, 'a1', at(3600))!.clashes, [])
+  assert.deepEqual(agentStats(s, 'a1', at(3600), [{ path: 'x.ts', agents: ['a1'] }])!.clashes, ['x.ts'])
+  assert.equal(swarmTotals(s, at(100), []).clashes, 0)
+  assert.equal(swarmTotals(s, at(100)).clashes, 1)
+})
+
+test('costPartial is true when one agent is unpriced', () => {
+  const s = foldAll('s1', [start('a1', 'coder'), usage('a1', 1, { input: 10 }), start('a2', 'tester'),
+    ev('agent.usage', { model: 'mystery', input: 5, output: 5, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a2', atSec: 2 })])
+  assert.equal(swarmTotals(s, at(3)).costPartial, true)
+})
+
+test('the burn rate ignores spend older than five minutes', () => {
+  const s = foldAll('s1', [start('a1', 'coder'), usage('a1', 10, { output: 1000 })])
+  assert.equal(swarmTotals(s, at(400)).burnPerMin, 0)
+  assert.ok(swarmTotals(s, at(300)).burnPerMin > 0)
+})
+
+test('an empty swarm has no busiest link or most expensive agent', () => {
+  const t = swarmTotals(foldAll('s1', []), at(1))
+  assert.equal(t.busiestLink, null)
+  assert.equal(t.mostExpensive, null)
+  assert.equal(t.agents, 0)
+})
+
+test('agentStats is null for unknown ids, including inherited names', () => {
+  assert.equal(agentStats(state(), 'nope', at(1)), null)
+  assert.equal(agentStats(state(), 'toString', at(1)), null)
+})
+
+test('context fill is capped at 1', () => {
+  const s = foldAll('s1', [start('a1', 'coder'), usage('a1', 1, { input: 50_000_000 })])
+  assert.equal(agentStats(s, 'a1', at(2))!.contextFill, 1)
 })

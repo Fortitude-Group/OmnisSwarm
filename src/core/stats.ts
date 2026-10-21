@@ -8,12 +8,15 @@ export const SPEED_WINDOW_MS = 30_000
 export const BURN_WINDOW_MS = 300_000
 export const CLASH_WINDOW_MS = 600_000
 export const STUCK_AFTER = 3
+/** An open tool call older than this is assumed to have lost its end event. */
+export const STALE_TOOL_MS = 300_000
 
 export type AgentStatus = 'running' | 'waiting' | 'done' | 'failed'
 
 export function agentStatus(a: AgentState, nowMs: number): AgentStatus {
   if (a.outcome !== null) return a.outcome === 'failed' ? 'failed' : 'done'
-  return a.openTools > 0 || nowMs - a.lastActivity <= RUNNING_WINDOW_MS ? 'running' : 'waiting'
+  const idle = nowMs - a.lastActivity
+  return idle <= RUNNING_WINDOW_MS || (a.openTools > 0 && idle <= STALE_TOOL_MS) ? 'running' : 'waiting'
 }
 
 export const totalTokens = (u: Usage): number => u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h
@@ -44,8 +47,11 @@ export function speed(a: AgentState, nowMs: number): number | null {
 
 export type Clash = { path: string; agents: string[] }
 
-/** Paths edited by two or more agents within CLASH_WINDOW_MS of each other. */
-export function fileClashes(state: SwarmState): Clash[] {
+/**
+ * Paths edited by two or more agents within CLASH_WINDOW_MS of each other.
+ * With nowMs, a pair only counts while at least one of its edits is within CLASH_WINDOW_MS of now.
+ */
+export function fileClashes(state: SwarmState, nowMs?: number): Clash[] {
   const clashes: Clash[] = []
   for (const [path, edits] of Object.entries(state.edits)) {
     const agents = new Set<string>()
@@ -53,7 +59,8 @@ export function fileClashes(state: SwarmState): Clash[] {
       for (let j = i + 1; j < edits.length; j++) {
         const a = edits[i]!
         const b = edits[j]!
-        if (a.agent !== b.agent && Math.abs(a.at - b.at) <= CLASH_WINDOW_MS) {
+        if (a.agent !== b.agent && Math.abs(a.at - b.at) <= CLASH_WINDOW_MS &&
+          (nowMs === undefined || nowMs - a.at <= CLASH_WINDOW_MS || nowMs - b.at <= CLASH_WINDOW_MS)) {
           agents.add(a.agent)
           agents.add(b.agent)
         }
@@ -87,7 +94,7 @@ export type AgentStats = {
   clashes: string[]
 }
 
-export function agentStats(state: SwarmState, id: string, nowMs: number): AgentStats | null {
+export function agentStats(state: SwarmState, id: string, nowMs: number, clashes: Clash[] = fileClashes(state, nowMs)): AgentStats | null {
   const a = Object.hasOwn(state.agents, id) ? state.agents[id] : undefined
   if (a === undefined) return null
   return {
@@ -109,8 +116,8 @@ export function agentStats(state: SwarmState, id: string, nowMs: number): AgentS
     messagesIn: a.messagesIn,
     messagesOut: a.messagesOut,
     errors: a.errors,
-    stuck: a.errorsInRow >= STUCK_AFTER,
-    clashes: fileClashes(state).filter(c => c.agents.includes(a.id)).map(c => c.path),
+    stuck: a.outcome === null && a.errorsInRow >= STUCK_AFTER,
+    clashes: clashes.filter(c => c.agents.includes(a.id)).map(c => c.path),
   }
 }
 
@@ -128,7 +135,7 @@ export type SwarmTotals = {
   clashes: number
 }
 
-export function swarmTotals(state: SwarmState, nowMs: number): SwarmTotals {
+export function swarmTotals(state: SwarmState, nowMs: number, clashes: Clash[] = fileClashes(state, nowMs)): SwarmTotals {
   const agents = Object.values(state.agents).filter(a => !a.placeholder)
   let tokens = 0
   let cost = 0
@@ -159,6 +166,6 @@ export function swarmTotals(state: SwarmState, nowMs: number): SwarmTotals {
     busiestLink: busiest,
     mostExpensive: top !== null && top.costUsd > 0 ? top.id : null,
     tasks,
-    clashes: fileClashes(state).length,
+    clashes: clashes.length,
   }
 }
