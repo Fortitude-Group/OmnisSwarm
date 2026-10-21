@@ -30,3 +30,9 @@ test('costOf switches Haiku 5.5 to its long-context rate above 100K prompt token
 test('costOf returns null for an unknown model', () => {
   assert.equal(costOf('mystery-model', { ...zero, input: 10 }), null)
 })
+
+test('priceFor does not price new model versions as an older one', () => {
+  assert.equal(priceFor('claude-opus-5-1'), null)
+  assert.equal(priceFor('claude-sonnet-5-7'), null)
+  assert.equal(priceFor('claude-opus-5-5-2027'), null)
+})

@@ -45,14 +45,13 @@ export const PRICES: Readonly<Record<string, Price>> = {
   'claude-haiku-4-5': price(1, 5, 0.1, 200_000),
 }
 
-/** Exact id first, else the longest table id that the model id extends with a dash (dated ids). */
+/** An exact table id, or a table id followed by `-YYYYMMDD` (dated ids). Anything else is unknown. */
 export function priceFor(model: string): Price | null {
   if (Object.hasOwn(PRICES, model)) return PRICES[model] ?? null
-  let best: string | null = null
   for (const key of Object.keys(PRICES)) {
-    if (model.startsWith(`${key}-`) && (best === null || key.length > best.length)) best = key
+    if (model.startsWith(key) && model.length === key.length + 9 && /^-\d{8}$/.test(model.slice(key.length))) return PRICES[key] ?? null
   }
-  return best === null ? null : (PRICES[best] ?? null)
+  return null
 }
 
 /** Dollars for one call's usage, or null when the model isn't in the table. */

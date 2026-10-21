@@ -7,6 +7,9 @@ import { costOf, type Usage } from './prices.ts'
 
 export const LEAD = 'lead'
 
+/** Memory keys the fold accepts. Anything else is skipped, never truncated. */
+export const MEMORY_KEY = /^[A-Za-z0-9._/-]{1,128}$/
+
 const MAX_FEED = 200
 const MAX_FILES = 200
 const MAX_SAMPLES = 30
@@ -81,8 +84,11 @@ export function emptyState(id: string): SwarmState {
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 })
 const zeroTools = (): Record<ToolKind, number> => Object.fromEntries(TOOL_KINDS.map(k => [k, 0])) as Record<ToolKind, number>
-const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : 0)
-const text = (x: unknown, max: number): string => (typeof x === 'string' ? x.slice(0, max) : '')
+const MAX_COUNT = 1e12
+const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.min(x, MAX_COUNT) : 0)
+/** Strips control characters (so no terminal escapes) and cuts by code point, never inside a surrogate pair. */
+const text = (x: unknown, max: number): string =>
+  typeof x === 'string' ? Array.from(x.replace(/\p{Cc}/gu, '')).slice(0, max).join('') : ''
 const trim = <T>(list: T[], max: number): void => {
   while (list.length > max) list.shift()
 }
@@ -120,6 +126,7 @@ function feed(state: SwarmState, item: FeedItem): void {
 
 export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
   const at = Date.parse(e.ts)
+  if (Number.isNaN(at)) return state
   state.events++
   if (at > state.lastAt) state.lastAt = at
   if (state.swarm.startedAt === null) state.swarm.startedAt = at
@@ -147,6 +154,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       a.role = text(d.role, 64) || a.role
       a.description = text(d.description, 120)
       a.parent = text(d.parent, 64) || LEAD
+      if (a.parent === a.id) a.parent = a.id === LEAD ? '' : LEAD
       a.placeholder = false
       a.startedAt = at
       a.lastActivity = at
@@ -183,7 +191,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       } else {
         a.costUsd += usd
         state.spend.push({ at, usd })
-        state.spend = state.spend.filter(s => s.at >= state.lastAt - SPEND_KEEP_MS)
+        state.spend = state.spend.filter(s => s.at >= at - SPEND_KEEP_MS)
       }
       a.calls++
       a.lastPrompt = usage.input + usage.cacheRead + usage.cacheWrite5m + usage.cacheWrite1h
@@ -204,7 +212,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
           a.files.push(subject)
         }
         if (kind === 'edit' && subject !== '' && isSafeKey(subject)) {
-          const list = (state.edits[subject] ??= [])
+          const list = Object.hasOwn(state.edits, subject) ? state.edits[subject]! : (state.edits[subject] = [])
           list.push({ agent: a.id, at })
           trim(list, MAX_EDITS)
         }
@@ -225,21 +233,23 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const to = resolve(state, text(e.data.to, 64) || 'unknown', at)
       const summary = text(e.data.summary, 200)
       const key = `${from.id}->${to}`
-      const link = (state.links[key] ??= { from: from.id, to, count: 0, lastAt: at, recent: [] })
+      const link = Object.hasOwn(state.links, key)
+        ? state.links[key]!
+        : (state.links[key] = { from: from.id, to, count: 0, lastAt: at, recent: [] })
       link.count++
       link.lastAt = at
       link.recent.push(summary)
       trim(link.recent, MAX_RECENT)
       from.messagesOut++
       from.lastActivity = at
-      const target = state.agents[to]
+      const target = Object.hasOwn(state.agents, to) ? state.agents[to] : undefined
       if (target !== undefined) target.messagesIn++
       feed(state, { at, kind: 'message', agent: from.id, to, text: summary })
       break
     }
     case 'memory.put': {
-      const key = text(e.data.key, 128)
-      if (!isSafeKey(key)) break
+      const key = e.data.key
+      if (typeof key !== 'string' || !MEMORY_KEY.test(key) || !isSafeKey(key)) break
       state.memory[key] = { writer: who, at, bytes: num(e.data.bytes), preview: text(e.data.preview, 80) }
       feed(state, { at, kind: 'memory', agent: who, text: `memory.put ${key}` })
       break

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { emptyState, fold, foldAll, LEAD } from '../../src/core/fold.ts'
+import { emptyState, fold, foldAll, LEAD, MEMORY_KEY } from '../../src/core/fold.ts'
 import type { SwarmEvent } from '../../src/core/events.ts'
 import { at, ev } from '../helpers.ts'
 
@@ -108,8 +108,8 @@ test('unsafe keys never reach the state objects', () => {
     ev('message.sent', { to: 'constructor', summary: 'x' }, { agent: '__proto__', atSec: 1 }),
     ev('memory.put', { key: '__proto__', bytes: 1, preview: 'x' }, { atSec: 2, src: 'mcp' }),
   ])
-  assert.equal(({} as Record<string, unknown>).x, undefined)
-  assert.equal(Object.hasOwn(s.memory, '__proto__'), false)
+  assert.equal(Object.getPrototypeOf(s.memory), Object.prototype)
+  assert.equal(({} as Record<string, unknown>).writer, undefined)
   assert.ok(s.links['lead->?unknown'])
 })
 
@@ -132,4 +132,61 @@ test('foldAll matches folding one event at a time', () => {
   const stepwise = emptyState('s1')
   for (const e of events) fold(stepwise, e)
   assert.deepEqual(foldAll('s1', events), stepwise)
+})
+
+const U = { cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }
+
+test('file names that match Object.prototype members fold without throwing', () => {
+  const names = ['toString', 'valueOf', 'hasOwnProperty']
+  const s = run([coder, ...names.map((n, i) => ev('agent.tool', { phase: 'start', tool: 'Edit', kind: 'edit', subject: n, isError: false }, { agent: 'a1', atSec: 2 + i }))])
+  names.forEach((n, i) => assert.deepEqual(s.edits[n], [{ agent: 'a1', at: at(2 + i) }]))
+})
+
+test('a link to an agent named like a prototype member folds', () => {
+  const s = run([coder, ev('message.sent', { to: 'toString', summary: 'x' }, { agent: 'a1', atSec: 2 }), ev('message.sent', { to: 'toString', summary: 'y' }, { agent: 'a1', atSec: 3 })])
+  assert.equal(s.links['a1->?toString']!.count, 2)
+})
+
+test('an agent can never be its own parent', () => {
+  const s = run([ev('agent.started', { name: 'lead', role: 'lead', description: '', parent: LEAD }, { atSec: 1 })])
+  assert.equal(s.agents.lead!.parent, '')
+  const t = run([ev('agent.started', { name: 'x', role: 'x', description: '', parent: 'a1' }, { agent: 'a1', atSec: 1 })])
+  assert.equal(t.agents.a1!.parent, LEAD)
+})
+
+test('a far-future event does not empty the spend window', () => {
+  const u = { model: 'claude-opus-5-5', input: 10, output: 10, ...U }
+  const s = run([coder, ev('agent.usage', u, { agent: 'a1', atSec: 86_400 * 365 }), ev('agent.usage', u, { agent: 'a1', atSec: 5 })])
+  assert.equal(s.spend.length, 2)
+})
+
+test('huge counts are capped so totals stay finite', () => {
+  const s = run([coder, ev('agent.usage', { model: 'claude-opus-5-5', input: 1e308, output: 1e308, ...U }, { agent: 'a1', atSec: 2 })])
+  assert.ok(Number.isFinite(s.agents.a1!.tokens.input))
+  assert.ok(Number.isFinite(s.agents.a1!.costUsd))
+})
+
+test('an event with an unparseable timestamp is ignored', () => {
+  const bad = { ...coder, ts: 'not a date' } as SwarmEvent
+  const s = run([bad])
+  assert.equal(s.events, 0)
+  assert.deepEqual(s.agents, {})
+})
+
+test('memory keys outside the allowed set are skipped, not truncated', () => {
+  assert.ok(MEMORY_KEY.test('design/auth'))
+  const s = run([
+    ev('memory.put', { key: 'k'.repeat(200), bytes: 1, preview: '' }, { atSec: 1, src: 'mcp' }),
+    ev('memory.put', { key: 'bad key!', bytes: 1, preview: '' }, { atSec: 2, src: 'mcp' }),
+  ])
+  assert.deepEqual(s.memory, {})
+})
+
+test('text drops control characters and never splits a surrogate pair', () => {
+  const s = run([
+    ev('message.sent', { to: 'lead', summary: '\u001b[31mred' }, { agent: 'a1', atSec: 1 }),
+    ev('message.sent', { to: 'lead', summary: '😀'.repeat(300) }, { agent: 'a1', atSec: 2 }),
+  ])
+  assert.equal(s.feed[0]!.text, '[31mred')
+  assert.equal(s.feed[1]!.text, '😀'.repeat(200))
 })
