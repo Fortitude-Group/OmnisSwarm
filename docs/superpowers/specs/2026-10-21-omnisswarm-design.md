@@ -1,8 +1,8 @@
 # OmnisSwarm — design
 
 Date: 2026-10-21
-Status: approved in brainstorming. **Needs re-approval:** the mod API spike (2026-10-21,
-[docs/spikes/2026-10-21-mod-api.md](../../spikes/2026-10-21-mod-api.md)) changed the architecture in
+Status: approved in brainstorming, then re-approved on 2026-10-21 after the mod API spike
+([docs/spikes/2026-10-21-mod-api.md](../../spikes/2026-10-21-mod-api.md)) changed the architecture in
 sections 4 to 10 (mods have no Node, so the MCP server is the only writer and the pane reads through it).
 
 ## 1. Summary
