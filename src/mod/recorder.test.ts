@@ -314,21 +314,22 @@ test('a tool end is sent only after its start call has settled', LOADED, async (
   expect(sent.map(s => (s.data as { phase?: string }).phase)).toEqual(['start', 'end'])
 })
 
+/** Seventy running agents: one session.start raises seventy agent.started events at once, so no test loops over slow kit calls. */
+const crowd: AgentInfo[] = Array.from({ length: 70 }, (_, i) => ({ id: `w${i}`, description: 'Task', type: 'Explore', status: 'running', name: `worker-${i}` }))
+
 test('with 64 calls in flight the next are dropped, and the count rides on the first call after', LOADED, async ($, on) => {
   let release!: () => void
   const gate = new Promise<void>(resolve => (release = resolve))
-  const sent = engine(on, { gate })
+  const sent = engine(on, { gate, agents: crowd })
   await start($)
-  const measure = () => $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
-  for (let i = 0; i < 100; i++) await measure()
   await until(() => sent.length === 64)
   await settle()
   expect(sent.length).toBe(64)
   release()
   await settle()
-  await measure()
+  await $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
   await until(() => sent.length === 65)
-  expect(sent[64]!.dropped).toBe(36)
+  expect(sent[64]!.dropped).toBe(6)
   expect(sent.slice(0, 64).some(s => s.dropped !== undefined)).toBe(false)
 })
 
@@ -336,9 +337,8 @@ test('a burst of drops costs one state save in flight and one more, not one each
   let release!: () => void
   const stateGate = new Promise<void>(resolve => (release = resolve))
   const writes: Write[] = []
-  engine(on, { gate: new Promise(() => {}), stateGate, writes })
+  engine(on, { gate: new Promise(() => {}), stateGate, writes, agents: crowd })
   await start($)
-  for (let i = 0; i < 100; i++) await $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
   await until(() => writes.some(w => w.key === 'dropped'))
   await settle()
   expect(writes.filter(w => w.key === 'dropped').length).toBe(1)
@@ -347,7 +347,7 @@ test('a burst of drops costs one state save in flight and one more, not one each
   await settle()
   const dropped = writes.filter(w => w.key === 'dropped')
   expect(dropped.length).toBe(2)
-  expect(dropped[1]!.value).toBe(36)
+  expect(dropped[1]!.value).toBe(6)
 })
 
 test('after a reload the seen agents and the drop count come back from state, once', LOADED, async ($, on) => {

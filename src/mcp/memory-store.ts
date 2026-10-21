@@ -120,9 +120,10 @@ export function takeOverStale(lock: string): boolean {
 }
 
 /** Takes the write lock and returns the token that proves it is ours. */
-export function takeLock(lock: string): string {
+/** `waitMs` is how long to wait for a held lock; the default is for real calls, a test with slow processes passes more. */
+export function takeLock(lock: string, waitMs = LOCK_WAIT_MS): string {
   const token = randomUUID()
-  const deadline = Date.now() + LOCK_WAIT_MS
+  const deadline = Date.now() + waitMs
   for (let wait = 10; ; wait = Math.min(wait + 10, 50)) {
     try {
       writeFileSync(lock, token, { flag: 'wx' })
@@ -154,14 +155,14 @@ export function releaseLock(lock: string, token: string): void {
   }
 }
 
-export function putMemory(root: string, swarm: string, key: string, value: string, writer: string, now = new Date()): void {
+export function putMemory(root: string, swarm: string, key: string, value: string, writer: string, now = new Date(), lockWaitMs = LOCK_WAIT_MS): void {
   const file = fileFor(root, swarm)
   if (!isSafeKey(key) || !MEMORY_KEY.test(key)) throw new Error(`invalid memory key: ${JSON.stringify(key.slice(0, 80))}`)
   if (Buffer.byteLength(value) > MAX_VALUE_BYTES) throw new Error(`memory value is over ${MAX_VALUE_BYTES} bytes`)
   if (!NAME.test(writer)) throw new Error('invalid writer name')
   ensureLogDirs(root)
   const lock = `${file}.lock`
-  const token = takeLock(lock)
+  const token = takeLock(lock, lockWaitMs)
   const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
   let renamed = false
   try {
