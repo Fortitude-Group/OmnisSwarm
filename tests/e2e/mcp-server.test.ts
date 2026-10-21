@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { once } from 'node:events'
@@ -102,4 +102,10 @@ test('console output from modules imported before the server goes to stderr, nev
     await s.stop()
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('server.ts imports the stdio guard before anything else', () => {
+  const source = readFileSync(SERVER, 'utf8')
+  const firstImport = source.split(/\r?\n/).map(l => l.trim()).find(l => l.startsWith('import '))
+  assert.match(firstImport ?? '', /^import '\.\/stdio-guard\.ts'/)
 })
