@@ -14,6 +14,9 @@ import { InputError, reqEnum, reqString } from '../validate.ts'
 const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 const MAX_COUNT = 1e12
 const MAX_USD = 1e9
+const MAX_USAGE = 1e9
+const AHEAD_MS = 5 * 60_000
+const BEHIND_MS = 24 * 3_600_000
 const FAILED = 'Could not record the event in .omnis-swarm/ (see the server log).'
 
 const isObj = (x: unknown): x is Args => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -46,10 +49,12 @@ function agentName(d: Args, key: string): string {
 }
 
 /** The ts the mod stamped: an ISO-8601 UTC time with milliseconds, exactly as Date.toISOString writes it. */
-function isoTime(v: unknown): string {
+function isoTime(v: unknown, clock: Date): string {
   if (typeof v !== 'string' || v.length > 32 || Number.isNaN(Date.parse(v)) || new Date(v).toISOString() !== v) {
     throw new InputError('ts must be an ISO-8601 UTC time with milliseconds')
   }
+  const off = Date.parse(v) - clock.getTime()
+  if (off > AHEAD_MS || off < -BEHIND_MS) throw new InputError('ts is too far from the server clock (at most 5 minutes ahead or 24 hours behind)')
   return v
 }
 
@@ -62,8 +67,8 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     case 'agent.usage':
       return {
         model: text(d, 'model', 80),
-        input: count(d, 'input'), output: count(d, 'output'), cacheRead: count(d, 'cacheRead'),
-        cacheWrite5m: count(d, 'cacheWrite5m'), cacheWrite1h: count(d, 'cacheWrite1h'),
+        input: count(d, 'input', MAX_USAGE), output: count(d, 'output', MAX_USAGE), cacheRead: count(d, 'cacheRead', MAX_USAGE),
+        cacheWrite5m: count(d, 'cacheWrite5m', MAX_USAGE), cacheWrite1h: count(d, 'cacheWrite1h', MAX_USAGE),
       }
     case 'agent.tool': {
       const isError = d.isError
@@ -111,7 +116,7 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
     handler: args => {
       const type = reqEnum(args, 'type', RECORDER_TYPES)
       const sessionId = reqString(args, 'sessionId', 64, SESSION_ID)
-      const ts = isoTime(args.ts)
+      const ts = isoTime(args.ts, (ctx.now ?? (() => new Date()))())
       const agent = args.agent === undefined ? undefined : agentName(args, 'agent')
       if (!isObj(args.data)) throw new InputError('data must be an object')
       const dropped = args.dropped === undefined ? 0 : count(args, 'dropped')

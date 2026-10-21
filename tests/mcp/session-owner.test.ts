@@ -32,7 +32,7 @@ test('the implicit swarm is named after the session and its swarm.started carrie
   const s = new Session(root)
   s.noteSession(SID)
   const id = s.swarmOrCreate(NOW)
-  assert.equal(id, 'session-abcdef12')
+  assert.equal(id, `session-${KEY.slice(0, 8)}`)
   assert.equal(readCurrent(root), id)
   assert.equal(s.owned, true)
   const [started] = readEvents(swarmLogPath(root, id)).events
@@ -60,7 +60,7 @@ test('a restarted server owns the swarm its session started', () => {
   assert.match(toolsFor(root, restarted)('omnis_swarm_end').text, /ended/)
 })
 
-test('a swarm another session started is adopted but not owned', () => {
+test("a session with a known id starts its own swarm rather than adopt another session's", () => {
   const root = tmpRoot()
   const theirs = new Session(root)
   theirs.noteSession(OTHER)
@@ -68,6 +68,18 @@ test('a swarm another session started is adopted but not owned', () => {
 
   const mine = new Session(root)
   mine.noteSession(SID)
+  const own = mine.swarmOrCreate(NOW)
+  assert.notEqual(own, id)
+  assert.equal(mine.owned, true)
+  assert.equal(readCurrent(root), id)
+})
+
+test('a session with no known id still adopts a live current, not owned', () => {
+  const root = tmpRoot()
+  const theirs = new Session(root)
+  theirs.noteSession(OTHER)
+  const id = theirs.swarmOrCreate(NOW)
+  const mine = new Session(root)
   assert.equal(mine.swarmOrCreate(NOW), id)
   assert.equal(mine.owned, false)
 })
