@@ -106,7 +106,7 @@ is used for words or numbers and must reach 4.5:1. "Signal" means it marks somet
 | `GLYPH.gap` / `dot` / `pinned` | `⚠` / `●` / `◉` | Log-gap marker; chip and spotlight dot; pinned chip | — |
 | `MOTION.fadeInMs` | 600 | New node fades in from the canvas, ease-out cubic | — |
 | `MOTION.ghostMs` | 1500 | Finished node fades to its ghost, linear | — |
-| `MOTION.glowPeriodMs` | 1600 | One breath of a running node's halo | — |
+| `MOTION.glowPeriodMs` | **2000** | One breath of a running node's halo (was 1600; slower reads calmer and gives 10 frames a breath at `FPS.glow`) | — |
 | `MOTION.cometMs` | 900 | Comet head travel, sender to receiver, ease-in-out | — |
 | `MOTION.trailMs` | 450 | How far behind the head the trail reaches, in time | — |
 | `MOTION.trailDots` | 6 | Trail dots behind the head | — |
@@ -116,9 +116,9 @@ is used for words or numbers and must reach 4.5:1. "Signal" means it marks somet
 | `MOTION.clashFlashMs` | 4000 | A clash's rims blink for this long after the latest clashing edit | — |
 | `MOTION.clashBlinkMs` | **400** | Half-period of the clash blink: 1.25 blinks a second (was 250) | — |
 | `MOTION.tweenMs` | 400 | Nodes glide to new positions after a layout change, ease-out cubic | — |
-| `FPS.busy` | 30 | Frame rate while comets, fades, pulses, glides or a clash blink are live | — |
-| `FPS.glow` | 12 | Frame rate while only glows and stuck rims move | — |
-| `FPS.min` | 4 | Slowest the back-off goes | — |
+| `FPS.busy` | **20** | Frame rate while a comet, fade-in, tool or error pulse, or glide is live (was 30) | — |
+| `FPS.glow` | **5** | Frame rate for slow motion: glows, stuck rims, ghost fades, link fades, the clash blink (was 12) | — |
+| `FPS.min` | 4 | Slowest rate at which a comet still reads as travelling; below it motion is dropped, not slowed (section 6) | — |
 | `FPS.tick` | **1** (new) | Clock refresh while the pane is shown and nothing else moves (section 6) | — |
 | `GRAPH.minRadius` | 1.6 | Smallest node radius, pixels (also every placeholder) | — |
 | `GRAPH.maxRadius` | 6 | Largest node radius, pixels (also capped at graph height ÷ 7) | — |
@@ -240,7 +240,7 @@ layer: the dot colour becomes the cell's foreground and the cell keeps its lower
 |---|---|---|---|
 | `fadeInMs` 600 | An agent has just started | ease-out cubic, `mix(CANVAS, fill, t)` | 8 |
 | `ghostMs` 1500 | An agent has just finished | linear | 6 |
-| `glowPeriodMs` 1600 | The agent is working | sine, phase `hashUnit(id)` so neighbours breathe out of step | 5 |
+| `glowPeriodMs` 2000 | The agent is working | sine, phase `hashUnit(id)` so neighbours breathe out of step | 5 |
 | `cometMs` 900 | A message is travelling | ease-in-out along the link's arc; the same time for any link length, so every message reads as one beat | head 1 + trail 4 |
 | `trailMs` 450 / `trailDots` 6 | Which way the message went | trail dot *i* has strength `1 - i/7`, colour `mix(CANVAS, LINK.active, q4(k))` | 4 |
 | `linkFadeMs` 3000 | Which links carried traffic recently | linear, `mix(LINK.idle, LINK.active, recency)` | 5 |
@@ -255,18 +255,49 @@ it, so the head glows. Draw every trail first and every head last, so a head is 
 Comets and pulses are drawn at `tEff = now - lag` (lag capped at 1 s): events arrive in batches every `PULL_MS`, and
 drawing them at their own time keeps a comet starting at its sender instead of jumping in half-way.
 
-**Frame rate policy** (`targetFps`, Task 12):
-1. `FPS.busy` (30) while any comet, fade-in, ghost fade, pulse, glide or clash blink is live.
-2. Otherwise `FPS.glow` (12) while any running agent glows or any stuck rim breathes.
-3. Otherwise **`FPS.tick` (1) while the pane is shown.** Ages in the feed (`12s`), a waiting agent's live timeline
-   bar, the header's burn rate and a link still fading back to idle all change with the clock, not with events.
-   The pane only redraws after a pull that brings news, so without a tick they freeze mid-state. One frame a second
-   costs less than the four pulls a second the pane already makes. This changes the plan's "0 when nothing moves"
-   to "1 when nothing moves, while shown". Spec section 10 says the frame loop stops when nothing moves; it still
-   stops when the pane is hidden, closed or off the terminal.
-4. Back-off as Task 12's `frameInterval`: a frame that took more than 60% of its interval doubles the interval,
-   never slower than `FPS.min` (4); one that took under 25% halves it again, never faster than the target. The
-   tick (1 fps, 1000 ms) is already slower than `FPS.min` and is exempt from the floor.
+**Frame rate policy** (`targetFps`, Task 12). Measured by the lead: a 120×44 frame costs about 25 ms of Claude
+Code's main thread, so 12 fps of breathing alone took about 30% of it. Spec section 11 says the pane never slows the
+session, so frame rate follows a **budget: the pane may spend at most 10% of the main thread, averaged over a
+second** (100 ms of render a second), as well as the motion's needs.
+
+The slowest rate each motion still reads at, and why:
+
+| Motion | Needs | Rate |
+|---|---|---|
+| Comet (900 ms) and its trail | Each frame moves the head about one trail gap (1/12 of the arc), so the eye joins the dots into travel. Below 4 fps it reads as jumping | `FPS.busy` 20; floor 4 |
+| Tool and error pulses (350 / 900 ms, 4 steps) | At least one frame at full strength and one part-faded | `FPS.busy` 20 (7 frames a pulse); floor: a single full-strength frame |
+| Fade-in (600 ms, 8 steps) | Most of its 8 steps | `FPS.busy` 20 |
+| Glide (400 ms) | 6 or more positions | `FPS.busy` 20 |
+| Glow and stuck rim (2000 ms, 5 and 4 steps) | 8 level changes a breath; 10 frames cover them | `FPS.glow` 5 |
+| Ghost fade (1500 ms, 6 steps) | One frame a step | `FPS.glow` 5 |
+| Link fade (3000 ms, 5 steps) | One frame a step | `FPS.glow` 5 (the tick would also do) |
+| Clash blink (400 ms half-period) | Two frames each half | `FPS.glow` 5 |
+
+1. `FPS.busy` (20) while any comet, fade-in, pulse or glide is live. These come in bursts of about 1.4 s.
+2. Otherwise `FPS.glow` (5) while any glow, stuck rim, ghost fade, link fade or clash blink is live.
+3. Otherwise **`FPS.tick` (1) while the pane is shown**: feed ages, a waiting agent's live timeline bar and the
+   header's burn rate change with the clock, not with events. The loop stops when the pane is hidden, closed or off
+   the terminal.
+4. **Budget cap.** Each frame's interval is at least `10 × renderMs` of the frame before (so at 25 ms a frame the pane
+   runs at 4 fps at most; at 5 ms, the full 20). This replaces the 60% back-off: it is the same idea with a fixed
+   share. If a frame comes in under the cap, the interval falls back to the target rate.
+5. **Graceful degradation.** When the cap leaves fewer frames than a motion needs, drop motions in this order,
+   least meaningful first, and give each back in reverse order as frames become cheap again:
+   1. **Breathing.** Glow halos are drawn steady at `glowK = 0.7`, and stuck rims steady at strength 0.6. Running is
+      still the halo plus `▶`; stuck is still the amber rim plus `!`. Applies when the cap is under `FPS.glow` (5).
+   2. **Slow fades.** Ghost fades and link fades jump to their end state; a link stays lit until the next tick
+      after its fade window ends, then goes. Applies when the cap is under 5.
+   3. **Clash blink.** Both rims are drawn steady in `LINK.clash` for `clashFlashMs`; the dashed line is unchanged.
+      Applies when the cap is under 5.
+   4. **Fade-in and glide.** New nodes appear at full colour; layout changes jump. Applies when the cap is under 10.
+   5. **Pulses.** A tool or error pulse becomes one full-strength frame, held until the next frame. Never dropped
+      entirely: a pulse is the only sign a tool ran. Applies when the cap is under 10.
+   6. **Comets, last.** Under `FPS.min` (4) a comet can't read as travel, so instead the link flashes to
+      `LINK.active` at once and decays by its link fade (at tick rate if need be). Direction is then shown by the
+      feed line, not the picture.
+   Every status stays readable at every step, because the glyph never depends on motion (section 4).
+6. The budget and the degradation step are worked out each frame from the last frame's `renderMs`, so a cheaper
+   frame (blitting only the grids that changed, a cached graph layer) buys the motion back with no other change.
 
 ## 7. Layouts per topology
 
@@ -524,6 +555,7 @@ To check on the goldens (Task 13):
       passed `safeGlyph`).
 - [ ] `pairCount` ≤ `PAIR_BUDGET` for every golden case, and the printed counts are within the section 10 estimate.
 - [ ] No blink is faster than 3 a second (`clashBlinkMs` ≥ 167).
+- [ ] The pane's render time × frame rate stays at or under 100 ms a second (10% of the main thread) in every state.
 - [ ] Nothing moves in the `idle` golden except what section 6 allows (glow for a running agent, the tick).
 - [ ] A comet head is visible in the `mid` golden and no comet in `idle`.
 - [ ] Tool flicker on a same-hue node (edit on haiku) shows in the outer flare.
