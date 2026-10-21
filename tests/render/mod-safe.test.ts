@@ -17,6 +17,9 @@ const BANNED: Array<[string, RegExp]> = [
   ['queueMicrotask', /\bqueueMicrotask\b/],
   ['setImmediate', /\bsetImmediate\b/],
   ['import(', /\bimport\s*\(/],
+  ['setTimeout', /\bsetTimeout\b/],
+  ['setInterval', /\bsetInterval\b/],
+  ['console.', /\bconsole\./],
 ]
 
 function entries(): string[] {

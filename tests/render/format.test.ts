@@ -37,3 +37,17 @@ test('clipText cuts by code point and ends in an ellipsis', () => {
   assert.equal(clipText('abc', 0), '')
   assert.equal(clipText('😀😀😀', 2), '😀…')
 })
+
+test('units are chosen after rounding, and bad numbers never print as numbers', () => {
+  assert.equal(fmtTokens(9999), '10k')
+  assert.equal(fmtTokens(999_999), '1.0M')
+  assert.equal(fmtTokens(999_499), '999k')
+  assert.equal(fmtUsd(99.999), '≈$100')
+  assert.equal(fmtUsd(0.00999), '≈$0.01')
+  assert.equal(fmtUsd(-1), '–')
+  assert.equal(fmtDuration(Number.NaN), '–')
+  assert.equal(fmtDuration(Number.POSITIVE_INFINITY), '–')
+  assert.equal(fmtAge(Number.NaN), '–')
+  assert.equal(clipText('abc', Number.NaN), '')
+  assert.equal(clipText('abc', Number.POSITIVE_INFINITY), '')
+})

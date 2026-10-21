@@ -4,6 +4,7 @@
  * the engine refuse the whole tree. Base64 is done by hand so this runs in a mod and in Node alike. Pure.
  */
 import { DEFAULT, rgb } from './color.ts'
+import { RASTER_MAX } from './tokens.ts'
 
 const SPACE = 0x20
 const REPLACEMENT = 0x3f
@@ -35,14 +36,17 @@ export function safeGlyph(cp: number): number {
 /** The first code point of `ch`. */
 export const cp = (ch: string): number => ch.codePointAt(0) ?? SPACE
 
+/** A whole size of at least 1 and at most `max`; anything that is not a finite number becomes 1. */
+const dimension = (n: number, max: number): number => (Number.isFinite(n) ? Math.max(1, Math.min(max, Math.floor(n))) : 1)
+
 export class Grid {
   readonly columns: number
   readonly rows: number
   readonly cells: Uint32Array
 
   constructor(columns: number, rows: number, bg: number = DEFAULT, fg: number = DEFAULT) {
-    this.columns = Math.max(1, Math.floor(columns))
-    this.rows = Math.max(1, Math.floor(rows))
+    this.columns = dimension(columns, RASTER_MAX.columns)
+    this.rows = dimension(rows, RASTER_MAX.rows)
     this.cells = new Uint32Array(this.columns * this.rows * 3)
     for (let i = 0; i < this.columns * this.rows; i++) {
       this.cells[i * 3] = SPACE
@@ -52,6 +56,7 @@ export class Grid {
   }
 
   #at(x: number, y: number): number {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return -1
     const cx = Math.floor(x)
     const cy = Math.floor(y)
     return cx < 0 || cy < 0 || cx >= this.columns || cy >= this.rows ? -1 : (cy * this.columns + cx) * 3
@@ -83,10 +88,14 @@ export class Grid {
 
   /** Blanks a box of cells to `bg`. */
   fill(x: number, y: number, w: number, h: number, bg: number): void {
-    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) this.set(cx, cy, SPACE, bg, bg)
+    const x0 = Math.max(0, Math.floor(x))
+    const y0 = Math.max(0, Math.floor(y))
+    const x1 = Math.min(this.columns, x + w)
+    const y1 = Math.min(this.rows, y + h)
+    for (let cy = y0; cy < y1; cy++) for (let cx = x0; cx < x1; cx++) this.set(cx, cy, SPACE, bg, bg)
   }
 
-  /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the cells written. */
+  /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the columns advanced. */
   text(x: number, y: number, s: string, fg: number, bg?: number, max = Number.POSITIVE_INFINITY): number {
     let n = 0
     for (const ch of s) {
@@ -172,23 +181,23 @@ export function pairCount(grid: Grid): number {
 
 /**
  * Coarsens colours, one more low bit per channel each round, until the grid holds at most `max` fg/bg pairs.
- * Returns how many bits it dropped (0 when the grid was already under budget). At 7 bits there are at most 9 colours.
+ * Returns how many bits it dropped (0 when the grid was already under budget), or 8 when even the coarsest round
+ * (each channel snapped to 0, 128 or 255: 27 colours plus the terminal default) is still over budget.
  */
 export function limitPairs(grid: Grid, max: number): number {
-  for (let drop = 0; drop <= 7; drop++) {
-    if (drop > 0) {
-      const step = 1 << drop
-      const snap = (v: number) => Math.min(255, Math.round(v / step) * step)
-      for (let i = 0; i < grid.columns * grid.rows; i++) {
-        for (const slot of [i * 3 + 1, i * 3 + 2]) {
-          const c = grid.cells[slot]!
-          if (c !== DEFAULT) grid.cells[slot] = rgb(snap((c >>> 16) & 255), snap((c >>> 8) & 255), snap(c & 255))
-        }
-      }
+  if (pairCount(grid) <= max) return 0
+  const slots = grid.columns * grid.rows * 3
+  for (let drop = 1; drop <= 7; drop++) {
+    const step = 1 << drop
+    const snap = (v: number) => Math.min(255, Math.round(v / step) * step)
+    for (let slot = 1; slot < slots; slot++) {
+      if (slot % 3 === 0) continue
+      const c = grid.cells[slot]!
+      if (c !== DEFAULT) grid.cells[slot] = rgb(snap((c >>> 16) & 255), snap((c >>> 8) & 255), snap(c & 255))
     }
     if (pairCount(grid) <= max) return drop
   }
-  return 7
+  return 8
 }
 
 /** One coloured run of text. */

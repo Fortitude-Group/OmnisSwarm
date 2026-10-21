@@ -26,3 +26,10 @@ test('hex, contrast, quantise and clamp01', () => {
   assert.equal(clamp01(Number.NaN), 0)
   assert.equal(clamp01(7), 1)
 })
+
+test('quantise copes with odd step counts', () => {
+  assert.equal(quantise(0.4, Number.NaN), 0.4)
+  assert.equal(quantise(0.4, 1.9), 0.4)
+  assert.equal(quantise(0.9, 2.9), 1)
+  assert.equal(quantise(0.4, Number.POSITIVE_INFINITY), 0.4)
+})

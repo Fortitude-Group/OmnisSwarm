@@ -6,7 +6,7 @@ import { makeEvent, type EventData, type EventType, type SwarmEvent, type ToolKi
 
 export const FIVE_T0 = Date.parse('2026-10-21T10:00:00.000Z')
 export const FIVE_SWARM = 'auth-refactor'
-/** mid: comets in flight and a tool flicker; idle: everything has settled. */
+/** mid: comets in flight and a tool flicker; idle: most has settled, but a-arch, a-cod1 and a-test still have a tool or run open, so they glow. */
 export const FIVE_AT = { mid: FIVE_T0 + 30_000, idle: FIVE_T0 + 400_000 } as const
 
 const MCP_TYPES: readonly string[] = ['swarm.started', 'memory.put', 'task.created', 'task.updated']

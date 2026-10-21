@@ -44,5 +44,7 @@ export function contrast(a: number, b: number): number {
 }
 
 /** Snaps t to one of `steps` levels, so ramps reuse a few colours and a frame stays under its pair budget. */
-export const quantise = (t: number, steps: number): number =>
-  steps <= 1 ? clamp01(t) : Math.round(clamp01(t) * (steps - 1)) / (steps - 1)
+export function quantise(t: number, steps: number): number {
+  const n = Math.floor(steps)
+  return !Number.isFinite(n) || n < 2 ? clamp01(t) : Math.round(clamp01(t) * (n - 1)) / (n - 1)
+}

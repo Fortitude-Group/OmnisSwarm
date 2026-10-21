@@ -4,6 +4,7 @@ import { DEFAULT } from '../../src/render/color.ts'
 import {
   Grid, decodeCells, fromBase64, gridText, limitPairs, pairCount, safeGlyph, toBase64, writeParts, writeRight,
 } from '../../src/render/grid.ts'
+import { RASTER_MAX } from '../../src/render/tokens.ts'
 
 test('a new grid is blank, in the terminal colours unless told otherwise', () => {
   const g = new Grid(3, 2)
@@ -86,4 +87,55 @@ test('writeParts writes coloured runs left to right, writeRight aligns them to t
   writeRight(g, 0, [['xy', 0x0000ff]], 0, 10)
   assert.deepEqual(gridText(g), ['abcd    xy'])
   assert.equal(writeParts(g, 8, 0, [['longer', 0xffffff]], 10), 10)
+})
+
+test('fill clips to the grid, so an infinite box returns at once', () => {
+  const g = new Grid(3, 2)
+  g.fill(-5, -5, Number.POSITIVE_INFINITY, 5.5, 0x123456)
+  assert.equal(g.bg(2, 0), 0x123456)
+  assert.equal(g.bg(0, 1), DEFAULT)
+  g.fill(1, 1, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, 0x654321)
+  assert.equal(g.bg(2, 1), 0x654321)
+  assert.equal(g.bg(0, 1), DEFAULT)
+})
+
+test('reads and writes outside the grid, or at non-finite spots, are harmless', () => {
+  const g = new Grid(2, 2, 0x111111, 0x222222)
+  for (const [x, y] of [[-1, 0], [0, -1], [2, 0], [0, 2], [Number.NaN, 0], [0, Number.POSITIVE_INFINITY]] as const) {
+    assert.equal(g.glyph(x, y), 0x20)
+    assert.equal(g.fg(x, y), DEFAULT)
+    assert.equal(g.bg(x, y), DEFAULT)
+    g.set(x, y, 0x41, 0xffffff, 0xffffff)
+  }
+  assert.deepEqual(gridText(g), ['  ', '  '])
+  assert.equal(g.bg(0, 0), 0x111111)
+})
+
+test('grid sizes are whole, at least 1, finite and capped at the Raster limit', () => {
+  const g = new Grid(Number.NaN, Number.POSITIVE_INFINITY)
+  assert.equal(g.columns, 1)
+  assert.equal(g.rows, 1)
+  const big = new Grid(100_000, 100_000)
+  assert.equal(big.columns, RASTER_MAX.columns)
+  assert.equal(big.rows, RASTER_MAX.rows)
+  assert.equal(new Grid(2.9, 0).columns, 2)
+})
+
+test('limitPairs never recolours the terminal default and says when it cannot reach the budget', () => {
+  const g = new Grid(40, 40)
+  for (let i = 1; i < 1600; i++) g.set(i % 40, Math.floor(i / 40), 0x2580, (i * 9973) & 0xffffff, (i * 7919) & 0xffffff)
+  assert.ok(limitPairs(g, 500) > 0)
+  assert.equal(g.fg(0, 0), DEFAULT)
+  assert.equal(g.bg(0, 0), DEFAULT)
+  const h = new Grid(40, 40)
+  for (let i = 0; i < 1600; i++) h.set(i % 40, Math.floor(i / 40), 0x2580, (i * 9973) & 0xffffff, (i * 7919) & 0xffffff)
+  assert.equal(limitPairs(h, 2), 8)
+})
+
+test('fromBase64 rejects characters outside the alphabet', () => {
+  for (const bad of ['TW!u', 'TW u', '-_-_', 'TWFu\n']) assert.throws(() => fromBase64(bad), RangeError, JSON.stringify(bad))
+})
+
+test('text reports the columns it advanced', () => {
+  assert.equal(new Grid(5, 1).text(0, 0, 'abc😀', 0xffffff), 4)
 })
