@@ -6,6 +6,7 @@ import { closeSync, existsSync, openSync, readSync } from 'node:fs'
 import { LIMITS, isValidSwarmId, parseLine } from '../../core/events.ts'
 import { FEED_MAX_EVENTS, fitEvents, freshReply, type FeedReply } from '../../core/feed-reply.ts'
 import { MAX_READ_BYTES, readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
+import { swarmOwner } from '../../core/swarm.ts'
 import type { Loaded } from '../../core/snapshot.ts'
 import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
@@ -67,13 +68,30 @@ function optOffset(args: Args, key: string): number | undefined {
 export function createFeedTools(ctx: ToolContext): ToolDef[] {
   const { root, session } = ctx
 
-  /** This server's live swarm, else the live current one, else the hinted one if its log exists, else an ended current. */
+  /**
+   * True when the pane may follow swarm `id` by its hint. A session that never learned an id has no owner to check, so
+   * any hint goes, as before. A session with an id follows only a swarm its log says it started; after a second,
+   * conflicting id there is no key to match, so only the live swarm mySwarm returns is shown.
+   */
+  const followable = (id: string): boolean => {
+    if (!existsSync(swarmLogPath(root, id))) return false
+    if (session.sessionId === null) return true
+    const key = session.sessionKey
+    return key !== null && swarmOwner(root, id) === key
+  }
+
+  /**
+   * This server's live swarm; else the hinted one if it is this session's; else, only for a session that never learned
+   * an id, `current`. A session with an id is never shown another session's swarm. A session with no id prefers a live
+   * `current` over its hint, so a pane left on an ended swarm moves on when a new one starts.
+   */
   const pick = (hint: string | undefined): string | null => {
     const live = session.mySwarm(false)
     if (live !== null) return live
-    const current = readCurrent(root)
+    const anonymous = session.sessionId === null
+    const current = anonymous ? readCurrent(root) : null
     if (current !== null && !session.hasEnded(current)) return current
-    if (hint !== undefined && existsSync(swarmLogPath(root, hint))) return hint
+    if (hint !== undefined && followable(hint)) return hint
     return current
   }
   const answer = (reply: FeedReply) => ({ text: JSON.stringify(reply) })

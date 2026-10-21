@@ -219,3 +219,47 @@ test('a failed re-announce writes one line to stderr', () => {
   assert.equal(lines.length, 1)
   assert.match(lines[0]!, /could not stamp the session on swarm session-/)
 })
+
+const THIRD = 'cccccccc-1111-2222-3333-444444444444'
+/** Runs `fn` with stderr silenced: a second session id warns once. */
+function quietly(fn: () => void): void {
+  const write = process.stderr.write
+  process.stderr.write = (() => true) as typeof process.stderr.write
+  try {
+    fn()
+  } finally {
+    process.stderr.write = write
+  }
+}
+
+test("after a second session id the session never adopts another session's live current", () => {
+  const root = tmpRoot()
+  const theirs = new Session(root)
+  theirs.noteSession(OTHER)
+  const id = theirs.swarmOrCreate(NOW)
+
+  // After /clear or a resume the process carries on under a new id, and a hot reload sends it.
+  const mine = new Session(root)
+  quietly(() => {
+    mine.noteSession(SID)
+    mine.noteSession(THIRD)
+  })
+  assert.equal(mine.mySwarm(), null)
+  const own = mine.swarmOrCreate(NOW)
+  assert.notEqual(own, id)
+  assert.equal(own, `session-${sessionKey(THIRD).slice(0, 8)}`)
+  assert.equal(mine.owned, true)
+  assert.equal(readCurrent(root), id)
+  // Log ownership stays off after a second id, so the new swarm carries no session key.
+  assert.equal(swarmOwner(root, own), null)
+})
+
+test('after a second session id the swarm this process started stays its own', () => {
+  const root = tmpRoot()
+  const s = new Session(root)
+  s.noteSession(SID)
+  const own = s.swarmOrCreate(NOW)
+  quietly(() => s.noteSession(THIRD))
+  assert.equal(s.swarmOrCreate(NOW), own)
+  assert.equal(s.owned, true)
+})

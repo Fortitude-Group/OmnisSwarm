@@ -205,3 +205,63 @@ test('a too-large answer is remembered for an unchanged swarm and recomputed whe
   assert.notEqual(b, a)
   assert.deepEqual(parseFeedReply(b), { v: 1, kind: 'too-large', agents: (parseFeedReply(a) as { agents: number }).agents + 1 })
 })
+
+const MINE = 'abcdef12-3456-7890-abcd-ef1234567890'
+const THEIRS = '99999999-0000-0000-0000-000000000000'
+
+/** Another session in the same project whose live swarm holds `current`. */
+function foreignLive(root: string): string {
+  const theirs = new Session(root)
+  theirs.noteSession(THEIRS)
+  return theirs.swarmOrCreate(NOW)
+}
+
+test("a session with a known id is not shown another session's live swarm before it has its own", () => {
+  const { root, pull } = setup(r => {
+    const s = new Session(r)
+    s.noteSession(MINE)
+    return s
+  })
+  foreignLive(root)
+  assert.deepEqual(pull(), { v: 1, kind: 'none' })
+})
+
+test("after its own swarm ends, the hint keeps showing it rather than another session's live swarm", () => {
+  let mine: Session | undefined
+  const { root, call, pull } = setup(r => {
+    mine = new Session(r)
+    mine.noteSession(MINE)
+    return mine
+  })
+  const theirs = foreignLive(root)
+  const own = mine!.swarmOrCreate(NOW)
+  assert.notEqual(own, theirs)
+  const live = pull()
+  assert.ok(live.kind === 'state' && live.swarm === own)
+  call('omnis_swarm_end', { outcome: 'done' })
+  const after = pull({ since: live.offset, swarm: own })
+  assert.ok(after.kind === 'events' && after.swarm === own)
+  assert.deepEqual(after.events.map(e => e.type), ['swarm.ended'])
+  const fresh = pull({ swarm: own })
+  assert.ok(fresh.kind === 'state' && fresh.swarm === own)
+  assert.deepEqual(pull(), { v: 1, kind: 'none' })
+})
+
+test("a hint at another session's swarm is not followed by a session with a known id", () => {
+  const { root, pull } = setup(r => {
+    const s = new Session(r)
+    s.noteSession(MINE)
+    return s
+  })
+  const theirs = foreignLive(root)
+  assert.deepEqual(pull({ swarm: theirs }), { v: 1, kind: 'none' })
+})
+
+test('a session that never learned an id is still shown the live current, ahead of an ended hint', () => {
+  const { root, call, pull } = setup()
+  call('omnis_swarm_init', { name: 'Feed', topology: 'mesh' })
+  call('omnis_swarm_end', { outcome: 'done' })
+  const theirs = foreignLive(root)
+  const r = pull({ swarm: 'feed' })
+  assert.ok(r.kind === 'state' && r.swarm === theirs)
+})
