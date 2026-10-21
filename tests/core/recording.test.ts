@@ -31,7 +31,9 @@ test('session ids look like the transcript name Claude Code uses', () => {
 test('the internal tool pattern matches our two tools by full name and nothing public', () => {
   assert.ok(INTERNAL_TOOL.test(RECORD))
   assert.ok(INTERNAL_TOOL.test(FEED))
-  for (const other of ['omnis_record', 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_status', 'Bash', 'mcp__other__omnis_record']) {
+  assert.ok(INTERNAL_TOOL.test('mcp__omnis-swarm__omnis_record'))
+  assert.ok(INTERNAL_TOOL.test('mcp__other__omnis_record'))
+  for (const other of ['omnis_record', 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_status', 'Bash']) {
     assert.equal(INTERNAL_TOOL.test(other), false, other)
   }
 })
