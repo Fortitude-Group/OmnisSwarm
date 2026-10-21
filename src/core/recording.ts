@@ -17,10 +17,11 @@ export const MAX_IN_FLIGHT = 64
 export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
 
 /**
- * The internal tools by full name, `mcp__plugin_<plugin>_<server>__omnis_record` (or `__omnis_feed`).
- * The plugin segment is left open so a marketplace install, which may rename it, is still covered.
+ * The internal tools under any server alias: `mcp__plugin_<plugin>_<server>__omnis_record` (plugin-bundled; a
+ * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
+ * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__plugin_.+__omnis_(record|feed)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed)$/
 
 /** An internal tool may be called only from this plugin's own hooks. Every other tool is not the guard's business. */
 export function guardVerdict(tool: string, origin: string, self: string): 'pass' | 'deny' {
