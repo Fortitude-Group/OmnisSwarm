@@ -26,13 +26,17 @@ function claim(root: string, id: string): boolean {
 }
 
 /** A valid swarm id not yet in use, claimed by creating its (empty) log file. */
-export function uniqueSwarmId(root: string, base: string): string {
+export function uniqueSwarmId(root: string, base: string, onAttempt?: () => void): string {
+  const tryClaim = (id: string): boolean => {
+    onAttempt?.()
+    return claim(root, id)
+  }
   ensureLogDirs(root)
   const slug = slugify(base) || 'swarm'
   let id = slug
   if (!isValidSwarmId(id)) id = slugify(`swarm-${slug}`)
   if (!isValidSwarmId(id)) id = 'swarm'
-  if (claim(root, id)) return id
+  if (tryClaim(id)) return id
   const suffixed = (n: number): string => `${id.slice(0, 63 - String(n).length).replace(/[.-]+$/, '')}-${n}`
   // One directory listing gives the numbers in use; we take the lowest free one and only move on if the claim loses a race.
   const used = new Set<number>()
@@ -49,7 +53,7 @@ export function uniqueSwarmId(root: string, base: string): string {
   for (let n = 2; n <= 10_001; n++) {
     if (used.has(n)) continue
     const candidate = suffixed(n)
-    if (isValidSwarmId(candidate) && claim(root, candidate)) return candidate
+    if (isValidSwarmId(candidate) && tryClaim(candidate)) return candidate
   }
   throw new Error('no free swarm id')
 }

@@ -119,13 +119,15 @@ test('a current marker holding junk is overwritten', () => {
   assert.equal(readCurrent(root), id)
 })
 
-test('300 same-name claims are quick and numbered in order', () => {
+test('300 same-name claims are numbered in order and each takes at most one attempt', () => {
   const root = tmpRoot()
-  const start = Date.now()
   let last = ''
-  for (let i = 0; i < 300; i++) last = uniqueSwarmId(root, 'Busy')
+  for (let i = 0; i < 300; i++) {
+    let attempts = 0
+    last = uniqueSwarmId(root, 'Busy', () => attempts++)
+    assert.ok(attempts <= 2, `init ${i} took ${attempts} attempts`)
+  }
   assert.equal(last, 'busy-300')
-  assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`)
 })
 
 test('a name whose numbered id hit the cap still finds a free gap', () => {
@@ -139,9 +141,11 @@ test('one poisoned number does not slow later claims', () => {
   const root = tmpRoot()
   assert.equal(uniqueSwarmId(root, 'auth'), 'auth')
   writeFileSync(swarmLogPath(root, 'auth-10001'), '')
-  const start = Date.now()
   const ids: string[] = []
-  for (let i = 0; i < 50; i++) ids.push(uniqueSwarmId(root, 'auth'))
+  for (let i = 0; i < 50; i++) {
+    let attempts = 0
+    ids.push(uniqueSwarmId(root, 'auth', () => attempts++))
+    assert.equal(attempts, 2, `init ${i}: the bare name, then the lowest free number`)
+  }
   assert.deepEqual(ids, Array.from({ length: 50 }, (_, i) => `auth-${i + 2}`))
-  assert.ok(Date.now() - start < 2000, `took ${Date.now() - start} ms`)
 })
