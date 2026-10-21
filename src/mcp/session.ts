@@ -51,7 +51,7 @@ export class Session {
       const mine = this.#mine
       if (mine !== null && this.#owned) {
         const { swarm } = this.state(mine).state
-        appendEvent(this.root, makeEvent({
+        const stamped = appendEvent(this.root, makeEvent({
           type: 'swarm.started',
           swarm: mine,
           src: 'mcp',
@@ -63,6 +63,7 @@ export class Session {
             session: sessionKey(id),
           },
         }))
+        if (!stamped) process.stderr.write(`omnis: could not stamp the session on swarm ${mine}; it will not be claimable after a restart\n`)
         this.#ownerRead = mine
       }
     } else if (id !== this.#sessionId && !this.#conflict) {

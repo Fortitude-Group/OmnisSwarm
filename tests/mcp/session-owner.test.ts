@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { appendEvent, readCurrent, readEvents, swarmLogPath } from '../../src/core/log.ts'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { sessionKey, swarmOwner, uniqueSwarmId } from '../../src/core/swarm.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createTools } from '../../src/mcp/tools.ts'
@@ -186,4 +186,24 @@ test('a swarm started before the session id was known is still owned after a res
   assert.equal(restarted.swarmOrCreate(NOW), id)
   assert.equal(restarted.owned, true)
   assert.match(toolsFor(root, restarted)('omnis_swarm_end').text, /ended/)
+})
+
+test('a failed re-announce writes one line to stderr', () => {
+  const root = tmpRoot()
+  const s = new Session(root)
+  const id = s.swarmOrCreate(NOW)
+  const file = swarmLogPath(root, id)
+  s.state(id)
+  rmSync(file)
+  mkdirSync(file)
+  const write = process.stderr.write
+  const lines: string[] = []
+  process.stderr.write = ((chunk: string) => { lines.push(String(chunk)); return true }) as typeof process.stderr.write
+  try {
+    s.noteSession(SID)
+  } finally {
+    process.stderr.write = write
+  }
+  assert.equal(lines.length, 1)
+  assert.match(lines[0]!, /could not stamp the session on swarm session-/)
 })
