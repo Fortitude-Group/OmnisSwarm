@@ -83,11 +83,17 @@ function treeLayout(state: SwarmState, agents: readonly AgentState[], box: Box):
   }
   const order: string[] = []
   const seen = new Set<string>()
-  const walk = (id: string): void => {
-    if (seen.has(id)) return
-    seen.add(id)
-    order.push(id)
-    for (const k of kids.get(id) ?? []) walk(k)
+  // An explicit stack: a chain thousands deep must not overflow the call stack.
+  const walk = (start: string): void => {
+    const stack = [start]
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      if (seen.has(id)) continue
+      seen.add(id)
+      order.push(id)
+      const k = kids.get(id) ?? []
+      for (let i = k.length - 1; i >= 0; i--) stack.push(k[i]!)
+    }
   }
   for (const r of roots) walk(r)
   for (const a of agents) walk(a.id)
@@ -128,12 +134,13 @@ function ringLayout(agents: readonly AgentState[], box: Box, out: Record<string,
 export function layoutNodes(state: SwarmState, topology: Topology, width: number, height: number): Record<string, Point> {
   const agents = orderAgents(state)
   if (agents.length === 0) return {}
-  const w = Math.min(RASTER_MAX.columns, width)
-  const h = Math.min(RASTER_MAX.rows * 2, height)
+  const finite = (n: number): number => (Number.isFinite(n) ? n : 0)
+  const w = Math.min(RASTER_MAX.columns, finite(width))
+  const h = Math.min(RASTER_MAX.rows * 2, finite(height))
   const box: Box = { x0: MARGIN.x, x1: Math.max(MARGIN.x, w - MARGIN.x), y0: MARGIN.top, y1: Math.max(MARGIN.top, h - MARGIN.bottom) }
   if (topology === 'hierarchical') return treeLayout(state, agents, box)
-  if (topology === 'star' && agents.length > 1) {
-    const out: Record<string, Point> = { [agents[0]!.id]: { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 } }
+  if (topology === 'star' && agents.length > 1 && agents[0]!.id === LEAD) {
+    const out: Record<string, Point> = { [LEAD]: { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 } }
     return ringLayout(agents.slice(1), box, out)
   }
   return ringLayout(agents, box)
@@ -143,7 +150,7 @@ export function layoutNodes(state: SwarmState, topology: Topology, width: number
 export function structuralEdges(state: SwarmState, topology: Topology): Edge[] {
   const agents = orderAgents(state)
   if (topology === 'mesh' || agents.length < 2) return []
-  if (topology === 'star') return agents.slice(1).map(a => ({ from: agents[0]!.id, to: a.id }))
+  if (topology === 'star') return agents[0]!.id === LEAD ? agents.slice(1).map(a => ({ from: LEAD, to: a.id })) : []
   const parents = parentsOf(state)
   const edges: Edge[] = []
   for (const a of agents) {
@@ -153,6 +160,7 @@ export function structuralEdges(state: SwarmState, topology: Topology): Edge[] {
   return edges
 }
 
+/** Callers should cache this per state: it walks every agent's parent chain (O(n x depth)). */
 /** Changes exactly when the node set, their order or the tree's shape changes: the pane glides nodes when it does. */
 export function nodesKey(state: SwarmState): string {
   const parents = parentsOf(state)

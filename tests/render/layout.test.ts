@@ -100,3 +100,30 @@ test('an oversized canvas is held to the Raster limits', () => {
   const pos = layoutNodes(state(leadUse(), start('a', 'lead', 1)), 'hierarchical', 5000, 5000)
   for (const p of Object.values(pos)) assert.ok(p.x <= 512 && p.y <= 512)
 })
+
+test('non-finite canvas sizes give finite positions', () => {
+  const s = state(leadUse(), start('a', 'lead', 1))
+  for (const [w, h] of [[NaN, 40], [100, NaN], [Infinity, -Infinity]] as const) {
+    for (const p of Object.values(layoutNodes(s, 'hierarchical', w, h))) assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y))
+  }
+})
+
+test('three siblings spread at a quarter, a half and three quarters of the width', () => {
+  const pos = layoutNodes(state(leadUse(), start('a', 'lead', 1), start('b', 'lead', 2), start('c', 'lead', 3)), 'hierarchical', 100, 40)
+  const x0 = MARGIN.x
+  const span = 100 - 2 * MARGIN.x
+  assert.deepEqual([pos.a!.x, pos.b!.x, pos.c!.x], [x0 + span * 0.25, x0 + span * 0.5, x0 + span * 0.75])
+})
+
+test('a star with no lead falls back to the ring, with no spokes', () => {
+  const s = state(start('a', 'x', 1), start('b', 'x', 2), start('c', 'x', 3))
+  const pos = layoutNodes(s, 'star', 100, 40)
+  assert.equal(Object.keys(pos).length, 3)
+  assert.deepEqual(pos, layoutNodes(s, 'mesh', 100, 40))
+  assert.deepEqual(structuralEdges(s, 'star'), [])
+})
+
+test('a chain ten thousand deep lays out without overflowing the stack', () => {
+  const events = [leadUse(), ...Array.from({ length: 10000 }, (_, i) => start(`n${i}`, i === 0 ? 'lead' : `n${i - 1}`, i + 1))]
+  assert.equal(Object.keys(layoutNodes(state(...events), 'hierarchical', 200, 60)).length, 10001)
+})

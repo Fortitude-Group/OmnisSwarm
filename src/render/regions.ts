@@ -16,8 +16,11 @@ export type Regions = {
 }
 
 /** As the pane shrinks: drop the timeline, then cut the spotlight to one line, then swap the graph for a tree, then one line. */
+const dim = (n: number): number => (Number.isFinite(n) && n > 0 ? n : 0)
+
 export function sizeStep(size: Size): SizeStep {
-  const { columns, rows } = size
+  const columns = dim(size.columns)
+  const rows = dim(size.rows)
   if (rows < SIZE.summaryBelowRows || columns < SIZE.summaryBelowColumns) return 'summary'
   if (rows < SIZE.treeBelowRows || columns < SIZE.treeBelowColumns) return 'tree'
   if (rows < SIZE.compactBelowRows) return 'compactSpotlight'
@@ -30,8 +33,8 @@ const CHIP_ROWS = 1
 
 export function planRegions(size: Size, agents: number): Regions {
   const step = sizeStep(size)
-  const columns = Math.max(1, Math.min(RASTER_MAX.columns, Math.floor(size.columns)))
-  const rows = Math.max(1, Math.floor(size.rows))
+  const columns = Math.max(1, Math.min(RASTER_MAX.columns, Math.floor(dim(size.columns))))
+  const rows = Math.max(1, Math.floor(dim(size.rows)))
   const none = { bottom: null, graph: null, tree: null, chips: false, spotlight: null, timeline: null, feed: null }
   if (step === 'summary') return { ...none, step, top: { columns, rows: 1 }, header: rect(0, 0, columns, 1) }
   if (step === 'tree') {

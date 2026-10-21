@@ -48,3 +48,14 @@ test('a huge pane is held to the Raster limits', () => {
   assert.equal(r.bottom!.rows, 256)
   assert.equal(r.graph!.h, 254)
 })
+
+test('non-finite or non-positive sizes plan as a one-line summary', () => {
+  for (const size of [{ columns: NaN, rows: 44 }, { columns: 120, rows: NaN }, { columns: Infinity, rows: -5 }]) {
+    assert.equal(sizeStep(size), 'summary')
+    const r = planRegions(size, 3)
+    assert.equal(r.step, 'summary')
+    assert.ok(Number.isFinite(r.top.columns) && Number.isFinite(r.top.rows))
+    assert.deepEqual(r.top, { columns: r.top.columns, rows: 1 })
+  }
+  assert.deepEqual(planRegions({ columns: NaN, rows: NaN }, 3).top, { columns: 1, rows: 1 })
+})
