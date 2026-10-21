@@ -13,7 +13,7 @@ export const FEED_REPLY_MAX = 40_000
 export type FeedReply =
   | { v: 1; kind: 'none' }
   | { v: 1; kind: 'too-large'; agents: number }
-  | { v: 1; kind: 'state'; swarm: string; offset: number; state: SwarmState; trimmed?: true }
+  | { v: 1; kind: 'state'; swarm: string; offset: number; state: SwarmState; trimmed?: true; hiddenFinished?: number }
   | { v: 1; kind: 'events'; swarm: string; offset: number; events: SwarmEvent[]; bad: number }
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -34,8 +34,9 @@ export function parseFeedReply(text: string): FeedReply | null {
   const swarm = raw.swarm
   if (raw.kind === 'state') {
     if (raw.trimmed !== undefined && raw.trimmed !== true) return null
+    if (raw.hiddenFinished !== undefined && !isCount(raw.hiddenFinished)) return null
     if (!isSwarmState(raw.state, swarm)) return null
-    return { v: 1, kind: 'state', swarm, offset: raw.offset, state: raw.state, ...(raw.trimmed === true && { trimmed: true as const }) }
+    return { v: 1, kind: 'state', swarm, offset: raw.offset, state: raw.state, ...(raw.trimmed === true && { trimmed: true as const }), ...(raw.hiddenFinished !== undefined && { hiddenFinished: raw.hiddenFinished }) }
   }
   if (raw.kind !== 'events' || !Array.isArray(raw.events) || raw.events.length > FEED_MAX_EVENTS || !isCount(raw.bad)) return null
   const events: SwarmEvent[] = []
@@ -69,17 +70,31 @@ export function fitEvents(events: readonly SwarmEvent[], swarm: string): number 
 const last = <T>(xs: readonly T[], n: number): T[] => (n <= 0 ? [] : xs.slice(-n))
 
 /** A copy of `state` with the stated lists cut; nothing in `state` itself changes. */
-function cut(state: SwarmState, keep: { feed: number; files: number; samples: number; recent: number; edits: number }): SwarmState {
+function cut(
+  state: SwarmState,
+  keep: { feed: number; files: number; samples: number; recent: number; edits: number },
+  drop: ReadonlySet<string> = new Set(),
+): SwarmState {
   const agents: SwarmState['agents'] = {}
   for (const [id, a] of Object.entries(state.agents)) {
-    agents[id] = { ...a, files: last(a.files, keep.files), samples: last(a.samples, keep.samples) }
+    if (!drop.has(id)) agents[id] = { ...a, files: last(a.files, keep.files), samples: last(a.samples, keep.samples) }
   }
+  const byName: SwarmState['byName'] = {}
+  for (const [name, id] of Object.entries(state.byName)) if (!drop.has(id)) byName[name] = id
   const links: SwarmState['links'] = {}
-  for (const [k, l] of Object.entries(state.links)) links[k] = { ...l, recent: last(l.recent, keep.recent) }
+  for (const [k, l] of Object.entries(state.links)) {
+    if (!drop.has(l.from) && !drop.has(l.to)) links[k] = { ...l, recent: last(l.recent, keep.recent) }
+  }
   const edits: SwarmState['edits'] = {}
-  for (const [k, v] of Object.entries(state.edits)) edits[k] = last(v, keep.edits)
-  return { ...state, agents, links, edits, feed: last(state.feed, keep.feed) }
+  for (const [k, v] of Object.entries(state.edits)) {
+    const kept = last(v.filter(e => !drop.has(e.agent)), keep.edits)
+    if (kept.length > 0 || v.length === 0) edits[k] = kept
+  }
+  return { ...state, agents, byName, links, edits, feed: last(state.feed, keep.feed) }
 }
+
+/** Finished agents kept in full when the state is too big; older finished ones are left out. */
+export const KEEP_FINISHED = 20
 
 export type FreshReply = Extract<FeedReply, { kind: 'state' | 'too-large' }>
 
@@ -91,7 +106,9 @@ export function freshReply(swarm: string, offset: number, state: SwarmState): Fr
   const size = (s: SwarmState, trimmed: boolean): number =>
     JSON.stringify({ v: 1, kind: 'state', swarm, offset, state: s, ...(trimmed && { trimmed: true }) }).length
   if (size(state, false) <= FEED_REPLY_MAX) return { v: 1, kind: 'state', swarm, offset, state }
-  const done = (s: SwarmState): FreshReply => ({ v: 1, kind: 'state', swarm, offset, state: s, trimmed: true })
+  const done = (s: SwarmState, hidden = 0): FreshReply => ({
+    v: 1, kind: 'state', swarm, offset, state: s, trimmed: true, ...(hidden > 0 && { hiddenFinished: hidden }),
+  })
   const full = { feed: state.feed.length, files: Infinity, samples: Infinity, recent: Infinity, edits: Infinity }
   // Stage 1: the most feed items that fit; a fit at 0 items means no later stage is needed.
   let lo = 0
@@ -113,5 +130,17 @@ export function freshReply(swarm: string, offset: number, state: SwarmState): Fr
     const s = cut(state, keep)
     if (size(s, true) <= FEED_REPLY_MAX) return done(s)
   }
+  // Stage 5: leave out all but the most recently finished agents; running and waiting ones are never left out.
+  const finished = Object.values(state.agents).filter(a => a.finishedAt !== null)
+    .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0) || (a.id < b.id ? -1 : 1))
+  const dropped = new Set(finished.slice(KEEP_FINISHED).map(a => a.id))
+  const lean = stages[2]!
+  if (dropped.size > 0) {
+    const s = cut(state, lean, dropped)
+    if (size(s, true) <= FEED_REPLY_MAX) return done(s, dropped.size)
+  }
+  // Stage 6: empty every kept agent's files and samples.
+  const s = cut(state, { ...lean, files: 0, samples: 0 }, dropped)
+  if (size(s, true) <= FEED_REPLY_MAX) return done(s, dropped.size)
   return { v: 1, kind: 'too-large', agents: Object.keys(state.agents).length }
 }

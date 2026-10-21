@@ -100,3 +100,13 @@ test('a too-large reply before any state leaves the model empty but flagged', ()
   assert.deepEqual([r.model.state, r.model.degraded], [null, 'too-large'])
   assert.deepEqual(feedArgs(r.model), { since: 0 })
 })
+
+test('hiddenFinished follows the state reply and is kept across events', () => {
+  const state = foldAll(FIVE_SWARM, events.slice(0, 10))
+  const a = applyReply(emptyModel(), { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 10, state, hiddenFinished: 7 }, FIVE_T0).model
+  assert.equal(a.hiddenFinished, 7)
+  const b = applyReply(a, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 20, events: events.slice(10, 12), bad: 0 }, FIVE_T0).model
+  assert.equal(b.hiddenFinished, 7)
+  const c = applyReply(b, { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 30, state }, FIVE_T0).model
+  assert.equal(c.hiddenFinished, 0)
+})

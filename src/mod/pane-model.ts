@@ -9,7 +9,8 @@ import type { Pulse } from '../render/types.ts'
 
 /** Why the last read failed, for the renderer to show; null when the last read was good. */
 export type Degraded = 'too-large' | 'unreadable'
-export type PaneModel = { swarm: string | null; offset: number; state: SwarmState | null; pulses: Pulse[]; lagMs: number; degraded: Degraded | null }
+/** `hiddenFinished`: finished agents the server left out of a trimmed state, for a "+N finished" note. */
+export type PaneModel = { swarm: string | null; offset: number; state: SwarmState | null; pulses: Pulse[]; lagMs: number; degraded: Degraded | null; hiddenFinished: number }
 
 /** Pulses older than this have finished flickering. */
 export const PULSE_KEEP_MS = 2_000
@@ -17,7 +18,7 @@ export const MAX_PULSES = 64
 /** A newest event older than this on arrival is history (a fresh load), not lag. */
 export const MAX_LAG_MS = 1_000
 
-export const emptyModel = (): PaneModel => ({ swarm: null, offset: 0, state: null, pulses: [], lagMs: 0, degraded: null })
+export const emptyModel = (): PaneModel => ({ swarm: null, offset: 0, state: null, pulses: [], lagMs: 0, degraded: null, hiddenFinished: 0 })
 
 /**
  * The arguments of the next omnis_feed pull. No swarm is named on the first pull, so the server picks the session's own.
@@ -62,7 +63,7 @@ function applyGood(m: PaneModel, reply: Exclude<FeedReply, { kind: 'too-large' }
   if (reply.kind === 'state') {
     const swarmChanged = reply.swarm !== m.swarm
     return {
-      model: { swarm: reply.swarm, offset: reply.offset, state: reply.state, pulses: swarmChanged ? [] : prunePulses(m.pulses, arrivedAt), lagMs: swarmChanged ? 0 : m.lagMs, degraded: null },
+      model: { swarm: reply.swarm, offset: reply.offset, state: reply.state, pulses: swarmChanged ? [] : prunePulses(m.pulses, arrivedAt), lagMs: swarmChanged ? 0 : m.lagMs, degraded: null, hiddenFinished: reply.hiddenFinished ?? 0 },
       changed: true,
       swarmChanged,
     }
@@ -84,7 +85,7 @@ function applyGood(m: PaneModel, reply: Exclude<FeedReply, { kind: 'too-large' }
   const sample = arrivedAt - newest
   const lagMs = Number.isFinite(sample) && sample >= 0 && sample <= MAX_LAG_MS ? Math.round(m.lagMs * 0.8 + sample * 0.2) : m.lagMs
   return {
-    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs, degraded: null },
+    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs, degraded: null, hiddenFinished: m.hiddenFinished },
     changed: reply.events.length > 0 || reply.bad > 0,
     swarmChanged: false,
   }
