@@ -2,7 +2,7 @@
 import { LEAD, type AgentState, type SwarmState } from '../core/fold.ts'
 import type { AgentStats, Clash } from '../core/stats.ts'
 import { Dots, Pixels, compose, toDots } from './canvas.ts'
-import { desaturate, mix, quantise, scale } from './color.ts'
+import { add, clamp01, desaturate, mix, quantise, scale } from './color.ts'
 import { clipText } from './format.ts'
 import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
@@ -140,27 +140,50 @@ function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): Map<stri
   return out
 }
 
+/**
+ * Disc, context ring, glow and rim for one node. It runs for every node on every frame, so it touches only pixels the
+ * node can draw (a squared-distance test first), writes the pixel array directly and works out the disc's four shades
+ * once. The colours are the same arithmetic as before, pixel for pixel.
+ */
 function paintNode(px: Pixels, n: Node, glowK: number, ring: { fill: number; color: number } | null, rim: Rim): void {
-  const reach = n.r + GRAPH.ringPx + GRAPH.glowPx + 1
-  for (let y = Math.floor(n.p.y - reach); y <= Math.ceil(n.p.y + reach); y++) {
-    for (let x = Math.floor(n.p.x - reach); x <= Math.ceil(n.p.x + reach); x++) {
+  const r = n.r
+  const ringOut = r + GRAPH.ringPx
+  const outer = r + GRAPH.ringPx + GRAPH.glowPx
+  const band = r + GRAPH.ringPx + 1
+  const flare = rim !== null && rim.flare
+  // The farthest a pixel is drawn: the glow, else the flare band, else the ring, else the disc.
+  const limit = glowK > 0 ? outer : flare ? Math.min(outer, band) : ring !== null ? ringOut : r
+  const limit2 = (limit + 1e-6) * (limit + 1e-6)
+  const reach = r + GRAPH.ringPx + GRAPH.glowPx + 1
+  const y0 = Math.max(0, Math.floor(n.p.y - reach))
+  const y1 = Math.min(px.height - 1, Math.ceil(n.p.y + reach))
+  const x0 = Math.max(0, Math.floor(n.p.x - reach))
+  const x1 = Math.min(px.width - 1, Math.ceil(n.p.x + reach))
+  const shade = [0, 1, 2, 3].map(q => mix(n.fill, WHITE, (q / 3) * 0.28))
+  const dimRing = mix(CANVAS, TEXT.faint, 0.35)
+  const data = px.data
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - n.p.y
+    for (let x = x0; x <= x1; x++) {
       const dx = x + 0.5 - n.p.x
-      const dy = y + 0.5 - n.p.y
+      if (dx * dx + dy * dy > limit2) continue
       const d = Math.hypot(dx, dy)
-      if (d <= n.r) {
-        px.set(x, y, mix(n.fill, WHITE, quantise(1 - d / n.r, 4) * 0.28))
-        if (rim !== null && d > n.r - 1) px.blend(x, y, rim.color, rim.k)
-      } else if (ring !== null && d <= n.r + GRAPH.ringPx) {
+      const i = y * px.width + x
+      if (d <= r) {
+        // quantise(1 - d / r, 4) is one of q / 3 for q in 0..3.
+        data[i] = shade[Math.round(clamp01(1 - d / r) * 3)]!
+        if (rim !== null && d > r - 1) data[i] = mix(data[i]!, rim.color, rim.k)
+      } else if (ring !== null && d <= ringOut) {
         let angle = Math.atan2(dx, -dy)
         if (angle < 0) angle += 2 * Math.PI
-        px.set(x, y, angle / (2 * Math.PI) <= ring.fill ? ring.color : mix(CANVAS, TEXT.faint, 0.35))
-      } else if (d <= n.r + GRAPH.ringPx + GRAPH.glowPx) {
+        data[i] = angle / (2 * Math.PI) <= ring.fill ? ring.color : dimRing
+      } else if (d <= outer) {
         if (glowK > 0) {
-          const k = quantise(1 - (d - n.r) / (GRAPH.ringPx + GRAPH.glowPx), 5) * glowK
-          px.light(x, y, n.fill, k * 0.8)
+          const k = quantise(1 - (d - r) / (GRAPH.ringPx + GRAPH.glowPx), 5) * glowK
+          data[i] = add(data[i]!, n.fill, k * 0.8)
         }
         // One pixel band outside the ring, so a flicker the same hue as the node still shows.
-        if (rim !== null && rim.flare && d > n.r + GRAPH.ringPx && d <= n.r + GRAPH.ringPx + 1) px.light(x, y, rim.color, 0.6 * rim.k)
+        if (flare && d > ringOut && d <= band) data[i] = add(data[i]!, rim.color, 0.6 * rim.k)
       }
     }
   }
