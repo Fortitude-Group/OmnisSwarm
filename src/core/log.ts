@@ -52,6 +52,7 @@ export function ensureGitignore(root: string): void {
 /**
  * Creates `dir` if missing, then insists it is a real directory inside the project.
  * Another process may create it at the same moment, so EEXIST is fine: whatever is there gets the same checks.
+ * The checks hold when they run; nothing here notices a folder swapped for a link afterwards.
  */
 function checkedDir(root: string, dir: string): void {
   let stat = lstatSync(dir, { throwIfNoEntry: false })
@@ -104,7 +105,11 @@ export function renameWithRetry(from: string, to: string): void {
   }
 }
 
-/** One append of one line. Retries once, and returns false rather than throwing. The folders are fully checked on the first append and after any failure. */
+/**
+ * One append of one line. Retries once, and returns false rather than throwing. The folders are fully checked on the
+ * first append for a root and again after any failure. In between, only the log file itself is refused if it is a link:
+ * a log folder swapped for a link is written through unnoticed unless an append fails (an accepted trade-off).
+ */
 export function appendEvent(root: string, event: SwarmEvent): boolean {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

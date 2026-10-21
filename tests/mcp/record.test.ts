@@ -266,3 +266,11 @@ test('a foreign or an ended swarm is never picked as the restarted session\'s ow
   assert.notEqual(mine, `session-${sessionKey(SID_B).slice(0, 8)}`)
   assert.equal(restarted.owned, true)
 })
+
+test('a lone surrogate in free text is refused and nothing is written', () => {
+  const { root, call } = setup()
+  for (const subject of ['npm \uD800test', 'trailing \uDC00']) {
+    assert.throws(() => call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...TOOL, subject } }), InputError)
+  }
+  assert.equal(readCurrent(root), null)
+})

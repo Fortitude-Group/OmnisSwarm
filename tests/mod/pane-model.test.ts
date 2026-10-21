@@ -111,3 +111,13 @@ test('hiddenFinished follows the state reply and is kept across events', () => {
   const c = applyReply(b, { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 30, state }, FIVE_T0).model
   assert.equal(c.hiddenFinished, 0)
 })
+
+test('hiddenFinished is cleared once folded events bring in an agent the state did not hold', () => {
+  // The new agent may be one the server left out of the trimmed state, so the count can no longer be trusted.
+  const state = foldAll(FIVE_SWARM, events.slice(0, 8))
+  assert.equal(Object.hasOwn(state.agents, 'a-cod2'), false)
+  const a = applyReply(emptyModel(), { v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 8, state, hiddenFinished: 7 }, FIVE_T0).model
+  const b = applyReply(a, { v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 9, events: events.slice(8, 9), bad: 0 }, FIVE_T0).model
+  assert.equal(Object.hasOwn(b.state!.agents, 'a-cod2'), true)
+  assert.equal(b.hiddenFinished, 0)
+})

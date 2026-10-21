@@ -121,9 +121,11 @@ function chainEnd($: EngineInterface, started: Promise<void>, end: RecordBody | 
 }
 
 async function restore($: EngineInterface): Promise<void> {
-  const stored = await read($, droppedAtom)
-  for (const id of await read($, seenAtom)) rec.seen.add(id)
-  rec.outbox.dropped += stored
+  // $.state may hold anything (a corrupt or older file): keep only what has the right shape.
+  const stored: unknown = await read($, droppedAtom)
+  const seen: unknown = await read($, seenAtom)
+  if (Array.isArray(seen)) for (const id of seen) if (typeof id === 'string') rec.seen.add(id)
+  rec.outbox.dropped += typeof stored === 'number' && Number.isSafeInteger(stored) && stored >= 0 ? stored : 0
 }
 
 async function start($: EngineInterface): Promise<void> {

@@ -99,6 +99,15 @@ test('auto opens the pane when a swarm starts, but not again after the person cl
   expect(seen.opens).toBe(1)
 })
 
+test('auto opens the pane for omnis_swarm_init under the .mcp.json server name too', { options: { panel: 'auto' } }, async ($, on) => {
+  const seen = engine(on)
+  on('tool.call', () => ({ result: {} }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'mcp__omnis-swarm__omnis_swarm_init', name: 'x', topology: 'mesh' })
+  await until(() => seen.opens === 1)
+  expect(seen.opens).toBe(1)
+})
+
 test('auto opens the pane when an agent is spawned through the Agent tool', { options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
@@ -200,6 +209,8 @@ test('a refused blit is sent again by the next frame, even when its cells have n
   for (let i = 0; i < 400 && seen.blitLog.filter(b => !b.ok).length === 0; i++) await clock.advance(250)
   const refused = seen.blitLog.find(b => !b.ok)
   expect(refused).toBeDefined()
+  // This discriminates only while nothing animates: a moving picture sends fresh cells on its own, with or without the
+  // fix. The five-agent swarm at FIVE_AT.mid is still enough between pulls for the frames to match.
   // Every pull answers a whole state, and each answer draws a frame. Frames that send nothing are invisible to the
   // stub, so the answers mark frames: the resend must come no later than the frame drawn for the first answer after
   // the refusal, so before the second answer. Without the fix, identical frames send nothing until the picture moves.
@@ -363,6 +374,24 @@ test('auto opens the pane while a foreground Agent call is still running', { opt
   void $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
   await until(() => seen.opens === 1)
 })
+
+for (const [what, pin] of [['a number', 42], ['an object', { toString: 1, valueOf: 1 }], ['an unknown agent', 'a-gone']] as const) {
+  test(`a stored pin that is ${what} counts as no pin, and the pane draws normally`, async ($, on) => {
+    const seen = engine(on)
+    on('state.get', (_, e) => ({ value: { value: String(e.key) === 'panePinned' ? pin : undefined, version: 0 } }))
+    const clock = mock.clock(on, { now: FIVE_AT.mid })
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+    await clock.settle()
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(rasterText(await ui.find({ type: 'Raster', key: 'top' })).join('\n')).toContain('architect')
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons).toHaveLength(6)
+    expect(buttons.every(b => b.props.variant === undefined)).toBe(true)
+    expect(feedCalls(seen).length).toBeGreaterThan(0)
+    await ui.unmount()
+  })
+}
 
 test('off the terminal a grid becomes Svg source, or the summary as text when the Svg is too big or the surface has none', () => {
   const grid = new Grid(40, 10, 0x0b0f17, 0xe6edf3)

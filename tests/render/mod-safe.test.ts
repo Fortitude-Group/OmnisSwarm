@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// The pane runs inside Claude Code's mod sandbox: web APIs only. This walks every render and pane file and
+// The mod runs inside Claude Code's mod sandbox: web APIs only. This walks every render and mod file and
 // everything they import, and fails on anything that sandbox does not have.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BANNED: Array<[string, RegExp]> = [
@@ -30,11 +30,13 @@ function entries(): string[] {
     for (const name of readdirSync(full)) if (name.endsWith('.ts') && !name.endsWith('.test.ts') && keep(name)) out.push(join(full, name))
   }
   add('src/render', () => true)
-  add('src/mod', name => name.startsWith('pane'))
+  // Every mod file; test-engine.ts is test support that reads the fixtures under tests/.
+  add('src/mod', name => name !== 'test-engine.ts')
   return out
 }
 
-test('render and pane files, and everything they import, are mod-safe', () => {
+test('render and mod files, and everything they import, are mod-safe', () => {
+  assert.ok(entries().some(f => f.endsWith('recorder.ts')), 'the walk includes the recorder')
   const queue = entries()
   assert.ok(queue.length > 0, 'found the render files')
   const seen = new Set<string>()

@@ -18,8 +18,11 @@ export const PANE = {
 } as const
 export const RUN = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
 
-export type Feed = 'ok' | 'error' | 'garbage' | 'late' | 'throw'
-/** What the stub saw, and its switches: `shown` (the pane placed but hidden when false), `feed` (how omnis_feed answers), `connectOk`. */
+export type Feed = 'ok' | 'quiet' | 'error' | 'garbage' | 'late' | 'throw'
+/**
+ * What the stub saw, and its switches: `shown` (the pane placed but hidden when false), `feed` (how omnis_feed answers:
+ * 'ok' a whole state every time, which counts as news; 'quiet' the state for a first pull, then nothing new), `connectOk`.
+ */
 export type Seen = {
   calls: Array<{ tool: string; args: Record<string, unknown> }>
   opens: number
@@ -105,6 +108,9 @@ export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: F
     if (seen.feed === 'error') return { value: { content: [{ type: 'text', text: 'omnis_feed failed' }], isError: true } }
     // Past the MCP output cap the engine hands back a notice in place of the reply.
     if (seen.feed === 'garbage') return { value: { content: [{ type: 'text', text: 'Output too large (61.2KB), saved to a file.' }], isError: false } }
+    if (seen.feed === 'quiet' && Number(e.args.since ?? 0) === 100) {
+      return { value: { content: [{ type: 'text', text: JSON.stringify({ v: 1, kind: 'events', swarm: FIVE_SWARM, offset: 100, events: [], bad: 0 }) }], isError: false } }
+    }
     const text = JSON.stringify({ v: 1, kind: 'state', swarm: FIVE_SWARM, offset: 100, state })
     seen.newsAt = ++seen.seq
     seen.news.push(seen.newsAt)
