@@ -222,10 +222,37 @@ export function sameCells(a: Grid, b: Grid): boolean {
   return true
 }
 
+/** pairCount's hash table of cell numbers plus one (0 is empty), kept between calls and grown as grids need. */
+let pairSlots = new Int32Array(0)
+
+/** How many distinct fg/bg pairs the grid holds. An open-addressed table over the cells, not a Set: it runs every frame. */
 export function pairCount(grid: Grid): number {
-  const pairs = new Set<number>()
-  for (let i = 0; i < grid.columns * grid.rows; i++) pairs.add(grid.cells[i * 3 + 1]! * 0x2000000 + grid.cells[i * 3 + 2]!)
-  return pairs.size
+  const n = grid.columns * grid.rows
+  const cells = grid.cells
+  let size = 16
+  while (size < n * 2) size *= 2
+  if (pairSlots.length < size) pairSlots = new Int32Array(size)
+  const slots = pairSlots
+  slots.fill(0, 0, size)
+  const mask = size - 1
+  let count = 0
+  for (let i = 0; i < n; i++) {
+    const fg = cells[i * 3 + 1]!
+    const bg = cells[i * 3 + 2]!
+    let h = (Math.imul(fg, 0x9e3779b1) ^ Math.imul(bg ^ (bg >>> 15), 0x85ebca77)) >>> 0
+    h = (h ^ (h >>> 13)) & mask
+    for (;;) {
+      const j = slots[h]!
+      if (j === 0) {
+        slots[h] = i + 1
+        count++
+        break
+      }
+      if (cells[(j - 1) * 3 + 1] === fg && cells[(j - 1) * 3 + 2] === bg) break
+      h = (h + 1) & mask
+    }
+  }
+  return count
 }
 
 /**

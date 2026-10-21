@@ -159,3 +159,23 @@ test('sameCells is true only for the same size and every cell alike', () => {
   assert.equal(sameCells(a, b), false)
   assert.equal(sameCells(new Grid(4, 2), new Grid(2, 4)), false)
 })
+
+test('pairCount agrees with a plain Set of pairs, for small, large and default-coloured grids', () => {
+  const bySet = (g: Grid) => {
+    const pairs = new Set<string>()
+    for (let i = 0; i < g.columns * g.rows; i++) pairs.add(`${g.cells[i * 3 + 1]} ${g.cells[i * 3 + 2]}`)
+    return pairs.size
+  }
+  for (const [w, h, colours] of [[1, 1, 1], [7, 3, 4], [120, 26, 40], [120, 26, 3000], [512, 256, 50_000]] as const) {
+    const g = new Grid(w, h)
+    let seed = w * 7919 + h
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+        const fg = seed % colours === 0 ? 0x01000000 : (seed % colours) * 0x010203
+        g.set(x, y, 0x41, fg & 0x1ffffff, ((seed >>> 8) % colours) * 0x030201)
+      }
+    }
+    assert.equal(pairCount(g), bySet(g), `${w}x${h}`)
+  }
+})
