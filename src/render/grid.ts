@@ -1,0 +1,213 @@
+/**
+ * A cell grid for the terminal's Raster: per cell a glyph, a 24-bit foreground and a background, packed as base64 of
+ * little-endian u32 triplets [codePoint, fg, bg], row-major. Every glyph passes safeGlyph, because one bad cell makes
+ * the engine refuse the whole tree. Base64 is done by hand so this runs in a mod and in Node alike. Pure.
+ */
+import { DEFAULT, rgb } from './color.ts'
+
+const SPACE = 0x20
+const REPLACEMENT = 0x3f
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+/** East Asian Wide and Fullwidth ranges in the BMP, and the BMP characters drawn as emoji by default. */
+const WIDE: ReadonlyArray<readonly [number, number]> = [
+  [0x1100, 0x115f], [0x231a, 0x231b], [0x2329, 0x232a], [0x23e9, 0x23ec], [0x23f0, 0x23f0], [0x23f3, 0x23f3],
+  [0x25fd, 0x25fe], [0x2614, 0x2615], [0x2648, 0x2653], [0x267f, 0x267f], [0x2693, 0x2693], [0x26a1, 0x26a1],
+  [0x26aa, 0x26ab], [0x26bd, 0x26be], [0x26c4, 0x26c5], [0x26ce, 0x26ce], [0x26d4, 0x26d4], [0x26ea, 0x26ea],
+  [0x26f2, 0x26f3], [0x26f5, 0x26f5], [0x26fa, 0x26fa], [0x26fd, 0x26fd], [0x2705, 0x2705], [0x270a, 0x270b],
+  [0x2728, 0x2728], [0x274c, 0x274c], [0x274e, 0x274e], [0x2753, 0x2755], [0x2757, 0x2757], [0x2795, 0x2797],
+  [0x27b0, 0x27b0], [0x27bf, 0x27bf], [0x2b1b, 0x2b1c], [0x2b50, 0x2b50], [0x2b55, 0x2b55], [0x2e80, 0x303e],
+  [0x3041, 0x33ff], [0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xa960, 0xa97f], [0xac00, 0xd7a3],
+  [0xf900, 0xfaff], [0xfe10, 0xfe19], [0xfe30, 0xfe6f], [0xff00, 0xff60], [0xffe0, 0xffe6],
+]
+/** Marks (zero width), controls, format characters, surrogates, private use, unassigned, line and paragraph separators. */
+const NOT_A_CELL = /[\p{M}\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u
+
+/** The code point if the Raster accepts it (printable, one cell wide, in the BMP), otherwise '?'. */
+export function safeGlyph(cp: number): number {
+  if (!Number.isInteger(cp) || cp < SPACE || cp > 0xffff) return REPLACEMENT
+  if (cp >= 0xd800 && cp <= 0xdfff) return REPLACEMENT
+  if (NOT_A_CELL.test(String.fromCharCode(cp))) return REPLACEMENT
+  for (const [lo, hi] of WIDE) if (cp >= lo && cp <= hi) return REPLACEMENT
+  return cp
+}
+
+/** The first code point of `ch`. */
+export const cp = (ch: string): number => ch.codePointAt(0) ?? SPACE
+
+export class Grid {
+  readonly columns: number
+  readonly rows: number
+  readonly cells: Uint32Array
+
+  constructor(columns: number, rows: number, bg: number = DEFAULT, fg: number = DEFAULT) {
+    this.columns = Math.max(1, Math.floor(columns))
+    this.rows = Math.max(1, Math.floor(rows))
+    this.cells = new Uint32Array(this.columns * this.rows * 3)
+    for (let i = 0; i < this.columns * this.rows; i++) {
+      this.cells[i * 3] = SPACE
+      this.cells[i * 3 + 1] = fg >>> 0
+      this.cells[i * 3 + 2] = bg >>> 0
+    }
+  }
+
+  #at(x: number, y: number): number {
+    const cx = Math.floor(x)
+    const cy = Math.floor(y)
+    return cx < 0 || cy < 0 || cx >= this.columns || cy >= this.rows ? -1 : (cy * this.columns + cx) * 3
+  }
+
+  /** Writes one cell. Leaves the background as it is when `bg` is not given. */
+  set(x: number, y: number, codePoint: number, fg: number, bg?: number): void {
+    const at = this.#at(x, y)
+    if (at < 0) return
+    this.cells[at] = safeGlyph(codePoint)
+    this.cells[at + 1] = fg >>> 0
+    if (bg !== undefined) this.cells[at + 2] = bg >>> 0
+  }
+
+  glyph(x: number, y: number): number {
+    const at = this.#at(x, y)
+    return at < 0 ? SPACE : this.cells[at]!
+  }
+
+  fg(x: number, y: number): number {
+    const at = this.#at(x, y)
+    return at < 0 ? DEFAULT : this.cells[at + 1]!
+  }
+
+  bg(x: number, y: number): number {
+    const at = this.#at(x, y)
+    return at < 0 ? DEFAULT : this.cells[at + 2]!
+  }
+
+  /** Blanks a box of cells to `bg`. */
+  fill(x: number, y: number, w: number, h: number, bg: number): void {
+    for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) this.set(cx, cy, SPACE, bg, bg)
+  }
+
+  /** Writes text left to right from (x, y): at most `max` cells and never past the edge. Returns the cells written. */
+  text(x: number, y: number, s: string, fg: number, bg?: number, max = Number.POSITIVE_INFINITY): number {
+    let n = 0
+    for (const ch of s) {
+      if (n >= max || x + n >= this.columns) break
+      this.set(x + n, y, cp(ch), fg, bg)
+      n++
+    }
+    return n
+  }
+
+  /** The cells as the Raster's base64. Uint32Array is little-endian on every platform Claude Code runs on. */
+  encode(): string {
+    return toBase64(new Uint8Array(this.cells.buffer, this.cells.byteOffset, this.cells.byteLength))
+  }
+
+  toRaster(key: string): { key: string; columns: number; rows: number; cells: string } {
+    return { key, columns: this.columns, rows: this.rows, cells: this.encode() }
+  }
+}
+
+export function toBase64(bytes: Uint8Array): string {
+  let out = ''
+  let i = 0
+  for (; i + 2 < bytes.length; i += 3) {
+    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8) | bytes[i + 2]!
+    out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]! + B64[(n >> 6) & 63]! + B64[n & 63]!
+  }
+  if (bytes.length - i === 1) {
+    const n = bytes[i]! << 16
+    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}==`
+  } else if (bytes.length - i === 2) {
+    const n = (bytes[i]! << 16) | (bytes[i + 1]! << 8)
+    out += `${B64[(n >> 18) & 63]}${B64[(n >> 12) & 63]}${B64[(n >> 6) & 63]}=`
+  }
+  return out
+}
+
+export function fromBase64(text: string): Uint8Array {
+  const clean = text.replace(/=+$/, '')
+  const out = new Uint8Array(Math.floor((clean.length * 3) / 4))
+  let acc = 0
+  let bits = 0
+  let o = 0
+  for (const ch of clean) {
+    const v = B64.indexOf(ch)
+    if (v < 0) throw new RangeError('not base64')
+    acc = ((acc << 6) | v) & 0x3fff
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      out[o++] = (acc >> bits) & 255
+    }
+  }
+  return out.subarray(0, o)
+}
+
+/** A grid from a Raster's cells, for tests and previews. Throws RangeError when the size does not match. */
+export function decodeCells(b64: string, columns: number, rows: number): Grid {
+  const bytes = fromBase64(b64)
+  if (bytes.length !== columns * rows * 12) throw new RangeError(`cells hold ${bytes.length} bytes, not ${columns * rows * 12}`)
+  const words = new Uint32Array(bytes.slice().buffer)
+  const grid = new Grid(columns, rows)
+  grid.cells.set(words)
+  return grid
+}
+
+/** Each row's glyphs as a string. */
+export function gridText(grid: Grid): string[] {
+  const rows: string[] = []
+  for (let y = 0; y < grid.rows; y++) {
+    let line = ''
+    for (let x = 0; x < grid.columns; x++) line += String.fromCodePoint(grid.glyph(x, y))
+    rows.push(line)
+  }
+  return rows
+}
+
+export function pairCount(grid: Grid): number {
+  const pairs = new Set<number>()
+  for (let i = 0; i < grid.columns * grid.rows; i++) pairs.add(grid.cells[i * 3 + 1]! * 0x2000000 + grid.cells[i * 3 + 2]!)
+  return pairs.size
+}
+
+/**
+ * Coarsens colours, one more low bit per channel each round, until the grid holds at most `max` fg/bg pairs.
+ * Returns how many bits it dropped (0 when the grid was already under budget). At 7 bits there are at most 9 colours.
+ */
+export function limitPairs(grid: Grid, max: number): number {
+  for (let drop = 0; drop <= 7; drop++) {
+    if (drop > 0) {
+      const step = 1 << drop
+      const snap = (v: number) => Math.min(255, Math.round(v / step) * step)
+      for (let i = 0; i < grid.columns * grid.rows; i++) {
+        for (const slot of [i * 3 + 1, i * 3 + 2]) {
+          const c = grid.cells[slot]!
+          if (c !== DEFAULT) grid.cells[slot] = rgb(snap((c >>> 16) & 255), snap((c >>> 8) & 255), snap(c & 255))
+        }
+      }
+    }
+    if (pairCount(grid) <= max) return drop
+  }
+  return 7
+}
+
+/** One coloured run of text. */
+export type Part = readonly [text: string, fg: number]
+
+/** Writes parts left to right from x, stopping before maxX. Returns the next free column. */
+export function writeParts(grid: Grid, x: number, y: number, parts: readonly Part[], maxX: number, bg?: number): number {
+  let cx = x
+  for (const [text, fg] of parts) {
+    if (cx >= maxX) break
+    cx += grid.text(cx, y, text, fg, bg, maxX - cx)
+  }
+  return cx
+}
+
+/** Writes parts so they end just before maxX, never starting left of minX. Returns the column it started at. */
+export function writeRight(grid: Grid, y: number, parts: readonly Part[], minX: number, maxX: number, bg?: number): number {
+  const width = parts.reduce((n, [text]) => n + [...text].length, 0)
+  const start = Math.max(minX, maxX - width)
+  writeParts(grid, start, y, parts, maxX, bg)
+  return start
+}
