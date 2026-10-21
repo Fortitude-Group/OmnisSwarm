@@ -1,4 +1,4 @@
-import { expect, mock, test, type TestBody } from 'claude-code/testing'
+import { expect, mock, test, type MockClock, type TestBody } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { foldAll } from '../core/fold.ts'
 import { Grid, decodeCells, gridText } from '../render/grid.ts'
@@ -291,9 +291,18 @@ async function opened($: Parameters<TestBody>[0], on: On, small = false) {
   return { seen, clock, ui, top }
 }
 
+/**
+ * The pane draws each frame at the real time while the test's clock is mocked, and blits only cells that changed, so
+ * a blit comes once enough real time has passed for the picture to move. The render budget spaces frames by their real
+ * cost, so how many land in a mocked second depends on the machine: move the clock on until one has.
+ */
+async function untilBlit(seen: Seen, clock: MockClock): Promise<void> {
+  for (let i = 0; i < 400 && seen.blits === 0; i++) await clock.advance(250)
+}
+
 test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the panes about once a second, and resumes when shown', async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
-  await clock.advance(1000)
+  await untilBlit(seen, clock)
   expect(seen.blits).toBeGreaterThan(0)
   seen.shown = false
   await clock.advance(300)
@@ -315,6 +324,7 @@ test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the p
 
 test('a Raster whose cells have not changed is not blitted again', async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
+  await untilBlit(seen, clock)
   await clock.advance(3000)
   expect(seen.blits).toBeGreaterThan(0)
   expect(seen.repeats).toBe(0)
