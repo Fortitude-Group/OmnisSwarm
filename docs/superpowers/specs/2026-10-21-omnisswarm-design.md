@@ -59,27 +59,32 @@ Non-goals (v1)
 
 ```
  Claude Code session
- ├─ Agent tool / SendMessage / tool calls ──▶ Recorder (mod)          ─┐
- ├─ subagent + lead transcripts (.jsonl) ───▶ Transcript reader (mod) ─┤ append
- └─ Claude calls omnis_* tools ────────────▶ MCP server (stdio)       ─┤
-                                                                       ▼
-                                   .omnis-swarm/swarms/<swarmId>.jsonl
-                                                                       │ follow
-                                      ┌────────────────────────────────┤
-                                      ▼                                ▼
-                               Pane (mod, Raster)         (later) hub ─▶ WebGL window
+ ├─ Agent tool / SendMessage / tool calls / model steps ─▶ Recorder (mod) ─┐ $.mcp.call
+ └─ Claude calls omnis_* tools ──────────────────────────────────────────┐ │
+                                                                         ▼ ▼
+                                                      MCP server (stdio, the only writer)
+                                                                         │ append
+                                                                         ▼
+                                                   .omnis-swarm/swarms/<swarmId>.jsonl
+                                                                         │ follow
+                                      ┌──────────────────────────────────┤
+                                      ▼ (via the MCP server)             ▼
+                               Pane (mod, Raster)           (later) hub ─▶ WebGL window
 ```
+
+A hooks module runs with no Node: it imports only its own files and `claude-code`, and reaches files
+through `$.fs`, which can't append or read from an offset (spike Q5). So the mod never touches the log
+file. It hands each event to the plugin's own MCP server with `$.mcp.call`, and the server appends it.
 
 Units, each with one job and a typed interface:
 
 | Unit | Job | Depends on |
 |---|---|---|
 | `core` | Event types, append, follow, pure `fold(events) → SwarmState`, price table | nothing |
-| `mcp` | `omnis_*` tools; writes swarm, memory and task events | core |
-| `recorder` | Mod handlers; turns Claude Code events into log events | core, mod API |
-| `transcripts` | Follows transcript files; writes `agent.usage` | core |
+| `mcp` | `omnis_*` tools; writes swarm, memory and task events; appends the events the recorder sends | core |
+| `recorder` | Mod handlers; turns Claude Code events (including `turn.step` usage) into log events and sends them to `mcp` | core (Node-free parts), mod API |
 | `render` | Pure `render(state, view, nowMs, size) → Grid`; layout, glow, particles | core |
-| `pane` | Mod pane: opens, follows the log, calls `render`, handles pin chips | core, render, mod API |
+| `pane` | Mod pane: opens, gets swarm state through `mcp` (not by reading the log file), calls `render`, handles pin chips | core (Node-free parts), render, mod API |
 
 Repository layout (`Fortitude-Group/OmnisSwarm`, which is also its own plugin marketplace):
 
@@ -88,15 +93,19 @@ Repository layout (`Fortitude-Group/OmnisSwarm`, which is also its own plugin ma
 .claude-plugin/marketplace.json   single-plugin marketplace
 src/core/       events.ts  log.ts  fold.ts  stats.ts  prices.ts
 src/mcp/        server.ts  tools/*.ts
-src/mod/        register.ts  recorder.ts  transcripts.ts  pane.ts
+src/mod/        register.ts  recorder.ts  pane.ts
 src/render/     layout.ts  graph.ts  spotlight.ts  timeline.ts  feed.ts  fx.ts  grid.ts
 tests/          mirrors src/, plus fixtures/ and e2e/
 docs/           this spec, event-log reference, hub protocol
 ```
 
 Runtime: TypeScript on Node 24 with no native dependencies. Mods are loaded by Claude Code
-as `.ts` (as RuFlo's are). The MCP server runs with Node's built-in type stripping, so there is
-no build step, if that holds up in practice (see section 15). No file over 500 lines.
+as `.ts` (as RuFlo's are) in an environment with no Node, so every file under `src/mod/` and
+`src/render/`, and every `src/core/` file they import (`events.ts`, `fold.ts`, `stats.ts`,
+`prices.ts`), must import nothing from `node:*`. Only `core/log.ts` and `src/mcp/` use Node. A
+mod may pass `$` only to functions declared at the top of a file or imported from its own files.
+The MCP server runs with Node's built-in type stripping, so there is no build step (verified,
+see section 15). No file over 500 lines.
 
 ## 5. Swarm model and MCP tools
 
@@ -135,36 +144,50 @@ the result through unchanged, even if the handler throws.
 
 | Claude Code event | Log event |
 |---|---|
-| `session.start` | Remembers the session id and the transcript folder; no log write |
-| `agent.spawn` (after `next`, with `result.agentId`) | `agent.started`: `name`, `role` (`subagentType`), `description` (≤ 120 chars), `parent` (spawning agent id, or `lead`) |
-| `turn.complete` with `agentId` | `agent.finished`: `outcome` = `answer` \| `aborted` \| `failed`, plus reason (≤ 80 chars) |
+| `session.start` | Remembers the session id (`$.session.id()`; the payload carries none); no log write |
+| `agent.spawn` (after `next`, with `result.agentId`) | `agent.started`: `name`, `role` (`subagentType`), `description` (≤ 120 chars), `parent` (`parentAgentId`, or `lead` when absent) |
+| `turn.complete` with `agentId` | `agent.finished`: `outcome` = `answer` (reason `answer`) \| `aborted` (`aborted`) \| `failed` (`refusal` or `error`), plus the raw reason (≤ 80 chars) |
+| `turn.step` with `agentId` (after `next`, when `usage` is not null), or without it for the lead | `agent.usage` from the step's `usage`, see section 7 |
 | `tool.call` (before and after `next`) | `agent.tool`: `phase` `start`/`end`, `tool`, `kind` (read, edit, bash, search, web, agent, other), `subject` (path or command, ≤ 80 chars), `isError` |
-| `tool.call` where `tool` is `SendMessage` | `message.sent`: `to`, `summary` (first 200 chars) |
+| `session.send` (after `next`, when `isDelivered`) | `message.sent`: `to`, `summary` (first 200 chars of `text`) |
+| `session.measure` when `changed` has `context` or `cost` | `session.measure`, see section 9 |
 | `ui.render` / `ui.close` / `command.run` | Pane only, see section 10 |
 
-The lead (main session) is agent id `lead`. Tool calls with no `agentId` belong to the lead.
+Each handler sends its event to the MCP server with `$.mcp.call` without awaiting it before `next`,
+and drops it on any error. The server's recording tool is refused for the model at `tool.check`.
+
+The lead (main session) is agent id `lead`. Tool calls, steps and turns with no `agentId` belong to
+the lead. An `agentId` the recorder never saw in an `agent.spawn` (an engine fork for compaction or
+memory) is ignored. A subagent resumed by `SendMessage` raises no `agent.spawn`, and a resumed agent
+or a teammate raises `turn.complete` once per run, so `fold` lets a `done` agent go back to `running`
+when new activity arrives.
 
 `SendMessage` addresses agents by name, but the graph is keyed by agent id. The recorder logs
-`to` exactly as given. `fold` resolves it to the most recently started agent with that name in
-the swarm (or `lead`). A name it can't resolve becomes a placeholder node marked "unknown",
-so the message still shows rather than being dropped.
+`to` exactly as given. `fold` resolves `main` to `lead` (the lead's address as SendMessage spells
+it), and any other name to the most recently started agent with that name in the swarm. A name it
+can't resolve becomes a placeholder node marked "unknown", so the message still shows rather than
+being dropped. `session.send` carries plain-text messages only; the protocol messages
+(`shutdown_request` and the like) are visible only as `SendMessage` tool calls.
 
-## 7. Transcript reader
+## 7. Token usage
 
-Subagent transcripts are at
-`~/.claude/projects/<project>/<sessionId>/subagents/agent-<agentId>.jsonl` (checked on this
-machine). Each assistant line carries `message.model`, `message.usage` and `timestamp`.
-
-The reader follows the lead's transcript and the transcript of every agent the recorder has
-seen start. For each new assistant line it appends:
+Changed by the mod API spike: there is no transcript reader. A mod can't read a file from an
+offset, and `$.fs.read` stops at 4 MiB (a trivial subagent's transcript was already 450 KB). The
+`turn.step` event gives the same figures live instead: every model request, the lead's or a
+subagent's (`agentId`), resolves to a result whose `usage` is `{ input_tokens, output_tokens,
+cache_read_input_tokens, cache_creation_input_tokens, model }`. For each step with a non-null
+`usage` the recorder sends:
 
 ```json
-{"type":"agent.usage","agent":"a050fac0e3c57d55a","data":{"model":"claude-opus-4-8",
- "input":2,"output":9,"cacheRead":0,"cacheWrite5m":59077,"cacheWrite1h":0}}
+{"type":"agent.usage","agent":"a8c5eb3dd61a2b303","data":{"model":"claude-opus-5-5",
+ "input":2,"output":210,"cacheRead":0,"cacheWrite5m":42374,"cacheWrite1h":0}}
 ```
 
-It keeps a byte offset per file, so each line is read once. It polls only while a swarm is
-active, and stops following an agent 30 s after `agent.finished`.
+`turn.step` does not split cache writes into 5-minute and 1-hour, so all of
+`cache_creation_input_tokens` goes into `cacheWrite5m` and cost stays labelled ≈. If the split turns
+out to matter, the MCP server (which has Node) can read it from the transcripts at
+`~/.claude/projects/<project>/<sessionId>/subagents/agent-<agentId>.jsonl`, deduplicating by
+message id, since a transcript writes several lines per response.
 
 ## 8. Event log
 
@@ -183,7 +206,7 @@ Envelope (every line):
 | `v` | int | Schema version, starts at 1 |
 | `ts` | ISO-8601 string | Writer's clock, millisecond precision |
 | `swarm` | string | Swarm id |
-| `src` | `recorder` \| `transcripts` \| `mcp` | Writer |
+| `src` | `recorder` \| `transcripts` \| `mcp` | Who produced it. The MCP server appends the recorder's events with `src: recorder`. `transcripts` is reserved for a server-side transcript reader (section 7) and has no writer yet |
 | `type` | string | One of the types below |
 | `agent` | string? | Agent id the event is about |
 | `data` | object | Type-specific, below |
@@ -202,6 +225,7 @@ Event types (v1):
 | `memory.put` | `key`, `bytes`, `preview` (first 80 chars) |
 | `task.created` | `id`, `title`, `assignee?`, `dependsOn?` |
 | `task.updated` | `id`, `state`, `assignee?`, `note?` |
+| `session.measure` | `contextTokens?`, `contextWindow`, `contextPercent?`, `costUsd?` (added by the mod API spike, for phase 2) |
 
 Rules:
 
@@ -209,7 +233,8 @@ Rules:
 - Readers buffer a trailing partial line until its newline arrives.
 - A line that fails to parse is skipped and counted (`state.gaps`).
 - Events with `v` greater than the reader's version are ignored.
-- Order is `ts`, then `src`, then file position. Writers never coordinate.
+- Order is `ts`, then `src`, then file position. Writers never coordinate. (Within one session the
+  MCP server is now the only process that appends, but two sessions in one project can still both write.)
 - Stored: names, models, numbers, paths, command lines up to 80 chars, message summaries up to
   200 chars, memory previews up to 80 chars. **Never** full prompts, tool output or file contents.
 - Memory values themselves live in `.omnis-swarm/memory/<swarmId>.json`, written by the MCP
@@ -246,8 +271,12 @@ Per-agent stats and how each is worked out:
 
 Swarm totals: tokens, cost ≈, burn rate ($/min over the last 5 minutes), session context %
 (from Claude Code's `session.measure`, the official figure), busiest link, most expensive agent,
-and task counts by state. Session context % is recorded by the recorder in phase 2. Its event
-type is settled once the mod API spike shows what `session.measure` carries.
+and task counts by state. Session context % is recorded by the recorder in phase 2 as a
+`session.measure` event. Claude Code's `session.measure` carries `context: { tokens?, window,
+percent? }` (percent a whole number, 0 to 100), `cost?: { usd }` (the session total as `/cost` has
+it), `rateLimits` and `changed`. It fires after each main-loop turn, not after subagent turns, so the
+figure refreshes when the lead finishes a turn. The header may show Claude Code's session cost beside
+OmnisSwarm's ≈ total.
 
 Every ≈ figure is labelled ≈ in the pane. `prices.ts` is one table (model, rates per token
 class, context window), so it's easy to update.
@@ -281,9 +310,18 @@ replace the graph with an indented tree, and finally show a one-line summary.
 
 Rendering: `render` draws into a cell grid (glyph plus 24-bit foreground and background per
 cell). It uses half-block glyphs for two true-colour pixels per cell, and braille for fine
-lines and particles. Fades are done by blending each colour toward the background. The frame
-loop runs only while something is animating, lowers its rate if a frame takes too long, and
-stops when nothing moves. On a surface that offers `Svg` instead of `Raster` (the desktop app),
+lines and particles. Fades are done by blending each colour toward the background. The terminal's
+`Raster` paints at most 1024 distinct foreground/background pairs at once (the rest snap to the
+nearest), so glow and fade ramps are quantised to a fixed palette that keeps a frame under that.
+A `Raster` is at most 512 columns by 256 rows. The frame loop is a `$.clock.every` timer calling
+`$.ui.blit` (up to 120 blits a second taken, about 60 shown); a full redraw
+(`$.ui.invalidate('ui.render')`, at most 30 a second for a shown pane) happens only on a resize or
+a layout change. Values the drawing reads live in `$.state`, since a hot reload drops module
+variables. The pane gets swarm state from the MCP server, not by reading the log file: `$.fs.read`
+stops at 4 MiB and can't read from an offset. Phase 3 picks between an internal MCP tool that returns
+the folded state (or the events after a given one) and folding the events the recorder sends,
+seeded from the server once when the pane opens. The frame loop runs only while something is
+animating, lowers its rate if a frame takes too long, and stops when nothing moves. On a surface that offers `Svg` instead of `Raster` (the desktop app),
 the same grid is converted to a static SVG redrawn on each render.
 
 The chips are the only interactive element. They change what the pane shows and nothing else.
@@ -294,12 +332,13 @@ The rule: OmnisSwarm never breaks or slows the session. Failures make it show le
 
 | Failure | Behaviour |
 |---|---|
-| Function hooks off | MCP tools still work; one notice names the setting to turn on |
+| Function hooks off (policy: `disableAllHooks`, `allowManagedHooksOnly`, `allowManagedModsOnly`) | MCP tools still work; no recorder or pane. Claude Code 2.1.306 needs no environment variable to load mods |
+| MCP server unreachable from the mod | `$.mcp.call` fails; the event is dropped and counted; the session is untouched |
 | Recorder handler throws | Caught; event dropped; `next` result passed through unchanged |
 | Log write fails | Retried once, then dropped; pane shows a "log gaps" marker |
 | Torn or corrupt line | Skipped and counted; folding continues |
 | Newer `v` | Event ignored |
-| Transcript missing or unreadable | That agent's tokens and cost show "–" |
+| No usage for an agent yet (no `turn.step` with usage) | That agent's tokens and cost show "–" |
 | Unknown model | Tokens shown; cost and context fill show "–" |
 | Pane too small | Size steps from section 10 |
 | Slow frames | Frame rate drops; animation stops when idle |
@@ -315,9 +354,9 @@ through its public interface. Mock-first for the mod API and file system.
   version skipping; snapshot plus replay equals a full replay; stats formulas against hand-worked numbers.
 - **render:** golden grid snapshots per size step at fixed times; fade and particle maths at known frames.
 - **mcp:** each tool through the MCP protocol in-process; checks appended events and input validation.
-- **recorder:** fake `agent.spawn`, `tool.call`, `turn.complete`; `next` always called and its
-  result unchanged, including when the handler throws.
-- **transcripts:** anonymised fixtures from real subagent transcripts, including cache fields and partial lines.
+- **recorder:** fake `agent.spawn`, `tool.call`, `turn.step`, `turn.complete`, `session.send`,
+  `session.measure` (shapes as recorded in the mod API spike); `next` always called and its result
+  unchanged, including when the handler throws or `$.mcp.call` rejects. Run with `claude plugin test`.
 - **e2e:** a scripted 5-agent swarm log rendered headless through the pane; checks the expected nodes, links and totals.
 
 ## 13. Later: hub server and WebGL window
@@ -329,7 +368,7 @@ Not built in v1. Documented here so it's a straight build later.
 - Binds `127.0.0.1` only, default port 7717, with the port written to `.omnis-swarm/hub.json`.
 - Requires a random token generated at start, written to `hub.json`, and passed as
   `?token=` on connect. Other origins are rejected.
-- Follows the current swarm's log with `core/log.ts` (the same code the pane uses).
+- Follows the current swarm's log with `core/log.ts` (the same code the MCP server uses; the pane can't, as mods have no Node).
 - WebSocket at `/stream`. On connect it sends
   `{"kind":"snapshot","state":<SwarmState>}`, then each new log line unchanged as
   `{"kind":"event","event":<envelope>}`. When the current swarm changes it sends
@@ -345,7 +384,7 @@ messages are the only interface between the two.
 ## 14. Phases
 
 1. **Core and MCP:** events, log, fold, stats, prices, the MCP server and tools, with tests.
-2. **Recorder and transcripts:** mod handlers and transcript reader, with tests.
+2. **Recorder:** mod handlers (including `turn.step` usage) and the MCP server's recording tool, with tests.
 3. **Pane:** render units and pane wiring, golden tests, e2e.
 4. **Packaging:** plugin manifest, marketplace repo under `Fortitude-Group`, install check in a
    fresh project, and wiring OmnisSwarm into `init-project.ps1` and `setup.ps1`.
@@ -360,14 +399,22 @@ as `SwarmState` is fixed.
 
 ## 15. Assumptions to check early
 
-These come from reading RuFlo's working source, not from official Claude Code docs. Each gets a
-spike at the start of the phase that needs it.
+These came from reading RuFlo's working source. The mod API spike
+([docs/spikes/2026-10-21-mod-api.md](../../spikes/2026-10-21-mod-api.md), Claude Code 2.1.306) checked
+each one against the engine's own type declarations and a probe session.
 
-- `agent.spawn`'s `result.agentId` matches the `agent-<id>.jsonl` transcript name (phase 2).
-- `tool.call` exposes `SendMessage`'s `to` and `message` arguments (phase 2).
-- `turn.complete` fires once per subagent with its `agentId` and a reason (phase 2).
-- `Raster` size limits and how fast frames can be pushed (phase 3).
-- Plugin MCP servers can run `.ts` with Node's type stripping and no build (phase 1). If not,
-  ship compiled JS from a small build script.
-- Function hooks need `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and are early access; the plugin
-  depends on them for the pane and recorder.
+- ✅ `agent.spawn`'s `result.agentId` matches the `agent-<id>.jsonl` transcript name exactly (spike Q1).
+- ✏️ `tool.call` exposes `SendMessage`'s `to`, `message` and `summary`, but `session.send` is the better
+  source: it says whether the message was delivered. The lead's address is `main`, not `lead` (spike Q2).
+- ✅ `turn.complete` fires once per subagent run with its `agentId`. Reasons are `answer`, `aborted`,
+  `refusal` and `error`. A resumed agent or a teammate finishes once per run (spike Q3).
+- ✅ `Raster` is up to 512 columns by 256 rows, blits up to 120 a second (about 60 shown), and paints at
+  most 1024 distinct colour pairs per frame. Blit throughput itself is untested (spike Q6).
+- ✅ Plugin MCP servers run `.ts` with Node's type stripping and no build. They start in the project
+  directory, and `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PROJECT_DIR}` expand in `args` and `env` (spike Q7).
+- ✏️ Function hooks are early access, but 2.1.306 loaded the mod without
+  `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`. What turns them off is policy (`disableAllHooks`,
+  `allowManagedHooksOnly`, `allowManagedModsOnly`).
+- ✏️ New, from the spike: a hooks module has no Node. It imports only its own files and `claude-code`,
+  and `$.fs` has no append, no offset reads and a 4 MiB cap. Sections 4, 6, 7 and 10 changed to match
+  (spike Q5).
