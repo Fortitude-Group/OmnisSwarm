@@ -137,3 +137,45 @@ test('sessionMeasure only when context or cost changed', () => {
   assert.equal(sessionMeasure({ context: { window: 1, percent: 140 }, changed: ['context'] })?.data.contextPercent, 100)
   assert.equal(sessionMeasure({ context: { window: 1 }, cost: { usd: -1 }, changed: ['cost'] })?.data.costUsd, undefined)
 })
+
+test('a 5 MB command is cut before it is scanned', () => {
+  const huge = `echo ${'ab '.repeat(2_000_000)}`
+  const start = Date.now()
+  const out = toolSubject('Bash', { command: huge })
+  assert.equal(out.length, 80)
+  assert.ok(Date.now() - start < 500)
+  assert.equal(cleanPath('x'.repeat(5_000_000) + 'tail.ts', 80).endsWith('tail.ts'), true)
+  assert.equal(cleanText('y'.repeat(5_000_000), 10), 'yyyyyyyyy…')
+})
+
+test('hostile payloads do not throw', () => {
+  const bad = null as never
+  assert.equal(toolSubject('Bash', bad), '')
+  assert.equal(toolEvent('start', 'Bash', undefined as never, 'lead').data.subject, '')
+  assert.equal(protocolMessage(bad, 'lead'), null)
+  assert.equal(sessionMeasure({ context: { window: 5 } } as never), null)
+  assert.equal(sessionMeasure({ context: 'x', changed: ['cost'], cost: { usd: 1 } } as never)?.data.contextWindow, 0)
+  assert.equal(sessionMeasure(bad), null)
+  assert.equal(agentStarted(bad, 'a1')?.data.role, 'agent')
+  assert.equal(agentUsage(bad, 'a1').data.input, 0)
+})
+
+test('protocol type is allow-listed', () => {
+  assert.equal(protocolMessage({ to: 'w1', message: { type: 'my password is hunter2 okay' } }, 'lead')?.data.summary, '[protocol]')
+})
+
+test('grep and glob subjects are redacted', () => {
+  assert.equal(toolSubject('Grep', { pattern: 'ghp_abcdefghijklmnop1234' }), '[redacted]')
+})
+
+test('redaction covers URL credentials, key=value pairs, -p flags and split tokens', () => {
+  assert.equal(toolSubject('WebFetch', { url: 'https://admin:hunter2@host/x?token=abc123' }), 'https://[redacted]@host/x?token=[redacted]')
+  assert.equal(toolSubject('Bash', { command: 'mysql -pS3cretPw!' }), 'mysql -p[redacted]')
+  assert.equal(toolSubject('Bash', { command: 'export API_KEY=abcd1234' }), 'export API_KEY=[redacted]')
+  assert.equal(toolSubject('Bash', { command: 'echo gh\u200Bp_abcdefghijklmnop1234' }), 'echo [redacted]')
+})
+
+test('lone surrogates are stripped and unsafe agent ids refused', () => {
+  assert.equal(cleanText('a\uD800b', 10), 'a b')
+  assert.equal(agentStarted({}, '__proto__'), null)
+})
