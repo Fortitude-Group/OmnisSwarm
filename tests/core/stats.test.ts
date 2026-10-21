@@ -164,11 +164,10 @@ test('a resumed agent is running again and its lifetime adds up its runs', () =>
   const s = foldAll('s1', [
     start('a1', 'coder'),
     ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 }),
-    usage('a1', 30, { output: 10 }),
+    edit('a1', 'a.ts', 30),
   ])
   assert.equal(agentStats(s, 'a1', at(32))!.status, 'running')
   assert.equal(agentStats(s, 'a1', at(32))!.lifetimeMs, 11_000 + 2_000)
-  assert.equal(agentStats(s, 'a1', at(60))!.status, 'waiting')
 })
 
 test('swarm totals carry session cost and context percent, null when unknown', () => {

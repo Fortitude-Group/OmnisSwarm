@@ -242,7 +242,7 @@ test('session.measure: latest wins, numbers are clamped, missing fields are null
   assert.deepEqual(emptyState('s1').session, { contextTokens: null, contextWindow: null, contextPercent: null, costUsd: null, at: null })
 })
 
-test('an agent that finished runs again on new activity', () => {
+test('an agent that finished runs again on a tool start', () => {
   const s = run([
     coder,
     ev('agent.finished', { outcome: 'answer', reason: 'ok' }, { agent: 'a1', atSec: 11 }),
@@ -273,4 +273,27 @@ test('lead aliases and a trailing [ref] resolve in message.sent', () => {
   assert.equal(s.links['a1->a1']!.count, 2)
   assert.ok(s.agents['?ghost'])
   assert.equal(s.agents['?ghost [ab12]'], undefined)
+})
+
+test('late usage after finish adds tokens but leaves the agent finished; a tool start re-opens it', () => {
+  const fin = ev('agent.finished', { outcome: 'answer' }, { agent: 'a1', atSec: 11 })
+  const use = ev('agent.usage', { model: 'claude-sonnet-5-5', input: 10, output: 5, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 12 })
+  const late = run([coder, fin, use]).agents.a1!
+  assert.equal(late.outcome, 'answer')
+  assert.equal(late.runs, 1)
+  assert.equal(late.tokens.input, 10)
+  assert.equal(late.samples.length, 1)
+  const endOnly = run([coder, fin, ev('agent.tool', { phase: 'end', tool: 'Read', kind: 'read', subject: '', isError: false }, { agent: 'a1', atSec: 12 })]).agents.a1!
+  assert.equal(endOnly.outcome, 'answer')
+  const back = run([coder, fin, use, ev('agent.tool', { phase: 'start', tool: 'Read', kind: 'read', subject: 'a.ts', isError: false }, { agent: 'a1', atSec: 13 })]).agents.a1!
+  assert.equal(back.outcome, null)
+  assert.equal(back.runs, 2)
+})
+
+test('session.measure merges: omitted fields keep their previous value', () => {
+  const s = run([
+    ev('session.measure', { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10, costUsd: 1 }, { atSec: 1 }),
+    ev('session.measure', { contextWindow: 200_000, costUsd: 2 }, { atSec: 2 }),
+  ])
+  assert.deepEqual(s.session, { contextTokens: 1000, contextWindow: 200_000, contextPercent: 10, costUsd: 2, at: at(2) })
 })

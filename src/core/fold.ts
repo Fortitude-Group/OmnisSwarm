@@ -140,7 +140,7 @@ function resolve(state: SwarmState, rawName: string, at: number): string {
   return id
 }
 
-/** New activity from an agent that had finished starts another run. */
+/** An agent.started or a tool start from an agent that had finished begins another run. Late usage does not. */
 function revive(a: AgentState, at: number): void {
   if (a.outcome === null && a.finishedAt === null) return
   a.outcome = null
@@ -206,7 +206,6 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'agent.usage': {
       const d = e.data
       const a = agentOf(state, who, at)
-      revive(a, at)
       const usage: Usage = {
         input: num(d.input), output: num(d.output), cacheRead: num(d.cacheRead),
         cacheWrite5m: num(d.cacheWrite5m), cacheWrite1h: num(d.cacheWrite1h),
@@ -236,7 +235,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'agent.tool': {
       const d = e.data
       const a = agentOf(state, who, at)
-      revive(a, at)
+      if (d.phase === 'start') revive(a, at)
       const kind: ToolKind = isOneOf(TOOL_KINDS, d.kind) ? d.kind : 'other'
       const subject = text(d.subject, 80)
       if (d.phase === 'start') {
@@ -307,11 +306,14 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const known = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? num(x) : null)
       const window = known(d.contextWindow)
       const percent = known(d.contextPercent)
+      const prev = state.session
+      const tokens = known(d.contextTokens)
+      const cost = known(d.costUsd)
       state.session = {
-        contextTokens: known(d.contextTokens),
-        contextWindow: window === 0 ? null : window,
-        contextPercent: percent === null ? null : Math.min(100, percent),
-        costUsd: known(d.costUsd),
+        contextTokens: tokens ?? prev.contextTokens,
+        contextWindow: window === null || window === 0 ? prev.contextWindow : window,
+        contextPercent: percent === null ? prev.contextPercent : Math.min(100, percent),
+        costUsd: cost ?? prev.costUsd,
         at,
       }
       break
