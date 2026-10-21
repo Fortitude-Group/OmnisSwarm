@@ -13,7 +13,10 @@ pane, the future hub and any WebGL window, rebuild state by folding these lines 
 .omnis-swarm/memory/<swarmId>.json        memory values: {"<key>":{"value","writer","at"}}
 ```
 
-Swarm ids match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and never contain `..`.
+Swarm ids are lowercase and match `^[a-z0-9][a-z0-9._-]{0,63}$`. They never contain `..`, never end
+in `.`, and are never a Windows device name (`con`, `prn`, `aux`, `nul`, `com0`-`com9`, `lpt0`-`lpt9`),
+with or without an extension, because ids become file names. `src/core/events.ts` (`isValidSwarmId`)
+is the rule.
 
 ## Envelope
 
@@ -41,8 +44,8 @@ only writer to the file: it stamps `v`, `swarm` and `src`.
 | `agent.usage` | recorder (written through the server) | `model`, `input`, `output`, `cacheRead`, `cacheWrite5m`, `cacheWrite1h` (token counts for one API call) |
 | `agent.tool` | recorder | `phase` (`start`\|`end`), `tool`, `kind` (`read`\|`edit`\|`bash`\|`search`\|`web`\|`agent`\|`other`), `subject` (path or command, ≤80), `isError` |
 | `message.sent` | recorder | `to` (agent **name** as given to SendMessage), `summary` (≤200) |
-| `memory.put` | mcp | `key`, `bytes`, `preview` (≤80) |
-| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?` |
+| `memory.put` | mcp | `key`, `bytes`, `preview` (≤80). The envelope `agent` is the writer's name as given to the tool (default `lead`), not an agent id |
+| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`. Two sessions sharing a swarm can both create the same id; the last write wins (accepted) |
 | `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200) |
 | `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. Merged into the session figures: a field left out keeps its previous value. Percent is clamped to 0-100 |
 

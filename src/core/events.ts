@@ -97,6 +97,9 @@ export function serialise(event: SwarmEvent): string {
 
 export type ParseResult = { ok: true; event: SwarmEvent } | { ok: false; reason: 'json' | 'shape' | 'version' }
 
+/** Agent ids reach names and terminals, so no control, format or whitespace characters. */
+const BAD_AGENT = /[\p{Cc}\p{Cf}\s]/u
+
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
 
 /** Checks the envelope only. `data` fields are checked defensively by `fold`. */
@@ -107,7 +110,7 @@ export function parseLine(line: string): ParseResult {
   } catch {
     return { ok: false, reason: 'json' }
   }
-  if (!isObj(raw) || typeof raw.v !== 'number') return { ok: false, reason: 'shape' }
+  if (!isObj(raw) || typeof raw.v !== 'number' || !Number.isInteger(raw.v) || raw.v < 1) return { ok: false, reason: 'shape' }
   if (raw.v > SCHEMA_VERSION) return { ok: false, reason: 'version' }
   const shapeOk =
     typeof raw.ts === 'string' && !Number.isNaN(Date.parse(raw.ts)) &&
@@ -115,6 +118,6 @@ export function parseLine(line: string): ParseResult {
     isOneOf(SOURCES, raw.src) &&
     isOneOf(EVENT_TYPES, raw.type) &&
     isObj(raw.data) &&
-    (raw.agent === undefined || (typeof raw.agent === 'string' && raw.agent.length <= 64))
+    (raw.agent === undefined || (typeof raw.agent === 'string' && raw.agent.length <= 64 && !BAD_AGENT.test(raw.agent)))
   return shapeOk ? { ok: true, event: raw as SwarmEvent } : { ok: false, reason: 'shape' }
 }

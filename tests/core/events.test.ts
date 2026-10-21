@@ -87,3 +87,18 @@ test('serialise counts a multi-byte character as its UTF-8 byte length', () => {
   assert.equal(byteLen(fits), LIMITS.line)
   assert.throws(() => serialise(withSummary('é'.repeat(Math.floor(room / 2) + 1))), RangeError)
 })
+
+test('parseLine rejects agent ids with control, format or whitespace characters', () => {
+  for (const agent of ['bad\u001b[31mred', 'has space', 'rtl‮evil']) {
+    const line = JSON.stringify({ ...message(), agent })
+    assert.deepEqual(parseLine(line), { ok: false, reason: 'shape' }, JSON.stringify(agent))
+  }
+  assert.equal(parseLine(JSON.stringify({ ...message(), agent: 'a1' })).ok, true)
+})
+
+test('parseLine rejects a version that is not an integer of at least 1', () => {
+  for (const v of [0, 1.5, -1]) {
+    assert.deepEqual(parseLine(JSON.stringify({ ...message(), v })), { ok: false, reason: 'shape' }, String(v))
+  }
+  assert.equal(parseLine(JSON.stringify({ ...message(), v: 1 })).ok, true)
+})
