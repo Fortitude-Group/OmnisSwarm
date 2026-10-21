@@ -88,7 +88,7 @@ test('the plugin own call is passed on, the engine call is denied', async () => 
 test('a throwing check fails closed for internal tools and open for the rest', async () => {
   const { check, checkCatch } = capture()
   const broken = { get plugin(): never { throw new Error('boom') } }
-  for (const tool of [RECORD, BARE_RECORD]) {
+  for (const tool of [RECORD, FEED, BARE_RECORD]) {
     expect(() => check(broken, { tool, input: {} }, allowNext('engine'))).toThrow('boom')
     const verdict = await checkCatch(broken, { tool, input: {} }, allowNext('engine'))
     expect(verdict.decision).toBe('deny')
