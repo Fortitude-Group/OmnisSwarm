@@ -5,7 +5,19 @@ import type { AgentInfo, On } from 'claude-code'
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const SERVER = 'plugin:omnis-swarm:omnis-swarm'
 type Sent = { sessionId: string; ts: string; type: string; agent?: string; data: Record<string, unknown>; dropped?: number }
-type Options = { connected?: boolean; failCalls?: number; throwCalls?: boolean; noSessionId?: boolean; agents?: AgentInfo[] }
+type Write = { key: string; value: unknown }
+type Options = {
+  connected?: boolean; failCalls?: number; throwCalls?: boolean; noSessionId?: boolean; agents?: AgentInfo[]
+  /** mcp.connect never answers. */
+  hangConnect?: boolean
+  /** Every omnis_record call waits for this before answering. */
+  gate?: Promise<unknown>
+  /** Every $.state write waits for this before landing. */
+  stateGate?: Promise<unknown>
+  /** What $.state holds when the plugin loads, as after a reload. */
+  stored?: { seen?: string[]; dropped?: number }
+  writes?: Write[]
+}
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine and the MCP server.
 function engine(on: On, opts: Options = {}): Sent[] {
@@ -16,11 +28,21 @@ function engine(on: On, opts: Options = {}): Sent[] {
     if (opts.noSessionId === true) throw new Error('no session')
     return { value: SID }
   })
-  on('mcp.connect', () => ({
+  on('state.get', (_$, e) => {
+    const key = String(e.key)
+    return { value: { value: key === 'seen' ? opts.stored?.seen : key === 'dropped' ? opts.stored?.dropped : undefined, version: 0 } }
+  })
+  on('state.set', async (_$, e) => {
+    opts.writes?.push({ key: String(e.key), value: e.value })
+    if (opts.stateGate !== undefined) await opts.stateGate
+    return { value: { isSet: true as const, version: 1 } }
+  })
+  on('mcp.connect', () => (opts.hangConnect === true ? new Promise<never>(() => {}) : {
     value: opts.connected === false ? { isConnected: false, reason: 'unlisted', message: 'not listed' } : { isConnected: true, server: SERVER },
   }))
-  on('mcp.call', (_$, e) => {
+  on('mcp.call', async (_$, e) => {
     if (e.server === SERVER && e.tool === 'omnis_record') sent.push(e.args as Sent)
+    if (opts.gate !== undefined) await opts.gate
     if (opts.throwCalls === true) throw new Error('Connection closed')
     if (failures > 0) {
       failures--
@@ -43,7 +65,23 @@ function engine(on: On, opts: Options = {}): Sent[] {
   return sent
 }
 
-const start = ($: Engine) => $.session.start({ cwd: '/project', surface: null, isInteractive: false })
+/** The recorder starts in the background and sends its end events off the hot path; this lets both finish. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 2000; i++) await Promise.resolve()
+}
+
+async function start($: Engine) {
+  const result = await $.session.start({ cwd: '/project', surface: null, isInteractive: false })
+  await settle()
+  return result
+}
+
+type ToolCall = Parameters<Engine['tool']['call']>[0]
+async function call($: Engine, input: ToolCall) {
+  const result = await $.tool.call(input)
+  await settle()
+  return result
+}
 
 async function spawnWorker($: Engine): Promise<void> {
   await $.agent.spawn({
@@ -52,10 +90,11 @@ async function spawnWorker($: Engine): Promise<void> {
   })
 }
 
-async function drain(stream: AsyncIterable<unknown>): Promise<void> {
-  for await (const _chunk of stream) {
-    // only the hooks matter here
-  }
+/** Runs a stream to its end and answers what it returns. */
+async function drain<R>(stream: AsyncGenerator<unknown, R>): Promise<R> {
+  let step = await stream.next()
+  while (step.done !== true) step = await stream.next()
+  return step.value
 }
 
 /**
@@ -67,7 +106,7 @@ const fromAgent = <T extends object>(call: T, agentId: string): T => ({ ...call,
 test('a lead tool call is recorded at start and end, stamped with the session and a time', async ($, on) => {
   const sent = engine(on)
   await start($)
-  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await call($, { tool: 'Bash', command: 'npm test' })
   expect(sent).toEqual([
     { sessionId: SID, ts: expect.any(String), type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false } },
     { sessionId: SID, ts: expect.any(String), type: 'agent.tool', agent: 'lead', data: { phase: 'end', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false } },
@@ -80,8 +119,8 @@ test('a spawned agent is started once, and only agents seen spawning are recorde
   await start($)
   await spawnWorker($)
   await spawnWorker($)
-  await $.tool.call(fromAgent({ tool: 'Read', file_path: '/project/README.md' }, 'a1'))
-  await $.tool.call(fromAgent({ tool: 'Read', file_path: '/project/other.md' }, 'fork-unknown'))
+  await call($, fromAgent({ tool: 'Read', file_path: '/project/README.md' }, 'a1'))
+  await call($, fromAgent({ tool: 'Read', file_path: '/project/other.md' }, 'fork-unknown'))
   expect(sent.filter(s => s.type === 'agent.started')).toEqual([
     { sessionId: SID, ts: expect.any(String), type: 'agent.started', agent: 'a1', data: { name: 'probe-worker', role: 'general-purpose', description: 'Find the docs', parent: 'lead' } },
   ])
@@ -126,8 +165,8 @@ test('delivered model messages are recorded from session.send; undelivered and p
 test('a protocol SendMessage is recorded from the tool call, without its free text; a plain-text one is not', async ($, on) => {
   const sent = engine(on)
   await start($)
-  await $.tool.call({ tool: 'SendMessage', to: 'probe-worker', message: { type: 'shutdown_response', request_id: 'r1', approve: false, reason: 'still busy' } })
-  await $.tool.call({ tool: 'SendMessage', to: 'probe-worker', message: 'plain text', summary: 'hi' })
+  await call($, { tool: 'SendMessage', to: 'probe-worker', message: { type: 'shutdown_response', request_id: 'r1', approve: false, reason: 'still busy' } })
+  await call($, { tool: 'SendMessage', to: 'probe-worker', message: 'plain text', summary: 'hi' })
   expect(sent.filter(s => s.type === 'message.sent').map(s => s.data)).toEqual([{ to: 'probe-worker', summary: '[shutdown_response] approve: no' }])
   expect(JSON.stringify(sent)).not.toContain('still busy')
 })
@@ -145,42 +184,43 @@ test('session.measure is recorded when context or cost changed', async ($, on) =
 test("the recorder's own internal tool calls are not recorded", async ($, on) => {
   const sent = engine(on)
   await start($)
-  await $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record', sessionId: SID })
-  await $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed', since: 0 })
+  await call($, { tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record', sessionId: SID })
+  await call($, { tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed', since: 0 })
   expect(sent).toEqual([])
 })
 
 test('results pass through unchanged when the server fails, and the loss rides on later events', async ($, on) => {
   const sent = engine(on, { failCalls: 2 })
   await start($)
-  const first = await $.tool.call({ tool: 'Bash', command: 'ls' })
-  const second = await $.tool.call({ tool: 'Bash', command: 'pwd' })
-  await $.tool.call({ tool: 'Bash', command: 'whoami' })
+  const first = await call($, { tool: 'Bash', command: 'ls' })
+  const second = await call($, { tool: 'Bash', command: 'pwd' })
+  await call($, { tool: 'Bash', command: 'whoami' })
   expect(first.result).toEqual({ stdout: 'ok' })
   expect(second.result).toEqual({ stdout: 'ok' })
-  // The two failed calls settle asynchronously, so their count may ride on one later call or be split over two.
-  expect(sent.slice(2).reduce((n, s) => n + (s.dropped ?? 0), 0)).toBe(2)
-  expect(sent.slice(0, 2).some(s => s.dropped !== undefined)).toBe(false)
+  // A call's end waits for its start to settle, so the first loss rides on that end, which then fails too;
+  // both are counted again on the next call, which gets through carrying 2.
+  expect(sent[0]!.dropped).toBeUndefined()
+  expect(Math.max(...sent.map(s => s.dropped ?? 0))).toBe(2)
 })
 
 test('a server that rejects outright changes nothing for the session', async ($, on) => {
   engine(on, { throwCalls: true })
   await start($)
-  const result = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  const result = await call($, { tool: 'Bash', command: 'ls' })
   expect(result.result).toEqual({ stdout: 'ok' })
 })
 
 test('with no server connection or no session id nothing is sent and the session is untouched', async ($, on) => {
   const sent = engine(on, { connected: false })
   expect((await start($)).cwd).toBe('/project')
-  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await call($, { tool: 'Bash', command: 'ls' })
   expect(sent).toEqual([])
 })
 
 test('a failing session id lookup leaves session.start unchanged and recording off', async ($, on) => {
   const sent = engine(on, { noSessionId: true })
   expect((await start($)).cwd).toBe('/project')
-  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await call($, { tool: 'Bash', command: 'ls' })
   expect(sent).toEqual([])
 })
 
@@ -191,6 +231,97 @@ test('a second session.start sends nothing new, and agents running before it are
   expect(sent.filter(s => s.type === 'agent.started').map(s => [s.agent, s.data])).toEqual([
     ['a7', { name: 'scout', role: 'Explore', description: 'Earlier task', parent: 'lead' }],
   ])
-  await $.tool.call(fromAgent({ tool: 'Grep', pattern: 'TODO' }, 'a7'))
+  await call($, fromAgent({ tool: 'Grep', pattern: 'TODO' }, 'a7'))
   expect(sent.filter(s => s.type === 'agent.tool').map(s => s.agent)).toEqual(['a7', 'a7'])
+})
+
+test('session.start returns at once even when the server connection never comes', async ($, on) => {
+  const sent = engine(on, { hangConnect: true })
+  expect((await $.session.start({ cwd: '/project', surface: null, isInteractive: false })).cwd).toBe('/project')
+  await call($, { tool: 'Bash', command: 'ls' })
+  expect(sent).toEqual([])
+})
+
+for (const throwCalls of [false, true]) {
+  test(`every hook returns what next gave it, unchanged (server throwing: ${throwCalls})`, async ($, on) => {
+    engine(on, { throwCalls })
+    await start($)
+    const spawned = await $.agent.spawn({
+      tool_use_id: 'toolu_1', prompt: 'p', description: 'd', subagentType: 'general-purpose',
+      provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false, name: 'probe-worker',
+    })
+    expect(spawned).toEqual({ model: 'claude-opus-5-5', agentId: 'a1' })
+    const step = await drain($.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, agentId: 'a1' }))
+    expect(step).toEqual({
+      turnId: 't1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn',
+      usage: { input_tokens: 2, output_tokens: 210, cache_read_input_tokens: 5, cache_creation_input_tokens: 42374, model: 'claude-opus-5-5' },
+    })
+    const done = await $.turn.complete({ answer: '', durationMs: 10, isAborted: false, turnId: 't1', agentId: 'a1', reason: 'answer' })
+    expect(done).toEqual({ text: '' })
+    const delivered = await $.session.send({ to: 'main', text: 'hi', origin: { kind: 'model' }, agentId: 'a1' })
+    expect(delivered).toEqual({ isDelivered: true })
+    const undelivered = await $.session.send({ to: 'nobody', text: 'hi', origin: { kind: 'model' }, agentId: 'a1' })
+    expect(undelivered).toEqual({ isDelivered: false, reason: 'No agent named nobody' })
+    const measured = await $.session.measure({ context: { tokens: 1, window: 10, percent: 10 }, rateLimits: [], cost: { usd: 0.1 }, changed: ['context'] })
+    expect(measured).toEqual({ changed: ['context'] })
+  })
+}
+
+test('a tool end is sent only after its start call has settled', async ($, on) => {
+  let release!: () => void
+  const gate = new Promise<void>(resolve => (release = resolve))
+  const sent = engine(on, { gate })
+  await start($)
+  const result = await call($, { tool: 'Bash', command: 'ls' })
+  expect(result.result).toEqual({ stdout: 'ok' })
+  expect(sent.map(s => (s.data as { phase?: string }).phase)).toEqual(['start'])
+  release()
+  await settle()
+  expect(sent.map(s => (s.data as { phase?: string }).phase)).toEqual(['start', 'end'])
+})
+
+test('with 64 calls in flight the next are dropped, and the count rides on the first call after', async ($, on) => {
+  let release!: () => void
+  const gate = new Promise<void>(resolve => (release = resolve))
+  const sent = engine(on, { gate })
+  await start($)
+  const measure = () => $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
+  for (let i = 0; i < 100; i++) await measure()
+  await settle()
+  expect(sent.length).toBe(64)
+  release()
+  await settle()
+  await measure()
+  await settle()
+  expect(sent.length).toBe(65)
+  expect(sent[64]!.dropped).toBe(36)
+  expect(sent.slice(0, 64).some(s => s.dropped !== undefined)).toBe(false)
+})
+
+test('a burst of drops costs one state save in flight and one more, not one each', async ($, on) => {
+  let release!: () => void
+  const stateGate = new Promise<void>(resolve => (release = resolve))
+  const writes: Write[] = []
+  engine(on, { gate: new Promise(() => {}), stateGate, writes })
+  await start($)
+  for (let i = 0; i < 100; i++) await $.session.measure({ context: { tokens: 1, window: 10 }, rateLimits: [], changed: ['context'] })
+  await settle()
+  expect(writes.filter(w => w.key === 'dropped').length).toBe(1)
+  release()
+  await settle()
+  const dropped = writes.filter(w => w.key === 'dropped')
+  expect(dropped.length).toBe(2)
+  expect(dropped[1]!.value).toBe(36)
+})
+
+test('after a reload the seen agents and the drop count come back from state, once', async ($, on) => {
+  const sent = engine(on, {
+    stored: { seen: ['a7'], dropped: 3 },
+    agents: [{ id: 'a7', description: 'Earlier task', type: 'Explore', status: 'running', name: 'scout' }],
+  })
+  await start($)
+  await start($)
+  expect(sent.filter(s => s.type === 'agent.started')).toEqual([])
+  await call($, fromAgent({ tool: 'Grep', pattern: 'TODO' }, 'a7'))
+  expect(sent.map(s => [s.agent, s.dropped])).toEqual([['a7', 3], ['a7', undefined]])
 })
