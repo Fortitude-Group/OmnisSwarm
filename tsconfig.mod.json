@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2024"],
+    "types": [],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment"
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "src/mod/**/*.tsx",
+    "src/mod/**/*.ts",
+    "src/render/**/*.ts",
+    "src/core/events.ts",
+    "src/core/fold.ts",
+    "src/core/prices.ts",
+    "src/core/recording.ts",
+    "src/core/stats.ts"
+  ]
+}

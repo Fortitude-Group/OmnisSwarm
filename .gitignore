@@ -10,3 +10,4 @@
 .superpowers/
 node_modules/
 .omnis-swarm/
+.claude-plugin/types/

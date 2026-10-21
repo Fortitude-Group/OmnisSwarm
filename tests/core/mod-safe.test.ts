@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 // Files a Claude Code mod may import. A mod has web APIs only: no Buffer, process or require.
 // Add a file name here to put it under the same rules.
-const MOD_SAFE = ['events.ts', 'fold.ts', 'prices.ts', 'stats.ts']
+const MOD_SAFE = ['events.ts', 'fold.ts', 'prices.ts', 'recording.ts', 'stats.ts']
 
 const coreDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'core')
 const source = (name: string) => readFileSync(join(coreDir, name), 'utf8')

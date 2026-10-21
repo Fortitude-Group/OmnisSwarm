@@ -1,0 +1,35 @@
+/** What the recorder mod sends to the server's internal omnis_record tool, and the rule that guards it. Pure and mod-safe: no Node. */
+import type { EventData } from './events.ts'
+
+/** The only event types omnis_record accepts. The server writes the swarm, memory and task events itself. */
+export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure'] as const
+export type RecorderType = (typeof RECORDER_TYPES)[number]
+
+export const RECORD_TOOL = 'omnis_record'
+
+/** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
+export const SERVER_KEY = 'omnis-swarm'
+
+/** Past this many omnis_record calls in flight, the recorder drops events and counts them (spec section 6). */
+export const MAX_IN_FLIGHT = 64
+
+/** A Claude Code session id, as $.session.id() gives it (the transcript file's name, a UUID). */
+export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
+
+/**
+ * The internal tools by full name, `mcp__plugin_<plugin>_<server>__omnis_record` (or `__omnis_feed`).
+ * The plugin segment is left open so a marketplace install, which may rename it, is still covered.
+ */
+export const INTERNAL_TOOL = /^mcp__plugin_.+__omnis_(record|feed)$/
+
+/** An internal tool may be called only from this plugin's own hooks. Every other tool is not the guard's business. */
+export function guardVerdict(tool: string, origin: string, self: string): 'pass' | 'deny' {
+  return INTERNAL_TOOL.test(tool) && origin !== self ? 'deny' : 'pass'
+}
+
+export type RecordBody<K extends RecorderType = RecorderType> = {
+  [T in K]: { type: T; agent?: string; data: EventData[T] }
+}[K]
+
+/** One omnis_record call. `ts` is the mod's clock at hook time; `dropped` counts events lost since the last call that got through. */
+export type RecordArgs = RecordBody & { sessionId: string; ts: string; dropped?: number }
