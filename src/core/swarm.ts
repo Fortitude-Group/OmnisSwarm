@@ -1,8 +1,9 @@
 /** Naming swarms and making sure one is running. */
 import { createHash } from 'node:crypto'
-import { closeSync, lstatSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, openSync, readSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { makeEvent, parseLine, type Source } from './events.ts'
-import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, readEvents, swarmLogPath, writeCurrent } from './log.ts'
+import { appendEvent, ensureLogDirs, isLink, isValidSwarmId, logPaths, readCurrent, readEvents, swarmLogPath, writeCurrent } from './log.ts'
 
 /** Lower-case letters, digits, dots and dashes; no leading or trailing punctuation; no dot runs; at most 64 characters. */
 export function slugify(name: string): string {
@@ -84,12 +85,48 @@ export function sessionKey(sessionId: string): string {
  */
 export function swarmOwner(root: string, id: string): string | null {
   try {
-    for (const e of readEvents(swarmLogPath(root, id)).events) {
-      if (e.type === 'swarm.started' && typeof e.data.session === 'string') return e.data.session
+    const file = swarmLogPath(root, id)
+    if (isLink(file)) return null
+    const fd = openSync(file, 'r')
+    let text: string
+    try {
+      const buf = Buffer.alloc(OWNER_READ_BYTES)
+      const n = readSync(fd, buf, 0, buf.length, 0)
+      text = buf.toString('utf8', 0, n)
+      // A full buffer ends mid-line: drop the partial last line.
+      if (n === buf.length) text = text.slice(0, Math.max(0, text.lastIndexOf('\n')))
+    } finally {
+      closeSync(fd)
+    }
+    for (const line of text.split('\n')) {
+      if (line.trim() === '') continue
+      const parsed = parseLine(line)
+      if (parsed.ok && parsed.event.type === 'swarm.started' && typeof parsed.event.data.session === 'string') return parsed.event.data.session
     }
     return null
   } catch {
     return null
+  }
+}
+
+/** How much of the start of a log swarmOwner reads: the first swarm.started sits at the top. */
+const OWNER_READ_BYTES = 65_536
+
+/** The most recently modified swarm logs a session looks through for its own swarm after a restart. */
+export const OWN_SCAN_LIMIT = 20
+
+/** Swarm ids of the newest `limit` logs by modification time, newest first. One directory listing. */
+export function recentSwarmIds(root: string, limit = OWN_SCAN_LIMIT): string[] {
+  try {
+    const dir = logPaths(root).swarms
+    return readdirSync(dir)
+      .filter(f => f.endsWith('.jsonl') && isValidSwarmId(f.slice(0, -6)))
+      .map(f => ({ id: f.slice(0, -6), t: lstatSync(join(dir, f), { throwIfNoEntry: false })?.mtimeMs ?? 0 }))
+      .sort((a, b) => b.t - a.t)
+      .slice(0, limit)
+      .map(x => x.id)
+  } catch {
+    return []
   }
 }
 

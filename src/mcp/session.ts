@@ -1,9 +1,10 @@
 /** Per-session swarm state: which swarm this server is working in, and its folded state held between calls. */
+import { existsSync } from 'node:fs'
 import { makeEvent } from '../core/events.ts'
-import { appendEvent, readCurrent, writeCurrent } from '../core/log.ts'
+import { appendEvent, readCurrent, swarmLogPath, writeCurrent } from '../core/log.ts'
 import { SESSION_ID } from '../core/recording.ts'
 import { advance, loadState, type Loaded } from '../core/snapshot.ts'
-import { announceSwarm, publishCurrent, sessionKey, swarmOwner, uniqueSwarmId } from '../core/swarm.ts'
+import { announceSwarm, publishCurrent, recentSwarmIds, sessionKey, swarmOwner, uniqueSwarmId } from '../core/swarm.ts'
 import { InputError } from './validate.ts'
 
 const stamp = (d: Date): string => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
@@ -22,6 +23,8 @@ export class Session {
   #conflict = false
   /** The swarm whose owner was last read from its log, so each swarm's log is read once per session id. */
   #ownerRead: string | null = null
+  /** The session key for which the swarms folder was already searched for this session's own swarm. */
+  #searched: string | null = null
 
   /** `load` is only replaced in tests, to count full loads. */
   constructor(root: string, load: (root: string, id: string) => Loaded = loadState) {
@@ -119,8 +122,29 @@ export class Session {
           this.#ownerRead = this.sessionKey === null ? null : c
         }
       }
+      if (this.#mine === null) this.#findOwn()
     }
     return this.#mine
+  }
+
+  /**
+   * After a restart `current` may name another session's swarm. Looks, once per session key, for a live swarm this
+   * session started: the deterministic implicit name first, then the newest few logs by modification time.
+   */
+  #findOwn(): void {
+    const key = this.sessionKey
+    if (key === null || this.#searched === key) return
+    this.#searched = key
+    const live = (id: string): boolean => swarmOwner(this.root, id) === key && !this.hasEnded(id)
+    const implicit = `session-${key.slice(0, 8)}`
+    const found = (existsSync(swarmLogPath(this.root, implicit)) && live(implicit) ? implicit : null)
+      ?? recentSwarmIds(this.root).find(live)
+      ?? null
+    if (found !== null) {
+      this.#mine = found
+      this.#owned = true
+      this.#ownerRead = found
+    }
   }
 
   /** Records that this session started swarm `id`. */

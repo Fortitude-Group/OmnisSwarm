@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, renameSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { sessionKey } from '../../src/core/swarm.ts'
@@ -219,4 +219,50 @@ test('a second, different session id switches ownership off but still records', 
   call({ sessionId: 'ffffffff-0000-0000-0000-000000000000', ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL })
   assert.equal(session.sessionKey, null)
   assert.equal(events(SWARM).length, 3)
+})
+
+const SID_B = '12345678-aaaa-bbbb-cccc-dddddddddddd'
+const rec = (root: string, session: Session) => createRecordTools({ root, session, now: () => new Date('2026-10-21T10:00:05.000Z') })[0]!
+const ping = (root: string, session: Session, sid: string) => rec(root, session).handler({ sessionId: sid, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL })
+
+test('a restarted session finds its own implicit swarm although another session holds current', () => {
+  const root = tmpRoot()
+  ping(root, new Session(root), SID_B) // B takes current
+  ping(root, new Session(root), SID) // A gets its own swarm
+  assert.equal(readCurrent(root), `session-${sessionKey(SID_B).slice(0, 8)}`)
+  const restarted = new Session(root)
+  ping(root, restarted, SID)
+  assert.equal(restarted.mySwarm(), SWARM)
+  assert.equal(restarted.owned, true)
+  assert.equal(readdirSync(join(root, '.omnis-swarm', 'swarms')).length, 2)
+})
+
+test('a restarted session finds its renamed swarm by owner, newest first', () => {
+  const root = tmpRoot()
+  ping(root, new Session(root), SID_B)
+  const a = new Session(root)
+  const [recA] = createRecordTools({ root, session: a })
+  recA!.handler({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL })
+  // Move A's swarm to a name the implicit lookup cannot guess.
+  const old = swarmLogPath(root, SWARM)
+  const named = swarmLogPath(root, 'alpha')
+  renameSync(old, named)
+  const restarted = new Session(root)
+  ping(root, restarted, SID)
+  assert.equal(restarted.mySwarm(), 'alpha')
+  assert.equal(restarted.owned, true)
+})
+
+test('a foreign or an ended swarm is never picked as the restarted session\'s own', () => {
+  const root = tmpRoot()
+  ping(root, new Session(root), SID_B)
+  const first = new Session(root)
+  ping(root, first, SID)
+  createTools({ root, session: first, now: () => new Date('2026-10-21T10:00:05.000Z') }).find(t => t.name === 'omnis_swarm_end')!.handler({})
+  const restarted = new Session(root)
+  ping(root, restarted, SID)
+  const mine = restarted.mySwarm()
+  assert.notEqual(mine, SWARM)
+  assert.notEqual(mine, `session-${sessionKey(SID_B).slice(0, 8)}`)
+  assert.equal(restarted.owned, true)
 })
