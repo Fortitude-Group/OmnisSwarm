@@ -236,9 +236,15 @@ export function pairCount(grid: Grid): number {
   slots.fill(0, 0, size)
   const mask = size - 1
   let count = 0
+  // Most cells repeat the cell before them (runs of blank canvas): those are already counted.
+  let lastFg = -1
+  let lastBg = -1
   for (let i = 0; i < n; i++) {
     const fg = cells[i * 3 + 1]!
     const bg = cells[i * 3 + 2]!
+    if (fg === lastFg && bg === lastBg) continue
+    lastFg = fg
+    lastBg = bg
     let h = (Math.imul(fg, 0x9e3779b1) ^ Math.imul(bg ^ (bg >>> 15), 0x85ebca77)) >>> 0
     h = (h ^ (h >>> 13)) & mask
     for (;;) {
