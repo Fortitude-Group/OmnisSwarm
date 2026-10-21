@@ -86,7 +86,10 @@ test('fix 1: bad keys and writers are refused', () => {
 
 test('fix 1: key 513 is refused, replacing an existing key is not', () => {
   const root = tmpRoot()
-  for (let i = 0; i < MAX_KEYS; i++) putMemory(root, 's1', `k${i}`, 'v', 'lead', now)
+  // Seed a full store directly; 512 locked puts would take seconds.
+  ensureLogDirs(root)
+  const seed = Object.fromEntries(Array.from({ length: MAX_KEYS }, (_, i) => [`k${i}`, { value: 'v', writer: 'lead', at: now.toISOString() }]))
+  writeFileSync(join(logPaths(root).memory, 's1.json'), JSON.stringify(seed))
   assert.throws(() => putMemory(root, 's1', 'one-more', 'v', 'lead', now), /full/)
   putMemory(root, 's1', 'k0', 'new', 'lead', now)
   assert.equal(readMemory(root, 's1')['k0']?.value, 'new')

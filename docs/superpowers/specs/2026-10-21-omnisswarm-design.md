@@ -108,7 +108,7 @@ Repository layout (`Fortitude-Group/OmnisSwarm`, which is also its own plugin ma
 .claude-plugin/plugin.json        plugin manifest (MCP server, mod modules, user config)
 .claude-plugin/marketplace.json   single-plugin marketplace
 src/core/       events.ts  log.ts  fold.ts  stats.ts  prices.ts
-src/mcp/        server.ts  tools/*.ts
+src/mcp/        server.ts  registry.ts  session.ts  protocol.ts  validate.ts  memory-store.ts  tools.ts  (one more file per later tool)
 src/mod/        register.ts  recorder.ts  pane.ts
 src/render/     layout.ts  graph.ts  spotlight.ts  timeline.ts  feed.ts  fx.ts  grid.ts
 tests/          mirrors src/, plus fixtures/ and e2e/
@@ -123,7 +123,7 @@ as `.ts` (as RuFlo's are) in an environment with no Node. Every file under `src/
 `TextEncoder`/`TextDecoder`, `structuredClone`, `crypto`, `URL`, `atob`/`btoa`, `performance`,
 `setTimeout`, `Uint8Array.prototype.toBase64` and `Date.now()` all exist (checked at run time, spike
 round 2). Byte lengths use `new TextEncoder().encode(s).length`, network goes through `$.http`, timers
-that outlive a hook through `$.clock`. Only `core/log.ts` and `src/mcp/` use Node. A mod may import
+that outlive a hook through `$.clock`. Only `core/log.ts`, `core/snapshot.ts`, `core/swarm.ts` and `src/mcp/` use Node (`core/state-check.ts` is Node-free). A mod may import
 from parent folders inside the plugin (`../core/fold.ts`, verified) and may pass `$` only to functions
 declared at the top of a file or imported from its own files.
 The MCP server runs with Node's built-in type stripping, so there is no build step (verified,
@@ -162,6 +162,9 @@ swarm instead of starting a second one. Calling `omnis_swarm_init` while an expl
 still running ends that one (`outcome: "replaced"`) and starts the new one. The server keeps no
 state it can't rebuild from `.omnis-swarm/`: Claude Code restarts a dead server on the next call,
 with a fresh process.
+
+Until phase 2 stamps the session id on the swarm, which swarm a server owns is held in memory only: a
+restarted server owns nothing and adopts `current` as another session's swarm (accepted).
 
 ## 6. Recorder
 
@@ -319,7 +322,7 @@ Rules:
 - Readers buffer a trailing partial line until its newline arrives.
 - A line that fails to parse is skipped and counted (`state.gaps`).
 - Events with `v` greater than the reader's version are ignored.
-- Order is `ts`, then `src`, then file position. Writers never coordinate. (Within one session the
+- Order is `ts`, then `src`, then file position. Writers never coordinate. Events are sorted per read batch, so clock skew between sessions can reorder events slightly; accepted. (Within one session the
   MCP server is now the only process that appends, but two sessions in one project can still both write.)
 - Stored: names, models, numbers, paths, command lines up to 80 chars, message summaries up to
   200 chars, memory previews up to 80 chars. **Never** full prompts, tool output or file contents.
@@ -518,10 +521,12 @@ messages are the only interface between the two.
 
 Phases 2 and 3 both depend only on phase 1 and can run in parallel; `render` can start as soon
 as `SwarmState` is fixed. Both now add an MCP tool (phase 2 `omnis_record`, phase 3 `omnis_feed`),
-so to keep them from colliding: each tool lives in its own `src/mcp/tools/<tool>.ts` exporting its
-definition and handler, `src/mcp/server.ts` registers them from one list, and `server.ts` (with
-the plugin manifest) is owned by the integrator, who adds each phase's tool to the list when that
-phase merges. Neither phase edits `server.ts` itself.
+so to keep them from colliding, the server is laid out as follows. `tools.ts` holds the phase 1
+`omnis_*` tools. `session.ts` holds the per-session swarm state and the held folded state, and every
+tool factory receives it in its `ToolContext`. `registry.ts` lists the tool factories. Each later
+tool is one new file in `src/mcp/` plus one line in `registry.ts`: neither phase edits `tools.ts`,
+`session.ts` or `server.ts`. The integrator owns `registry.ts` and the plugin manifest, and adds each
+phase's line when that phase merges.
 
 ## 15. Assumptions to check early
 

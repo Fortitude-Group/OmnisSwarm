@@ -1,12 +1,7 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
 import { AGENT_OUTCOMES, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
-import type { SwarmState } from './fold.ts'
+import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
 
-const MAX_FEED = 200
-const MAX_FILES = 200
-const MAX_SAMPLES = 30
-const MAX_RECENT = 5
-const MAX_EDITS = 10
 const MAX_DEPENDS = 20
 const MAX_SPEND = 200_000
 const MAX_KEY = 256

@@ -13,11 +13,11 @@ export const LEAD_ALIASES: readonly string[] = Object.freeze(['main', 'lead', 't
 /** Memory keys the fold accepts. Anything else is skipped, never truncated. */
 export const MEMORY_KEY = /^[A-Za-z0-9._/-]{1,128}$/
 
-const MAX_FEED = 200
-const MAX_FILES = 200
-const MAX_SAMPLES = 30
-const MAX_RECENT = 5
-const MAX_EDITS = 10
+export const MAX_FEED = 200
+export const MAX_FILES = 200
+export const MAX_SAMPLES = 30
+export const MAX_RECENT = 5
+export const MAX_EDITS = 10
 const SPEND_KEEP_MS = 600_000
 
 export type UsageSample = { at: number; output: number; gapMs: number }

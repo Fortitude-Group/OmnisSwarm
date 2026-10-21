@@ -17,6 +17,10 @@ const BANNED: Array<[string, RegExp]> = [
   ['Buffer', /\bBuffer\b/],
   ['process.', /\bprocess\./],
   ['__dirname', /__dirname/],
+  ['fetch', /\bfetch\b/],
+  ['queueMicrotask', /\bqueueMicrotask\b/],
+  ['setImmediate', /\bsetImmediate\b/],
+  ['globalThis.process', /globalThis\.process\b/],
 ]
 
 for (const name of MOD_SAFE) {

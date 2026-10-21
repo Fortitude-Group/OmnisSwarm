@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent, isValidSwarmId, readCurrent, readEvents, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
-import { announceSwarm, ensureSwarm, publishCurrent, slugify, uniqueSwarmId } from '../../src/core/swarm.ts'
+import { announceSwarm, publishCurrent, slugify, uniqueSwarmId } from '../../src/core/swarm.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
 test('slugify makes a safe id from a human name', () => {
@@ -19,25 +19,6 @@ test('uniqueSwarmId adds a number when the id is taken', () => {
   appendEvent(root, ev('swarm.ended', {}, { swarm: 'auth', src: 'mcp' }))
   assert.equal(uniqueSwarmId(root, 'Auth'), 'auth-2')
   assert.equal(uniqueSwarmId(root, '???'), 'swarm')
-})
-
-test('ensureSwarm returns the current swarm when there is one', () => {
-  const root = tmpRoot()
-  writeCurrent(root, 'auth')
-  assert.equal(ensureSwarm(root, { idHint: 'session-x', src: 'mcp' }), 'auth')
-})
-
-test('ensureSwarm starts an implicit swarm when there is none', () => {
-  const root = tmpRoot()
-  const now = new Date('2026-10-21T10:00:00.000Z')
-  const id = ensureSwarm(root, { idHint: 'session-20261021-100000', src: 'mcp', now })
-  assert.equal(id, 'session-20261021-100000')
-  assert.equal(readCurrent(root), id)
-  const [started] = readEvents(swarmLogPath(root, id)).events
-  assert.deepEqual(started, {
-    v: 1, ts: now.toISOString(), swarm: id, src: 'mcp', type: 'swarm.started',
-    data: { name: id, topology: 'hierarchical', implicit: true },
-  })
 })
 
 test('uniqueSwarmId prefixes slugs that are not valid ids', () => {
@@ -67,21 +48,6 @@ test('uniqueSwarmId claims the id, so the same name is never handed out twice', 
   const root = tmpRoot()
   assert.equal(uniqueSwarmId(root, 'Auth'), 'auth')
   assert.equal(uniqueSwarmId(root, 'Auth'), 'auth-2')
-})
-
-test('two ensureSwarm calls with different hints agree with current', () => {
-  const root = tmpRoot()
-  const a = ensureSwarm(root, { idHint: 'one', src: 'mcp' })
-  const b = ensureSwarm(root, { idHint: 'two', src: 'recorder' })
-  assert.ok(isValidSwarmId(a) && isValidSwarmId(b))
-  assert.equal(readCurrent(root), a)
-  assert.equal(b, a)
-})
-
-test('ensureSwarm propagates a failure to set up the log folder', () => {
-  const root = tmpRoot()
-  writeFileSync(join(root, '.omnis-swarm'), 'not a folder')
-  assert.throws(() => ensureSwarm(root, { idHint: 'x', src: 'mcp' }))
 })
 
 test('two writers starting together end up in the same swarm (A1, B1, A2, B2)', () => {

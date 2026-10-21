@@ -103,12 +103,3 @@ export function publishCurrent(root: string, id: string): string {
   if (winner !== id && onlyStarted(root, id)) rmSync(swarmLogPath(root, id), { force: true })
   return winner
 }
-
-/** The current swarm id, starting an implicit hierarchical swarm named after `idHint` if none is running. */
-export function ensureSwarm(root: string, input: { idHint: string; src: Source; now?: Date }): string {
-  const current = readCurrent(root)
-  if (current !== null) return current
-  const id = uniqueSwarmId(root, input.idHint)
-  announceSwarm(root, id, input)
-  return publishCurrent(root, id)
-}

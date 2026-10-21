@@ -106,6 +106,6 @@ test('console output from modules imported before the server goes to stderr, nev
 
 test('server.ts imports the stdio guard before anything else', () => {
   const source = readFileSync(SERVER, 'utf8')
-  const firstImport = source.split(/\r?\n/).map(l => l.trim()).find(l => l.startsWith('import '))
+  const firstImport = source.split(/\r?\n/).map(l => l.trim()).find(l => /^(import|export)\b/.test(l))
   assert.match(firstImport ?? '', /^import '\.\/stdio-guard\.ts'/)
 })

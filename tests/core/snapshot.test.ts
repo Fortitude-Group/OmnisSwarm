@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { foldAll } from '../../src/core/fold.ts'
 import { serialise } from '../../src/core/events.ts'
-import { appendEvent, readEvents, swarmLogPath } from '../../src/core/log.ts'
+import { appendEvent, logPaths, MAX_READ_BYTES, readEvents, swarmLogPath } from '../../src/core/log.ts'
 import { advance, loadSnapshot, loadState, MAX_SNAPSHOT_BYTES, saveSnapshot, SNAPSHOT_EVERY, snapshotPath } from '../../src/core/snapshot.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
@@ -67,7 +67,10 @@ test('a replaced log rebuilds state from scratch', () => {
 test('a log over 1 MiB loads completely with one loadState call', () => {
   const root = tmpRoot()
   const long = 'x'.repeat(200)
-  for (let n = 0; n < 6000; n++) appendEvent(root, ev('message.sent', { to: 'lead', summary: long }, { agent: 'a1', atSec: n }))
+  const lines = Array.from({ length: 6000 }, (_, n) => serialise(ev('message.sent', { to: 'lead', summary: long }, { agent: 'a1', atSec: n })))
+  mkdirSync(logPaths(root).swarms, { recursive: true })
+  writeFileSync(swarmLogPath(root, 's1'), lines.join(''))
+  assert.ok(statSync(swarmLogPath(root, 's1')).size > MAX_READ_BYTES)
   assert.equal(loadState(root, 's1').state.events, 6000)
 })
 
