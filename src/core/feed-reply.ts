@@ -1,14 +1,32 @@
 /** The omnis_feed reply: what the MCP server sends the pane, and the pane's check of it. Pure and mod-safe. */
 import { isValidSwarmId, parseLine, type SwarmEvent } from './events.ts'
-import type { SwarmState } from './fold.ts'
+import { LEAD, type SwarmState } from './fold.ts'
 import { isSwarmState } from './state-check.ts'
 
 export const FEED_VERSION = 1
 /** The most events one reply carries; further behind than this, the server answers a fresh state. */
 export const FEED_MAX_EVENTS = 500
 
-/** The most characters one serialised reply may hold. Claude Code caps MCP output near 50,000, so this leaves margin. */
+/** The most bytes (UTF-8) one serialised reply may hold. Claude Code caps MCP output near 50,000, so this leaves margin. */
 export const FEED_REPLY_MAX = 40_000
+
+/** The UTF-8 size of `text` in bytes, counted over code points (plain string work, so it is mod-safe). */
+export function utf8Bytes(text: string): number {
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    if (c < 0x80) n += 1
+    else if (c < 0x800) n += 2
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      n += 4
+      i++
+    } else n += 3
+  }
+  return n
+}
+
+/** No running agent's record, with its name entry, is smaller than this; used to give up early on huge swarms. */
+const MIN_AGENT_BYTES = 500
 
 export type FeedReply =
   | { v: 1; kind: 'none' }
@@ -58,7 +76,7 @@ const EVENTS_OVERHEAD = 160
 export function fitEvents(events: readonly SwarmEvent[], swarm: string): number {
   let used = EVENTS_OVERHEAD + swarm.length
   for (let i = 0; i < events.length; i++) {
-    used += JSON.stringify(events[i]).length + 1
+    used += utf8Bytes(JSON.stringify(events[i])) + 1
     if (used > FEED_REPLY_MAX) {
       if (i === 0) throw new Error('a single event is larger than the feed reply budget')
       return i
@@ -103,20 +121,23 @@ export type FreshReply = Extract<FeedReply, { kind: 'state' | 'too-large' }>
  * agent's files (20) and samples (10), then each link's recent (1), then edits per path (2). Else `too-large`.
  */
 export function freshReply(swarm: string, offset: number, state: SwarmState): FreshReply {
-  const size = (s: SwarmState, trimmed: boolean): number =>
-    JSON.stringify({ v: 1, kind: 'state', swarm, offset, state: s, ...(trimmed && { trimmed: true }) }).length
-  if (size(state, false) <= FEED_REPLY_MAX) return { v: 1, kind: 'state', swarm, offset, state }
   const done = (s: SwarmState, hidden = 0): FreshReply => ({
     v: 1, kind: 'state', swarm, offset, state: s, trimmed: true, ...(hidden > 0 && { hiddenFinished: hidden }),
   })
+  /** The size of the exact reply that would be sent for `s`. */
+  const size = (s: SwarmState, hidden = 0): number => utf8Bytes(JSON.stringify(done(s, hidden)))
+  if (utf8Bytes(JSON.stringify({ v: 1, kind: 'state', swarm, offset, state })) <= FEED_REPLY_MAX) return { v: 1, kind: 'state', swarm, offset, state }
+  const tooLarge: FreshReply = { v: 1, kind: 'too-large', agents: Object.keys(state.agents).length }
+  // Running agents are never left out, so this many cannot fit however much else is trimmed.
+  if (Object.values(state.agents).filter(a => a.finishedAt === null).length * MIN_AGENT_BYTES > FEED_REPLY_MAX) return tooLarge
   const full = { feed: state.feed.length, files: Infinity, samples: Infinity, recent: Infinity, edits: Infinity }
   // Stage 1: the most feed items that fit; a fit at 0 items means no later stage is needed.
   let lo = 0
   let hi = state.feed.length
-  if (size(cut(state, { ...full, feed: 0 }), true) <= FEED_REPLY_MAX) {
+  if (size(cut(state, { ...full, feed: 0 })) <= FEED_REPLY_MAX) {
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2)
-      if (size(cut(state, { ...full, feed: mid }), true) <= FEED_REPLY_MAX) lo = mid
+      if (size(cut(state, { ...full, feed: mid })) <= FEED_REPLY_MAX) lo = mid
       else hi = mid - 1
     }
     return done(cut(state, { ...full, feed: lo }))
@@ -128,19 +149,19 @@ export function freshReply(swarm: string, offset: number, state: SwarmState): Fr
   ]
   for (const keep of stages) {
     const s = cut(state, keep)
-    if (size(s, true) <= FEED_REPLY_MAX) return done(s)
+    if (size(s) <= FEED_REPLY_MAX) return done(s)
   }
   // Stage 5: leave out all but the most recently finished agents; running and waiting ones are never left out.
-  const finished = Object.values(state.agents).filter(a => a.finishedAt !== null)
+  const finished = Object.values(state.agents).filter(a => a.finishedAt !== null && a.id !== LEAD)
     .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0) || (a.id < b.id ? -1 : 1))
   const dropped = new Set(finished.slice(KEEP_FINISHED).map(a => a.id))
   const lean = stages[2]!
   if (dropped.size > 0) {
     const s = cut(state, lean, dropped)
-    if (size(s, true) <= FEED_REPLY_MAX) return done(s, dropped.size)
+    if (size(s, dropped.size) <= FEED_REPLY_MAX) return done(s, dropped.size)
   }
   // Stage 6: empty every kept agent's files and samples.
   const s = cut(state, { ...lean, files: 0, samples: 0 }, dropped)
-  if (size(s, true) <= FEED_REPLY_MAX) return done(s, dropped.size)
-  return { v: 1, kind: 'too-large', agents: Object.keys(state.agents).length }
+  if (size(s, dropped.size) <= FEED_REPLY_MAX) return done(s, dropped.size)
+  return tooLarge
 }

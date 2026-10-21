@@ -192,3 +192,16 @@ test('a fresh state too big for one reply is trimmed under the cap', () => {
   const r = parseFeedReply(text)
   assert.ok(r !== null && r.kind === 'state' && r.trimmed === true)
 })
+
+test('a too-large answer is remembered for an unchanged swarm and recomputed when it changes', () => {
+  const { root, call, feed, started } = setup()
+  call('omnis_swarm_init', { name: 'Feed', topology: 'mesh' })
+  for (let i = 0; i < 120; i++) appendEvent(root, started(1 + i / 100, `a${i}`))
+  const a = feed.handler({}).text
+  assert.equal(parseFeedReply(a)?.kind, 'too-large')
+  assert.equal(feed.handler({}).text, a)
+  appendEvent(root, started(5, 'one-more'))
+  const b = feed.handler({}).text
+  assert.notEqual(b, a)
+  assert.deepEqual(parseFeedReply(b), { v: 1, kind: 'too-large', agents: (parseFeedReply(a) as { agents: number }).agents + 1 })
+})

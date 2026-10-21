@@ -77,7 +77,16 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
     return current
   }
   const answer = (reply: FeedReply) => ({ text: JSON.stringify(reply) })
-  const fresh = (id: string, held: Loaded) => answer(freshReply(id, held.offset, held.state))
+  // The last too-large answer, so an unchanged swarm is not trimmed again on every poll.
+  let tooLarge: { key: string; text: string } | null = null
+  const fresh = (id: string, held: Loaded) => {
+    const key = `${id}@${held.offset}`
+    if (tooLarge !== null && tooLarge.key === key) return { text: tooLarge.text }
+    const reply = freshReply(id, held.offset, held.state)
+    const out = answer(reply)
+    tooLarge = reply.kind === 'too-large' ? { key, text: out.text } : null
+    return out
+  }
 
   const tool: ToolDef = {
     name: 'omnis_feed',

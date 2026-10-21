@@ -36,15 +36,16 @@ test('malformed replies are refused', () => {
 })
 
 // --- reply size cap ---
-import { FEED_REPLY_MAX, fitEvents, freshReply } from '../../src/core/feed-reply.ts'
+import { FEED_REPLY_MAX, fitEvents, freshReply, utf8Bytes } from '../../src/core/feed-reply.ts'
 import { foldAll, type SwarmState } from '../../src/core/fold.ts'
 import { isSwarmState } from '../../src/core/state-check.ts'
 
 /** A state of `agents` agents, each with `files` files read, built by folding real events. */
-function bigState(agents: number, files: number, finished = 0): SwarmState {
+function bigState(agents: number, files: number, finished = 0, desc = 'd', quote = false): SwarmState {
   const events = []
+  const pre = quote ? 'q"\\' : 'n'
   for (let a = 0; a < agents; a++) {
-    events.push(ev('agent.started', { name: `n${a}`, role: 'coder', description: 'd', parent: 'lead' }, { swarm: 'big', agent: `a${a}`, atSec: 1 }))
+    events.push(ev('agent.started', { name: `${pre}${a}`, role: 'coder', description: desc, parent: 'lead' }, { swarm: 'big', agent: `a${a}`, atSec: 1 }))
   }
   for (let a = 0; a < agents; a++) {
     const id = `a${a}`
@@ -53,7 +54,7 @@ function bigState(agents: number, files: number, finished = 0): SwarmState {
     }
     // Edits and messages that point at agents, so dropping an agent has links and edits to clean up.
     events.push(ev('agent.tool', { phase: 'start', tool: 'Edit', kind: 'edit', subject: `shared/file-${a % 5}.ts`, isError: false }, { swarm: 'big', agent: id, atSec: 5 }))
-    events.push(ev('message.sent', { to: `n${(a + 1) % agents}`, summary: 'hi' }, { swarm: 'big', agent: id, atSec: 6 }))
+    events.push(ev('message.sent', { to: `${pre}${(a + 1) % agents}`, summary: 'hi' }, { swarm: 'big', agent: id, atSec: 6 }))
   }
   for (let a = 0; a < finished; a++) events.push(ev('agent.finished', { outcome: 'answer' }, { swarm: 'big', agent: `a${a}`, atSec: 300 + a }))
   return foldAll('big', events)
@@ -137,4 +138,54 @@ test('when finished agents are not enough, files and samples are emptied', () =>
 test('the ceiling: about 60 running agents fit, 70 do not', () => {
   assert.equal(freshReply('big', 1, bigState(60, 200)).kind, 'state')
   assert.equal(freshReply('big', 1, bigState(70, 200)).kind, 'too-large')
+})
+
+test('utf8Bytes agrees with the real encoding for ASCII, accents, CJK, emoji and escapes', () => {
+  for (const t of ['', 'plain', 'café', '漢字です', 'party \u{1F389}!', 'q"\\\\n\n', '\ud800 lone']) {
+    assert.equal(utf8Bytes(t), Buffer.byteLength(t), JSON.stringify(t))
+  }
+})
+
+test('the cap is in bytes: CJK text that fits by characters is still trimmed to fit by bytes', () => {
+  const desc = '漢'.repeat(120)
+  let tested = false
+  for (let n = 30; n <= 70 && !tested; n++) {
+    const state = bigState(n, 0, 0, desc)
+    const text = JSON.stringify({ v: 1, kind: 'state', swarm: 'big', offset: 1, state })
+    if (text.length > FEED_REPLY_MAX || Buffer.byteLength(text) <= FEED_REPLY_MAX) continue
+    tested = true
+    const r = freshReply('big', 1, state)
+    const sent = JSON.stringify(r)
+    assert.ok(Buffer.byteLength(sent) <= FEED_REPLY_MAX, `${Buffer.byteLength(sent)}`)
+    assert.ok(r.kind === 'too-large' || r.trimmed === true)
+  }
+  assert.ok(tested, 'found a size that fits by characters but not by bytes')
+})
+
+test('quote and backslash heavy names are measured as serialised, and the reply stays under the cap and valid', () => {
+  const state = bigState(300, 30, 270, 'd', true)
+  const r = freshReply('big', 1, state)
+  assert.ok(r.kind === 'state' && isSwarmState(r.state, 'big'))
+  assert.ok(Buffer.byteLength(JSON.stringify(r)) <= FEED_REPLY_MAX)
+  assert.equal(parseFeedReply(JSON.stringify(r))?.kind, 'state')
+})
+
+test('the size includes hiddenFinished', () => {
+  for (const fin of [268, 270, 272]) {
+    const r = freshReply('big', 1, bigState(300, 30, fin))
+    if (r.kind === 'state') assert.ok(Buffer.byteLength(JSON.stringify(r)) <= FEED_REPLY_MAX)
+  }
+})
+
+test('the lead is never left out, even when finished and oldest', () => {
+  const state = bigState(300, 30, 270)
+  const a0 = state.agents['a0']!
+  state.agents['lead'] = { ...a0, id: 'lead', name: 'lead', finishedAt: 1 }
+  state.byName['lead'] = 'lead'
+  const r = freshReply('big', 1, state)
+  assert.ok(r.kind === 'state' && Object.hasOwn(r.state.agents, 'lead'))
+})
+
+test('a swarm of running agents too many to fit is refused without trimming', () => {
+  assert.deepEqual(freshReply('big', 1, bigState(90, 0)), { v: 1, kind: 'too-large', agents: 90 })
 })
