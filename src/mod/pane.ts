@@ -265,11 +265,22 @@ async function paneCommand($: EngineInterface, arg: string): Promise<string> {
   return opened.isPlaced ? 'Swarm pane open.' : `The swarm pane is waiting to be shown: ${opened.reason}`
 }
 
-/** Awaited by its hooks after next(e), so the open has settled when the hook returns (the kit settles fire-and-forget calls late). */
+/** True while an auto-open is in flight, so tool calls in quick succession open the pane once. */
+let autoOpening = false
+
+/** Run in the background by its hook, after next(e): a tool call never waits on ui.open. */
 async function maybeAutoOpen($: EngineInterface): Promise<void> {
-  if (rt.panel !== 'auto' || rt.open || rt.closedByPerson) return
-  await openPane($)
+  if (rt.panel !== 'auto' || rt.open || rt.closedByPerson || autoOpening) return
+  autoOpening = true
+  try {
+    await openPane($)
+  } finally {
+    autoOpening = false
+  }
 }
+
+/** What a command answers when its hook fails: the session goes on, and the markdown fallback is not sent to the model. */
+const COMMAND_FAILED = { text: 'The swarm pane could not be opened.' }
 
 async function togglePin($: EngineInterface, id: string): Promise<void> {
   await update($, pinnedAtom, current => (current === id ? null : id))
@@ -301,6 +312,7 @@ function chipRow($: EngineInterface, kit: Kit, frame: Frame, columns: number): R
 
 export function registerPane(on: On, options: PluginOptions): void {
   rt = fresh(panelOf(options.panel))
+  autoOpening = false
 
   // Matched: the recorder holds the plugin's one unmatched session.start, and only a session with a person at the prompt can show a pane.
   on('session.start', { isInteractive: true }, async ($, e, next) => {
@@ -330,9 +342,9 @@ export function registerPane(on: On, options: PluginOptions): void {
     const [sub = '', arg = ''] = e.args.trim().toLowerCase().split(/\s+/)
     if (sub !== 'pane') return { text: 'Usage: /omnis pane, or /omnis pane close.' }
     return { text: await paneCommand($, arg) }
-  })
+  }).catch(() => COMMAND_FAILED)
 
-  on('command.run', { command: 'omnis-swarm:watch' }, async $ => ({ text: await paneCommand($, '') }))
+  on('command.run', { command: 'omnis-swarm:watch' }, async $ => ({ text: await paneCommand($, '') })).catch(() => COMMAND_FAILED)
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     rt.pinned = await read($, pinnedAtom)
@@ -381,17 +393,14 @@ export function registerPane(on: On, options: PluginOptions): void {
     const result = await next(e)
     if (e.id === PANE_ID) closed(e.origin.kind === 'person')
     return result
-  })
+  }).catch((_$, e, next) => next(e))
 
   // With panel auto, a new swarm or a spawned agent (an Agent tool call) opens the pane.
   on('tool.call', { tool: [SWARM_INIT_TOOL, AGENT_TOOL] }, async ($, e, next) => {
     const result = await next(e)
-    try {
-      await maybeAutoOpen($)
-    } catch {
-      // Opening the pane must never change the tool call's result.
-    }
+    // Not awaited, and never allowed to change the result: the tool call returns now.
+    void maybeAutoOpen($).catch(() => {})
     return result
-  })
+  }).catch((_$, e, next) => next(e)) // next is replay-safe here: once the hook has called it, it returns that result without running the tool again.
 
 }

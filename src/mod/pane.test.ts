@@ -16,14 +16,16 @@ const RUN = { origin: { kind: 'composer' }, presentation: { isFullscreen: true, 
 
 type Seen = { calls: Array<{ tool: string; args: Record<string, unknown> }>; opens: number; blits: number }
 
-/** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. */
-function engine(on: On): Seen {
+/** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
+function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok'): Seen {
   const seen: Seen = { calls: [], opens: 0, blits: 0 }
   const state = foldAll(FIVE_SWARM, fiveAgentEvents())
   let open = false
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.open', () => {
     seen.opens++
+    if (openAs === 'throw') throw new Error('no room for the pane')
+    if (openAs === 'hang') return new Promise<never>(() => {})
     open = true
     return { value: { isPlaced: true } }
   })
@@ -47,6 +49,18 @@ function engine(on: On): Seen {
   on('agent.list', () => ({ value: [] }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   return seen
+}
+
+/** The auto-open runs in the background after the tool call returns: these wait for it, by microtask yields. */
+async function until(cond: () => boolean, max = 20000): Promise<void> {
+  for (let i = 0; i < max; i++) {
+    if (cond()) return
+    await Promise.resolve()
+  }
+  throw new Error(`until: the condition still did not hold after ${max} microtask yields`)
+}
+async function settle(): Promise<void> {
+  for (let i = 0; i < 2000; i++) await Promise.resolve()
 }
 
 const feedCalls = (seen: Seen) => seen.calls.filter(c => c.tool === 'omnis_feed')
@@ -141,9 +155,10 @@ test('auto opens the pane when a swarm starts, but not again after the person cl
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: INIT, name: 'x', topology: 'mesh' })
-  expect(seen.opens).toBe(1)
+  await until(() => seen.opens === 1)
   await $.command.run({ command: 'omnis', args: 'pane close', ...RUN })
   await $.tool.call({ tool: INIT, name: 'y', topology: 'mesh' })
+  await settle()
   expect(seen.opens).toBe(1)
 })
 
@@ -152,6 +167,9 @@ test('auto opens the pane when an agent is spawned through the Agent tool', { op
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
+  await until(() => seen.opens === 1)
+  await $.tool.call({ tool: 'Agent', prompt: 'Test it', description: 'test auth' })
+  await settle()
   expect(seen.opens).toBe(1)
 })
 
@@ -161,6 +179,7 @@ test('auto does not open the pane for other tools', { options: { panel: 'auto' }
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   await $.tool.call({ tool: 'Read', file_path: '/a.ts' })
+  await settle()
   expect(seen.opens).toBe(0)
 })
 
@@ -169,6 +188,7 @@ test('with panel command an Agent tool call does not open the pane', async ($, o
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
+  await settle()
   expect(seen.opens).toBe(0)
 })
 
@@ -189,3 +209,17 @@ test("the recorder does not record the pane's omnis_feed pulls as agent tool cal
   expect(recorded).toContain('Bash')
   expect(recorded.some(t => String(t).includes('omnis_feed'))).toBe(false)
 })
+
+for (const openAs of ['throw', 'hang'] as const) {
+  const how = openAs === 'throw' ? 'throws' : 'never answers'
+  test(`an Agent call's result comes back unchanged when ui.open ${how}`, { options: { panel: 'auto' } }, async ($, on) => {
+    const seen = engine(on, openAs)
+    const answer = { status: 'completed', content: [{ type: 'text', text: 'Reviewed.' }] }
+    on('tool.call', () => ({ result: answer as never }))
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    const ran = await $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
+    expect(ran.result).toEqual(answer)
+    await until(() => seen.opens === 1)
+    expect(feedCalls(seen)).toHaveLength(0)
+  })
+}
