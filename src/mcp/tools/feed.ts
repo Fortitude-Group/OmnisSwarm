@@ -6,12 +6,14 @@ import { closeSync, existsSync, openSync, readSync } from 'node:fs'
 import { LIMITS, isValidSwarmId, parseLine } from '../../core/events.ts'
 import { FEED_MAX_EVENTS, fitEvents, freshReply, type FeedReply } from '../../core/feed-reply.ts'
 import { MAX_READ_BYTES, readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
+import { FEED_TOOL } from '../../core/recording.ts'
 import { swarmOwner } from '../../core/swarm.ts'
 import type { Loaded } from '../../core/snapshot.ts'
 import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, optString } from '../validate.ts'
 
+/** For the input schema only; the handler checks with isValidSwarmId, which also refuses reserved names. */
 const SWARM_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 /** True when the byte before `offset` is a newline, so `offset` starts a line. */
 function atLineStart(file: string, offset: number): boolean {
@@ -107,7 +109,7 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
   }
 
   const tool: ToolDef = {
-    name: 'omnis_feed',
+    name: FEED_TOOL,
     description: 'Internal to the OmnisSwarm pane. When the OmnisSwarm mod is loaded it refuses calls from the model.',
     inputSchema: {
       type: 'object',
@@ -119,7 +121,7 @@ export function createFeedTools(ctx: ToolContext): ToolDef[] {
     },
     handler: args => {
       const since = optOffset(args, 'since') ?? 0
-      const hint = optString(args, 'swarm', 64, SWARM_ID)
+      const hint = optString(args, 'swarm', 64)
       if (hint !== undefined && !isValidSwarmId(hint)) throw new InputError('swarm is not a valid swarm id')
       try {
         const id = pick(hint)

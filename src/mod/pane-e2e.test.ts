@@ -1,7 +1,7 @@
 /**
  * Spec section 12 e2e, headless through the engine: a stand-in omnis_feed answers as the real server would, a state for
  * the five-agent swarm's first 30 events at offset 30, then the other 16 as an events reply, then nothing new. The
- * pane draws the first, repaints with the second by blits, and stops pulling and blitting once closed.
+ * pane draws the first, repaints with the second by blits, and stops pulling, blitting and looking at the panes once closed.
  *
  * The pane reads Date.now(), which the kit does not mock, so it draws at the real time while timers run on the mocked
  * clock; frames are spaced by their real cost and only changed cells are blitted. So the test waits for outcomes (a
@@ -32,7 +32,11 @@ test('a scripted five-agent swarm arrives in two pulls; the pane draws it, repai
     open = false
     return { value: undefined }
   })
-  on('ui.panes', () => ({ value: open ? [{ id: 'omnis-swarm', title: 'Swarm', isShown: true, isFocused: false, isPlaced: true }] : [] }))
+  let panes = 0
+  on('ui.panes', () => {
+    panes++
+    return { value: open ? [{ id: 'omnis-swarm', title: 'Swarm', isShown: true, isFocused: false, isPlaced: true }] : [] }
+  })
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.blit', (_, e) => {
     if ('cells' in e) blits.push({ key: e.key, cells: String(e.cells), columns: Number(e.columns), rows: Number(e.rows) })
@@ -85,12 +89,14 @@ test('a scripted five-agent swarm arrives in two pulls; the pane draws it, repai
   await clock.advance(500)
   expect(asked.at(-1)).toEqual({ since: 46, swarm: FIVE_SWARM })
 
-  // Closed: no more pulls and no more blits.
+  // Closed: no more pulls, no more blits and no more looks at the panes.
   expect((await $.command.run({ command: 'omnis', args: 'pane close', ...RUN })).text).toBe('Swarm pane closed.')
   const pulls = asked.length
   const sent = blits.length
+  const looks = panes
   await clock.advance(5000)
   expect(asked.length).toBe(pulls)
   expect(blits.length).toBe(sent)
+  expect(panes).toBe(looks)
   await ui.unmount()
 })

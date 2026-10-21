@@ -7,11 +7,11 @@
  */
 import type { EngineInterface, Timer } from 'claude-code'
 import { parseFeedReply } from '../core/feed-reply.ts'
+import { FEED_TOOL } from '../core/recording.ts'
 import { PULL_MS } from '../render/tokens.ts'
 import { applyReply, feedArgs, markDegraded, type PaneModel } from './pane-model.ts'
 
 export const PANE_ID = 'omnis-swarm'
-const FEED_TOOL = 'omnis_feed'
 /** While the pane is hidden it only looks at $.ui.panes(), this often. */
 const HIDDEN_PULL_MS = 1_000
 /** After this many replies in a row with no news, a shown pane pulls every IDLE_PULL_MS until news or a wake. */

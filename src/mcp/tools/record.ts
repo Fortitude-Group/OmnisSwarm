@@ -11,7 +11,8 @@ import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, reqEnum, reqString } from '../validate.ts'
 
-const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
+/** Control and format characters, line and paragraph separators, and lone surrogates (which no terminal can draw). */
+const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u
 const MAX_COUNT = 1e12
 const MAX_USD = 1e9
 const MAX_USAGE = 1e9

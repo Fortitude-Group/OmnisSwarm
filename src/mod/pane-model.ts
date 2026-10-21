@@ -75,6 +75,7 @@ function applyGood(m: PaneModel, reply: Exclude<FeedReply, { kind: 'too-large' }
     return { model: { ...m, offset: 0 }, changed: false, swarmChanged: false }
   }
   const state = m.state
+  const agents = Object.keys(state.agents).length
   let newest = Number.NEGATIVE_INFINITY
   for (const e of reply.events) {
     fold(state, e)
@@ -84,8 +85,10 @@ function applyGood(m: PaneModel, reply: Exclude<FeedReply, { kind: 'too-large' }
   state.gaps += reply.bad
   const sample = arrivedAt - newest
   const lagMs = Number.isFinite(sample) && sample >= 0 && sample <= MAX_LAG_MS ? Math.round(m.lagMs * 0.8 + sample * 0.2) : m.lagMs
+  // An agent the state did not hold may be one the server left out of a trimmed state: the count is stale, so drop it.
+  const hiddenFinished = Object.keys(state.agents).length > agents ? 0 : m.hiddenFinished
   return {
-    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs, degraded: null, degradedAgents: 0, hiddenFinished: m.hiddenFinished },
+    model: { swarm: m.swarm, offset: reply.offset, state, pulses: prunePulses([...m.pulses, ...pulsesFrom(reply.events)], arrivedAt), lagMs, degraded: null, degradedAgents: 0, hiddenFinished },
     changed: reply.events.length > 0 || reply.bad > 0,
     swarmChanged: false,
   }

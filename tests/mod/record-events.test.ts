@@ -188,3 +188,10 @@ test('redact does not backtrack badly on long scheme-like runs', () => {
   assert.ok(Date.now() - start < 500)
   assert.equal(redact('https://admin:hunter2@host/x'), 'https://[redacted]@host/x')
 })
+
+test('the server and the recorder redact token-shaped text with the same pattern', async () => {
+  const { SECRETISH: server } = await import('../../src/mcp/tools.ts')
+  const { SECRETISH: recorder } = await import('../../src/mod/record-events.ts')
+  assert.equal(server.source, recorder.source)
+  assert.equal(server.flags, recorder.flags)
+})

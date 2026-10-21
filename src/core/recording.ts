@@ -7,6 +7,9 @@ export type RecorderType = (typeof RECORDER_TYPES)[number]
 
 export const RECORD_TOOL = 'omnis_record'
 
+/** The internal tool the pane pulls the swarm from. */
+export const FEED_TOOL = 'omnis_feed'
+
 /** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
 export const SERVER_KEY = 'omnis-swarm'
 

@@ -19,7 +19,8 @@ import { PANE_ID, periodFailed, resume, startPulling, wake, type PaneHooks, type
 import { connectServer } from './server.ts'
 
 export { PANE_ID }
-const SWARM_INIT_TOOL = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_init'
+/** omnis_swarm_init under any server alias: plugin-bundled (`mcp__plugin_omnis-swarm_omnis-swarm__…`) or from .mcp.json (`mcp__omnis-swarm__…`). */
+const SWARM_INIT_TOOL = /^mcp__.+__omnis_swarm_init$/
 /** The built-in tool that spawns an agent: with panel auto, a spawn opens the pane as a new swarm does. */
 const AGENT_TOOL = 'Agent'
 const pinnedAtom = atom({ plugin: 'omnis-swarm', key: 'panePinned' } as const, null)
