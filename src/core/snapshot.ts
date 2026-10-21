@@ -1,12 +1,15 @@
 /** Loads swarm state from a snapshot plus the log tail, and keeps it current with `advance`. */
-import { closeSync, fstatSync, lstatSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { isAbsolute, relative } from 'node:path'
 import { emptyState, fold, type SwarmState } from './fold.ts'
-import { ensureLogDirs, readEvents, sortEvents, swarmLogPath } from './log.ts'
+import { ensureLogDirs, logPaths, readEvents, sortEvents, swarmLogPath } from './log.ts'
+import { isSwarmState } from './state-check.ts'
 
 export const SNAPSHOT_EVERY = 500
 
 /** The most a snapshot file may hold; anything bigger is ignored. */
-const MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
+export const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 
 export type Loaded = { state: SwarmState; offset: number; sinceSnapshot: number }
 
@@ -15,23 +18,44 @@ export const snapshotPath = (root: string, id: string): string => swarmLogPath(r
 export function saveSnapshot(root: string, loaded: Loaded): void {
   ensureLogDirs(root)
   const file = snapshotPath(root, loaded.state.swarm.id)
-  const tmp = `${file}.tmp`
-  rmSync(tmp, { force: true })
-  writeFileSync(tmp, JSON.stringify({ v: 1, offset: loaded.offset, state: loaded.state }), { flag: 'wx' })
-  renameSync(tmp, file)
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
+  let renamed = false
+  try {
+    writeFileSync(tmp, JSON.stringify({ v: 1, offset: loaded.offset, state: loaded.state }), { flag: 'wx' })
+    renameSync(tmp, file)
+    renamed = true
+  } finally {
+    if (!renamed) rmSync(tmp, { force: true })
+  }
 }
 
+const isLink = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
+
+/** Null unless the snapshot is a plain file in a real log folder, of sane size, with a valid state inside. */
 export function loadSnapshot(root: string, id: string): Loaded | null {
   let fd: number | undefined
   try {
+    const paths = logPaths(root)
+    if (isLink(paths.dir) || isLink(paths.swarms)) return null
+    const rel = relative(realpathSync(root), realpathSync(paths.swarms))
+    if (rel.startsWith('..') || isAbsolute(rel)) return null
     const file = snapshotPath(root, id)
-    if (lstatSync(file).isSymbolicLink()) return null
+    if (isLink(file)) return null
     fd = openSync(file, 'r')
     const stat = fstatSync(fd)
     if (!stat.isFile() || stat.size > MAX_SNAPSHOT_BYTES) return null
-    const raw = JSON.parse(readFileSync(fd, 'utf8')) as { v?: unknown; offset?: unknown; state?: SwarmState }
-    if (raw.v !== 1 || typeof raw.offset !== 'number' || raw.state?.swarm?.id !== id) return null
-    return { state: raw.state as SwarmState, offset: raw.offset, sinceSnapshot: 0 }
+    const buf = Buffer.alloc(stat.size)
+    let got = 0
+    while (got < buf.length) {
+      const n = readSync(fd, buf, got, buf.length - got, got)
+      if (n === 0) break
+      got += n
+    }
+    const raw = JSON.parse(buf.subarray(0, got).toString('utf8')) as { v?: unknown; offset?: unknown; state?: unknown }
+    const offset = raw.offset
+    if (raw.v !== 1 || typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) return null
+    if (!isSwarmState(raw.state, id)) return null
+    return { state: raw.state, offset, sinceSnapshot: 0 }
   } catch {
     return null
   } finally {
@@ -62,16 +86,25 @@ export function advance(root: string, loaded: Loaded): number {
   if (loaded.sinceSnapshot >= SNAPSHOT_EVERY) {
     try {
       saveSnapshot(root, loaded)
-      loaded.sinceSnapshot = 0
     } catch {
       // A missed snapshot only costs replay time next load.
     }
+    loaded.sinceSnapshot = 0
   }
   return added
 }
 
 export function loadState(root: string, id: string): Loaded {
-  const loaded = loadSnapshot(root, id) ?? { state: emptyState(id), offset: 0, sinceSnapshot: 0 }
+  const snap = loadSnapshot(root, id)
+  if (snap !== null) {
+    try {
+      advance(root, snap)
+      return snap
+    } catch {
+      // A snapshot that breaks the fold is discarded; replay the whole log instead.
+    }
+  }
+  const loaded: Loaded = { state: emptyState(id), offset: 0, sinceSnapshot: 0 }
   advance(root, loaded)
   return loaded
 }
