@@ -214,3 +214,24 @@ test('when two nodes would overlap the graph area shows the tree', () => {
   const roomy = render(five(), emptyView(), FIVE_AT.mid, FULL)
   assert.doesNotMatch(gridText(roomy.top).slice(2).join('\n'), /\S+ tok · /)
 })
+
+test('a very deep chain draws in bounded time (the legibility guard is linear and cached)', { timeout: 30_000 }, () => {
+  const s = five()
+  const base = s.agents['a-test']!
+  const N = 20_000
+  for (let i = 0; i < N; i++) {
+    s.agents[`c${i}`] = { ...base, id: `c${i}`, name: `c${i}`, parent: i === 0 ? 'lead' : `c${i - 1}`, startedAt: FIVE_AT.mid - 50_000 + i }
+  }
+  s.events++
+  const t0 = Date.now()
+  const f = render(s, emptyView(), FIVE_AT.mid, FULL)
+  render(s, emptyView(), FIVE_AT.mid, FULL)
+  assert.equal(f.step, 'full')
+  assert.ok(Date.now() - t0 < 5_000)
+})
+
+test('the 1-row header leaves out the topology so the context fits', () => {
+  const f = render(five(), emptyView(), FIVE_AT.mid, { columns: 60, rows: 13 })
+  assert.match(gridText(f.top)[0]!, /◆ auth refactor · 6 agents 4▶ · ≈\$[\d.]+\+ · ctx 34%/)
+  assert.doesNotMatch(gridText(f.top)[0]!, /hierarchical/)
+})

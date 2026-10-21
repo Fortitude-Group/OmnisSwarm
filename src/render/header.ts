@@ -43,7 +43,7 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   const right: Part[] = [...(area.h < 2 && hn.short !== null ? [hn.short, ...(gaps.length > 0 ? [SEP] : [])] : []), ...gaps]
   const limit = right.length === 0 ? maxX : maxX - width(right) - 1
   const groups: Part[][] = [
-    [SEP, [state.swarm.topology, TEXT.dim]],
+    ...(area.h < 2 ? [] : [[SEP, [state.swarm.topology, TEXT.dim]] as Part[]]),
     [SEP, [`${totals.agents} agents`, TEXT.primary], [` ${totals.running}${GLYPH.running}`, totals.running > 0 ? STATUS.running : TEXT.dim]],
     [SEP, [cost(totals), TEXT.primary]],
     [SEP, ['ctx ', TEXT.dim], ctxPart(totals)],

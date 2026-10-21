@@ -83,7 +83,8 @@ export function frameInterval(fps: number, previousMs: number, renderMs: number)
  * A state object is checked first by its event count (the pane folds events into the same object, and hands the same
  * object back when nothing arrived); otherwise the nodes' key decides, so a fresh state with the same nodes reuses it.
  */
-type Shape = { key: string; ids: string[]; edges: Edge[]; sized: Map<string, Record<string, Point>> }
+type Sized = { positions: Record<string, Point>; crowded: boolean }
+type Shape = { key: string; ids: string[]; edges: Edge[]; sized: Map<string, Sized> }
 const shapeOfState = new WeakMap<SwarmState, { events: number; shape: Shape }>()
 let lastShape: Shape | null = null
 
@@ -101,27 +102,38 @@ function shapeFor(state: SwarmState): Shape {
 /** Node centres closer than this (2 x (minRadius + ringPx) + 2, rounded up) overlap, discs and halos. */
 const MIN_GAP = Math.ceil(2 * (GRAPH.minRadius + GRAPH.ringPx) + 2)
 
-/** The distance between the two closest points: a sweep along x, so it is near-linear for a spread-out layout. */
-function closest(positions: Readonly<Record<string, Point>>): number {
-  const pts = Object.values(positions).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x)
-  let best = Number.POSITIVE_INFINITY
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length && pts[j]!.x - pts[i]!.x < Math.min(best, MIN_GAP); j++) {
-      best = Math.min(best, Math.hypot(pts[j]!.x - pts[i]!.x, pts[j]!.y - pts[i]!.y))
+/** Whether any two node centres are closer than MIN_GAP. Bucketed by MIN_GAP, so it is linear and stops at the first pair. */
+function crowded(positions: Readonly<Record<string, Point>>): boolean {
+  const buckets = new Map<string, Point[]>()
+  const cell = (v: number): number => Math.floor(v / MIN_GAP)
+  for (const p of Object.values(positions)) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue
+    const bx = cell(p.x)
+    const by = cell(p.y)
+    for (let x = bx - 1; x <= bx + 1; x++) {
+      for (let y = by - 1; y <= by + 1; y++) {
+        for (const q of buckets.get(x + ',' + y) ?? []) if (Math.hypot(p.x - q.x, p.y - q.y) < MIN_GAP) return true
+      }
     }
+    const key = bx + ',' + by
+    const list = buckets.get(key)
+    if (list === undefined) buckets.set(key, [p])
+    else list.push(p)
   }
-  return best
+  return false
 }
 
-function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Record<string, Point> {
+/** The layout for a canvas size, with its crowding verdict; both are computed once and kept with the shape. */
+function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Sized {
   const size = `${w}x${h}`
-  let positions = s.sized.get(size)
-  if (positions === undefined) {
+  let entry = s.sized.get(size)
+  if (entry === undefined) {
     if (s.sized.size >= 4) s.sized.clear()
-    positions = layoutNodes(state, state.swarm.topology, w, h)
-    s.sized.set(size, positions)
+    const positions = layoutNodes(state, state.swarm.topology, w, h)
+    entry = { positions, crowded: crowded(positions) }
+    s.sized.set(size, entry)
   }
-  return positions
+  return entry
 }
 
 export function render(state: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}): Frame {
@@ -155,9 +167,9 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
     if (regions.tree !== null) drawTree(top, regions.tree, state, stats)
     if (regions.graph !== null) {
       const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2)
-      positions = tween(target, view.tween, nowMs)
+      positions = tween(target.positions, view.tween, nowMs)
       // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead.
-      if (closest(target) < MIN_GAP) drawTree(top, regions.graph, state, stats)
+      if (target.crowded) drawTree(top, regions.graph, state, stats)
       else drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges })
     }
   }

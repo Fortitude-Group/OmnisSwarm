@@ -242,3 +242,18 @@ test('a quiet link shows only while recent; at rest the graph holds no message a
   assert.ok(draw(FIVE_AT.mid) > 0)
   assert.equal(draw(FIVE_AT.idle), 0)
 })
+
+test('the glyph-only label keeps a stuck agent\'s mark', () => {
+  const s = foldAll(FIVE_SWARM, fiveAgentEvents())
+  const { stats, clashes } = statsOf(s, FIVE_AT.mid)
+  assert.equal(stats['a-test']!.stuck, true)
+  const positions: Record<string, { x: number; y: number }> = {
+    lead: { x: 20, y: 10 }, 'a-test': { x: 27, y: 10 }, 'a-arch': { x: 60, y: 10 }, 'a-cod1': { x: 80, y: 10 }, 'a-cod2': { x: 100, y: 10 }, 'a-rev': { x: 40, y: 30 }, ghost: { x: 90, y: 30 },
+  }
+  const g = new Grid(120, 24, CANVAS)
+  drawGraph(g, rect(0, 0, 120, 24), { state: s, stats, positions, clashes, view: emptyView(), now: FIVE_AT.mid, tEff: FIVE_AT.mid, edges: [] })
+  const text = gridText(g).join('\n')
+  assert.ok(text.includes('◆ lead ▶'))
+  assert.ok(text.includes('▶!'), text)
+  assert.ok(!text.includes('tester'))
+})

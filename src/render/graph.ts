@@ -192,7 +192,8 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
     const full: Part[] = isLead
       ? [[GLYPH.lead, ACCENT], [` ${name}`, nameColor], [` ${status}`, statusColor], ...stuck]
       : [[status, statusColor], [` ${name}`, nameColor], ...stuck]
-    const short: Part[] = isLead ? [[GLYPH.lead, ACCENT], [status, statusColor]] : [[status, statusColor]]
+    // The glyph-only form keeps the marks: the lead's diamond and a stuck agent's `!`.
+    const short: Part[] = [...(isLead ? ([[GLYPH.lead, ACCENT]] as Part[]) : []), [status, statusColor], ...(n.s.stuck ? ([[GLYPH.stuck, STATUS.warn]] as Part[]) : [])]
     for (const parts of [full, short]) {
       const cells = parts.flatMap(([text, color]) => [...text].map(ch => [ch, color] as const))
       if (cells.length > area.w) continue

@@ -1,5 +1,5 @@
 # no-timeline-mid: hierarchical at +30000 ms in 100x29; step noTimeline, fps 30, spotlight a-cod1
-## top 100x18 pairs 158 sha 5714617109167f03
+## top 100x18 pairs 158 sha c8eb86a37fdaa35a
 ### glyphs
  ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0.11/min           
  tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash   move sessions to signed t… 
@@ -13,7 +13,7 @@
                            ⢠⠤⣀                                         ⢀⡠⠬                          
                    ▀ ▀ ▀ ▀▀⡀⠁⠈⠉⠒⠢⢤⣄⢀⡀ ▀▀▀▀▀ ▀▀▀           ▀▀      ⢀⣀⠤⠒⠊⠁  ▀▀▀▀▀▀                    
                   ▀▀▀▀▀ ▀▀▀⠙⢄⣄ ▀▀▀▀⠉⠉⠚⠣⠴⢆⣐⣄⡠⡀⢀⡀           ⣀⣀⣀⠤⠤⠒⠊⠉⠁      ? ghost                    
-                  ▶ architect ⠒⠤▀▀▀▀▀ ▀ ▀▶ ⠈⠉⠉⠉⠉⠑⠒⠒⠲⠖⢉⡉⠉⠉ ✕  ▀ ▀▀▀▀▀                                
+                  ▶ architect ⠒⠤▀▀▀▀▀ ▀ ▀▀ ⠈⠉⠉⠉⠉⠑⠒⠒⠲⠖⢉⡉⠉⠉ ✕  ▀ ▀▀▀▀▀                                
                                   ▀▀▀ ▀                ⠈⠁⠈⠂⠐⠂▀ ▀▀▀                                  
                                   ▀▀▀ ▀⠈⠉ ⠈⠉ ⠈⠉ ⠈⠉ ⠈⠁ ⠉⠁ ⠉⠁ ⠁▀ ▀▀▀                                  
                              ▀▀▀▀▀▀▀▀ ▀                      ▀ ▀▀▀▀▀                                
@@ -32,7 +32,7 @@ hhhhhhhhhhhhhhhhhopIqSstsSmlvoyhyhhhTUVWXXWYLKZ0000011hhyh23hhhhhhhhyyyy4567876R
 hhhhhhhhhhhhhhhhhopqrs9!9sr$%&hhhhhhT*q+--+/qUThhhhhhhhhh:;;<hhhhhhhhhh=>?@^_^~.4hhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhop.q.sxs.E.vu=====y.U.....q...hhhhhhhhhhh..hhhhhh======4.......4hhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhAH...q......h..............zyhhhhhhhhhhh=========hhhhhh10...00hhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhh1000...0000........q...1h===============.hh.q.....hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhh1000...0000........q....h===============.hh.q.....hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhh..q.......q..hhhhhhhhhhhhhyyyyy........qhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhh..q............h..h..h..h..h..h........qhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhh........q...hhhhhhhhhhhhhhhhhhhh.q.....hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
@@ -92,7 +92,7 @@ X fg #272d39 bg #bbe285 x2
 Y fg #799cc5 bg #272d39 x1
 Z fg #b48cff bg #23261e x1
 0 fg #e6edf3 bg #0b0f17 x23
-1 fg #7ee787 bg #0b0f17 x6
+1 fg #7ee787 bg #0b0f17 x5
 2 fg #0b0f17 bg #f9615a x1
 3 fg #0b0f17 bg #f85149 x1
 4 fg #10141e bg #10141e x5

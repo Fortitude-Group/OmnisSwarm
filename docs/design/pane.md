@@ -338,7 +338,7 @@ bottom and sides, and the label row sits below the ring rather than over it.
 
 **Labels.** One row below each node: the status glyph, a space, the name clipped to 12 characters, then ` !` if
 stuck (and ` ▶`-style trailing status for the lead, section 4). If the label would overlap another, fall back to the
-glyph alone; if that overlaps too, skip it (the chips and spotlight still name everyone). A label needs its span
+glyph alone (keeping the marks: `◆` before the lead's glyph, `!` after a stuck agent's); if that overlaps too, skip it (the chips and spotlight still name everyone). A label needs its span
 **plus one cell either side** clear of other labels and of cells holding node pixels; braille dots inside that padded
 span are cleared to a space (the cell keeps its background), so a label never runs into a line or a node.
 
@@ -420,6 +420,7 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
   `ctx` in `TEXT.dim` with the percentage in `contextColor`, then tokens and burn in `TEXT.dim`, `cc $x.xx` (Claude
   Code's own session cost) in `TEXT.dim`, `ended` in `TEXT.dim` when it ended. Right-aligned: `⚠ n gaps` in
   `STATUS.warn`. Context comes before tokens because it is the figure to keep when the row runs out of room.
+- On a 1-row header (tree step) the topology is left out so `ctx` fits (`◆ auth refactor · 6 agents 4▶ · ≈$0.57+ · ctx 34%` at 60×13).
 - **Parts are whole or absent.** Each ` · value` group is drawn only if all of it fits before the right-aligned
   notes; the row stops at the first group that doesn't. A cut figure (`cc $1.2` for `$1.20`) reads as a different
   number. The same holds for the summary line.
