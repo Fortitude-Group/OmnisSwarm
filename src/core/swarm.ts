@@ -1,5 +1,5 @@
 /** Naming swarms and making sure one is running. */
-import { closeSync, lstatSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { makeEvent, parseLine, type Source } from './events.ts'
 import { appendEvent, ensureLogDirs, isValidSwarmId, logPaths, readCurrent, swarmLogPath, writeCurrent } from './log.ts'
 
@@ -33,8 +33,21 @@ export function uniqueSwarmId(root: string, base: string): string {
   if (!isValidSwarmId(id)) id = slugify(`swarm-${slug}`)
   if (!isValidSwarmId(id)) id = 'swarm'
   if (claim(root, id)) return id
-  for (let n = 2; n <= 10_001; n++) {
-    const candidate = `${id.slice(0, 63 - String(n).length).replace(/[.-]+$/, '')}-${n}`
+  const suffixed = (n: number): string => `${id.slice(0, 63 - String(n).length).replace(/[.-]+$/, '')}-${n}`
+  // One directory listing finds the highest number already used, so old swarms of one name don't slow us down.
+  let highest = 1
+  try {
+    for (const file of readdirSync(logPaths(root).swarms)) {
+      if (!file.endsWith('.jsonl')) continue
+      const name = file.slice(0, -6)
+      const m = /-(\d{1,5})$/.exec(name)
+      if (m !== null && suffixed(Number(m[1])) === name) highest = Math.max(highest, Number(m[1]))
+    }
+  } catch {
+    // fall back to counting up from 2
+  }
+  for (let n = highest + 1; n <= 10_001; n++) {
+    const candidate = suffixed(n)
     if (isValidSwarmId(candidate) && claim(root, candidate)) return candidate
   }
   throw new Error('no free swarm id')

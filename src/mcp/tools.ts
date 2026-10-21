@@ -7,7 +7,7 @@ import { ensureSwarm, uniqueSwarmId } from '../core/swarm.ts'
 import { MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { MAX_VALUE_BYTES, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
-import { InputError, optString, optStringList, reqEnum, reqString } from './validate.ts'
+import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
 export type ToolContext = { root: string; now?: () => Date }
 
@@ -37,16 +37,40 @@ function statusText(state: SwarmState, nowMs: number): string {
   return lines.join('\n')
 }
 
+/** Token-shaped runs are blanked before a value preview reaches the log. */
+const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|[A-Za-z0-9+/=_-]{32,}/g
+const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
+
+export const MAX_TASKS = 500
+const FAILED = 'Could not update the swarm files in .omnis-swarm/ (see the server log).'
+
 export function createTools(ctx: ToolContext): ToolDef[] {
   const root = ctx.root
   const clock = ctx.now ?? (() => new Date())
+  /** The swarm this server started or adopted. Other sessions in the same project may share `current`. */
+  let mine: string | null = null
 
   const emit = (event: SwarmEvent): void => {
     if (!appendEvent(root, event)) throw new Error('Could not write to the swarm log in .omnis-swarm/')
   }
-  const swarmOrCreate = (now: Date): string => ensureSwarm(root, { idHint: `session-${stamp(now)}`, src: 'mcp', now })
+  const hasEnded = (id: string): boolean => loadState(root, id).state.swarm.endedAt !== null
+  /** My live swarm, adopting `current` while I have none. */
+  const mySwarm = (adopt = true): string | null => {
+    if (mine !== null && hasEnded(mine)) mine = null
+    if (mine === null && adopt) {
+      const c = readCurrent(root)
+      if (c !== null && !hasEnded(c)) mine = c
+    }
+    return mine
+  }
+  const swarmOrCreate = (now: Date): string => {
+    const id = mySwarm()
+    if (id !== null) return id
+    mine = ensureSwarm(root, { idHint: `session-${stamp(now)}`, src: 'mcp', now })
+    return mine
+  }
   const runningSwarm = (): string => {
-    const id = readCurrent(root)
+    const id = mySwarm()
     if (id === null) throw new InputError('No swarm is running. Call omnis_swarm_init first.')
     return id
   }
@@ -56,14 +80,14 @@ export function createTools(ctx: ToolContext): ToolDef[] {
     return key
   }
 
-  return [
+  const tools: ToolDef[] = [
     {
       name: 'omnis_swarm_init',
       description: 'Start a named swarm with a topology, so the OmnisSwarm pane groups and lays out the agents you spawn. If agents are already running in an unnamed session swarm, this names that swarm instead of starting another.',
       inputSchema: {
         type: 'object',
         properties: {
-          name: { type: 'string', maxLength: 64, description: 'Human name, e.g. "auth refactor".' },
+          name: { type: 'string', minLength: 1, maxLength: 64, description: 'Human name, e.g. "auth refactor".' },
           topology: { type: 'string', enum: [...TOPOLOGIES], description: 'hierarchical: a lead with workers. mesh: peers talk to each other. star: everything goes through one hub.' },
           goal: { type: 'string', maxLength: 200, description: 'One line on what the swarm is for.' },
         },
@@ -71,22 +95,25 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         additionalProperties: false,
       },
       handler: args => {
-        const name = reqString(args, 'name', 64)
+        const name = reqText(args, 'name', 64)
         const topology = reqEnum(args, 'topology', TOPOLOGIES)
-        const goal = optString(args, 'goal', 200)
+        const goal = optText(args, 'goal', 200)
         const now = clock()
         const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false }
-        const existing = readCurrent(root)
+        const existing = mySwarm(false) // init never takes over a swarm it didn't start
+        let replaced: string | null = null
         if (existing !== null) {
           const { state } = loadState(root, existing)
-          if (state.swarm.implicit && state.swarm.endedAt === null) {
+          if (state.swarm.implicit) {
             emit(makeEvent({ type: 'swarm.started', swarm: existing, src: 'mcp', data, now }))
             return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.` }
           }
-          if (state.swarm.endedAt === null) emit(makeEvent({ type: 'swarm.ended', swarm: existing, src: 'mcp', data: { outcome: 'replaced' }, now }))
+          replaced = existing
         }
         const id = uniqueSwarmId(root, name)
+        if (replaced !== null) emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
         writeCurrent(root, id)
+        mine = id
         emit(makeEvent({ type: 'swarm.started', swarm: id, src: 'mcp', data, now }))
         return { text: `Swarm "${name}" started as ${id} (${topology}).` }
       },
@@ -101,9 +128,10 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       },
       handler: args => {
         const id = runningSwarm()
-        const outcome = optString(args, 'outcome', 200)
+        const outcome = optText(args, 'outcome', 200)
         emit(makeEvent({ type: 'swarm.ended', swarm: id, src: 'mcp', data: outcome === undefined ? {} : { outcome }, now: clock() }))
-        clearCurrent(root)
+        if (readCurrent(root) === id) clearCurrent(root)
+        mine = null
         return { text: `Swarm ${id} ended.` }
       },
     },
@@ -124,7 +152,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         type: 'object',
         properties: {
           key: { type: 'string', pattern: MEMORY_KEY.source, description: 'e.g. "design/auth".' },
-          value: { type: 'string', description: `At most ${MAX_VALUE_BYTES} bytes.` },
+          value: { type: 'string', maxLength: MAX_VALUE_BYTES, description: `At most ${MAX_VALUE_BYTES} bytes.` },
           agent: { type: 'string', pattern: NAME.source, description: 'Your agent name, so the pane shows who wrote it.' },
         },
         required: ['key', 'value'],
@@ -139,7 +167,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const now = clock()
         const swarm = swarmOrCreate(now)
         putMemory(root, swarm, key, value, writer, now)
-        emit(makeEvent({ type: 'memory.put', swarm, src: 'mcp', agent: writer, data: { key, bytes, preview: clip(value, 80) }, now }))
+        emit(makeEvent({ type: 'memory.put', swarm, src: 'mcp', agent: writer, data: { key, bytes, preview: preview(value) }, now }))
         return { text: `Stored ${key} (${bytes} bytes).` }
       },
     },
@@ -180,7 +208,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       inputSchema: {
         type: 'object',
         properties: {
-          title: { type: 'string', maxLength: 120 },
+          title: { type: 'string', minLength: 1, maxLength: 120 },
           assignee: { type: 'string', pattern: NAME.source, description: 'Agent name.' },
           dependsOn: { type: 'array', items: { type: 'string', pattern: TASK_ID.source }, maxItems: 20 },
         },
@@ -188,18 +216,21 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         additionalProperties: false,
       },
       handler: args => {
-        const title = reqString(args, 'title', 120)
+        const title = reqText(args, 'title', 120)
         const assignee = optString(args, 'assignee', 64, NAME)
         const dependsOn = optStringList(args, 'dependsOn', 20, 8, TASK_ID)
         const now = clock()
         const swarm = swarmOrCreate(now)
         const { state } = loadState(root, swarm)
+        if (Object.keys(state.tasks).length >= MAX_TASKS) throw new InputError(`This swarm already has ${MAX_TASKS} tasks.`)
+        const deps = dependsOn === undefined ? undefined : [...new Set(dependsOn)]
+        for (const d of deps ?? []) if (!Object.hasOwn(state.tasks, d)) throw new InputError(`dependsOn: no task ${clip(d, 80)} in swarm ${swarm}.`)
         let n = Object.keys(state.tasks).length + 1
         while (Object.hasOwn(state.tasks, `t${n}`)) n++
         const id = `t${n}`
         emit(makeEvent({
           type: 'task.created', swarm, src: 'mcp', now,
-          data: { id, title, ...(assignee !== undefined && { assignee }), ...(dependsOn !== undefined && { dependsOn }) },
+          data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }) },
         }))
         return { text: `Created task ${id}.` }
       },
@@ -222,7 +253,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const id = reqString(args, 'id', 8, TASK_ID)
         const taskState = reqEnum(args, 'state', TASK_STATES)
         const assignee = optString(args, 'assignee', 64, NAME)
-        const note = optString(args, 'note', 200)
+        const note = optText(args, 'note', 200)
         const swarm = runningSwarm()
         if (!Object.hasOwn(loadState(root, swarm).state.tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
         emit(makeEvent({
@@ -233,4 +264,18 @@ export function createTools(ctx: ToolContext): ToolDef[] {
       },
     },
   ]
+
+  // Anything but a bad-input error gets a fixed message; the detail (which may hold paths) goes to stderr only.
+  return tools.map(tool => ({
+    ...tool,
+    handler: args => {
+      try {
+        return tool.handler(args)
+      } catch (err) {
+        if (err instanceof InputError) throw err
+        process.stderr.write(`omnis: ${tool.name} failed: ${err instanceof Error ? err.message : String(err)}\n`)
+        throw new Error(FAILED)
+      }
+    },
+  }))
 }

@@ -176,3 +176,8 @@ test('round 2 B: nested arguments are cleaned and depth is capped', () => {
   assert.ok(levels <= 33)
   assert.equal(node, null)
 })
+
+test('initialize echoes protocol version 2025-11-25', () => {
+  const reply = handleMessage(req(1, 'initialize', { protocolVersion: '2025-11-25' }), tools, info)
+  assert.equal((reply?.result as { protocolVersion: string }).protocolVersion, '2025-11-25')
+})

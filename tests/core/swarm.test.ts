@@ -118,3 +118,12 @@ test('a current marker holding junk is overwritten', () => {
   assert.equal(publishCurrent(root, id), id)
   assert.equal(readCurrent(root), id)
 })
+
+test('300 same-name claims are quick and numbered in order', () => {
+  const root = tmpRoot()
+  const start = Date.now()
+  let last = ''
+  for (let i = 0; i < 300; i++) last = uniqueSwarmId(root, 'Busy')
+  assert.equal(last, 'busy-300')
+  assert.ok(Date.now() - start < 5000, `took ${Date.now() - start} ms`)
+})

@@ -6,7 +6,7 @@
 import type { Readable, Writable } from 'node:stream'
 
 export const DEFAULT_PROTOCOL = '2025-06-18'
-export const SUPPORTED_PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05']
+export const SUPPORTED_PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
 export const MAX_LINE_BYTES = 1_048_576
 
 export type Args = Record<string, unknown>
