@@ -1,7 +1,7 @@
 /** Shared memory values, one JSON file per swarm. The log only records that a write happened. */
 import { randomUUID } from 'node:crypto'
 import {
-  closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync, renameSync, rmSync, writeFileSync,
+  closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
 import { isSafeKey } from '../core/events.ts'
@@ -77,7 +77,7 @@ function load(file: string): Loaded {
   const data = emptyStore()
   for (const key of Object.keys(raw)) {
     const entry = (raw as Record<string, unknown>)[key]
-    if (isSafeKey(key) && isStored(entry)) data[key] = { value: entry.value, writer: entry.writer, at: entry.at }
+    if (isSafeKey(key) && MEMORY_KEY.test(key) && isStored(entry) && WRITER.test(entry.writer) && Buffer.byteLength(entry.value) <= MAX_VALUE_BYTES) data[key] = { value: entry.value, writer: entry.writer, at: entry.at }
   }
   return { kind: 'ok', data }
 }
@@ -104,12 +104,26 @@ export function readMemory(root: string, swarm: string): Record<string, StoredVa
   return loaded.kind === 'ok' ? loaded.data : emptyStore()
 }
 
-function takeLock(lock: string): void {
+/** Moves a stale lock aside under a unique name. Only one competing waiter's rename succeeds. */
+export function takeOverStale(lock: string): boolean {
+  const aside = `${lock}.${randomUUID()}.stale`
+  try {
+    renameSync(lock, aside)
+  } catch {
+    return false
+  }
+  rmSync(aside, { force: true })
+  return true
+}
+
+/** Takes the write lock and returns the token that proves it is ours. */
+export function takeLock(lock: string): string {
+  const token = randomUUID()
   const deadline = Date.now() + LOCK_WAIT_MS
   for (let wait = 10; ; wait = Math.min(wait + 10, 50)) {
     try {
-      writeFileSync(lock, String(process.pid), { flag: 'wx' })
-      return
+      writeFileSync(lock, token, { flag: 'wx' })
+      return token
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       if (code !== 'EEXIST' && code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw err
@@ -117,7 +131,7 @@ function takeLock(lock: string): void {
     try {
       const stat = lstatSync(lock, { throwIfNoEntry: false })
       if (stat !== undefined && Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
-        rmSync(lock, { force: true })
+        takeOverStale(lock)
         continue
       }
     } catch {
@@ -125,6 +139,15 @@ function takeLock(lock: string): void {
     }
     if (Date.now() > deadline) throw new Error('memory store is busy: could not take the write lock')
     sleep(wait)
+  }
+}
+
+/** Removes the lock only if it still holds our token. */
+export function releaseLock(lock: string, token: string): void {
+  try {
+    if (readFileSync(lock, 'utf8') === token) rmSync(lock, { force: true })
+  } catch {
+    // already gone
   }
 }
 
@@ -148,7 +171,7 @@ export function putMemory(root: string, swarm: string, key: string, value: strin
   if (!WRITER.test(writer)) throw new Error('invalid writer name')
   ensureLogDirs(root)
   const lock = `${file}.lock`
-  takeLock(lock)
+  const token = takeLock(lock)
   const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`
   let renamed = false
   try {
@@ -164,6 +187,6 @@ export function putMemory(root: string, swarm: string, key: string, value: strin
     renamed = true
   } finally {
     if (!renamed) rmSync(tmp, { force: true })
-    rmSync(lock, { force: true })
+    releaseLock(lock, token)
   }
 }

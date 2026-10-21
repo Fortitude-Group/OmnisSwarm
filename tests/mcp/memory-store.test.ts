@@ -5,7 +5,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, ut
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ensureLogDirs, logPaths } from '../../src/core/log.ts'
-import { MAX_KEYS, MAX_VALUE_BYTES, putMemory, readMemory } from '../../src/mcp/memory-store.ts'
+import { MAX_KEYS, MAX_VALUE_BYTES, putMemory, readMemory, releaseLock, takeLock, takeOverStale } from '../../src/mcp/memory-store.ts'
 import { tmpRoot } from '../helpers.ts'
 
 const now = new Date('2026-10-21T10:00:00.000Z')
@@ -180,4 +180,41 @@ test('fix 4: an ensureLogDirs error propagates from put', () => {
   mkdirSync(join(root, '.omnis-swarm'))
   writeFileSync(join(root, '.omnis-swarm', 'memory'), 'not a folder')
   assert.throws(() => putMemory(root, 's1', 'k', 'v', 'lead', now), /plain directory/)
+})
+
+test('round 2 A: of two takeovers of a stale lock, only one succeeds', () => {
+  const root = tmpRoot()
+  ensureLogDirs(root)
+  const lock = join(logPaths(root).memory, 's1.json.lock')
+  writeFileSync(lock, 'old')
+  assert.equal(takeOverStale(lock), true)
+  assert.equal(takeOverStale(lock), false)
+  assert.deepEqual(readdirSync(logPaths(root).memory), [])
+})
+
+test('round 2 B: release only removes our own lock', () => {
+  const root = tmpRoot()
+  ensureLogDirs(root)
+  const lock = join(logPaths(root).memory, 's1.json.lock')
+  const token = takeLock(lock)
+  writeFileSync(lock, 'someone-else')
+  releaseLock(lock, token)
+  assert.equal(readFileSync(lock, 'utf8'), 'someone-else')
+  writeFileSync(lock, token)
+  releaseLock(lock, token)
+  assert.deepEqual(readdirSync(logPaths(root).memory), [])
+})
+
+test('round 2 C: reads drop entries with a bad key, writer or oversize value', () => {
+  const root = tmpRoot()
+  putMemory(root, 's1', 'seed', 'v', 'lead', now)
+  const ok = { value: 'v', writer: 'w', at: 'a' }
+  writeFileSync(join(logPaths(root).memory, 's1.json'), JSON.stringify({
+    good: ok,
+    '\u001b[2J': ok,
+    longwriter: { ...ok, writer: 'w'.repeat(65) },
+    oddwriter: { ...ok, writer: 'a b' },
+    fat: { ...ok, value: 'x'.repeat(MAX_VALUE_BYTES + 1) },
+  }))
+  assert.deepEqual(Object.keys(readMemory(root, 's1')), ['good'])
 })
