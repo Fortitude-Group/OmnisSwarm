@@ -171,3 +171,21 @@ test('with panel command an Agent tool call does not open the pane', async ($, o
   await $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
   expect(seen.opens).toBe(0)
 })
+
+test("the recorder does not record the pane's omnis_feed pulls as agent tool calls", async ($, on) => {
+  const seen = engine(on)
+  on('tool.call', () => ({ result: {} }))
+  const clock = mock.clock(on, { now: FIVE_AT.mid })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+  await clock.advance(1000)
+  expect(feedCalls(seen).length).toBeGreaterThanOrEqual(1)
+  // In case the engine dispatches a plugin's $.mcp.call as a tool call: the pull, by its full tool name, then a
+  // Bash call to show the recorder is live in this session.
+  await $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed', since: 0 })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await clock.settle()
+  const recorded = seen.calls.filter(c => c.tool === 'omnis_record' && c.args.type === 'agent.tool').map(c => (c.args.data as { tool?: unknown }).tool)
+  expect(recorded).toContain('Bash')
+  expect(recorded.some(t => String(t).includes('omnis_feed'))).toBe(false)
+})
