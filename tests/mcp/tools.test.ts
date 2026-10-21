@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { appendEvent, readCurrent, readEvents, swarmLogPath } from '../../src/core/log.ts'
+import { appendEvent, readCurrent, readEvents, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
 import { handleMessage } from '../../src/mcp/protocol.ts'
 import { MAX_TASKS, createTools } from '../../src/mcp/tools.ts'
 import { InputError, optStringList } from '../../src/mcp/validate.ts'
@@ -338,4 +338,22 @@ test('line and paragraph separators are refused in free text', () => {
   const { call } = setup()
   assert.throws(() => call('omnis_swarm_init', { name: 'a b', topology: 'mesh' }), InputError)
   assert.throws(() => call('omnis_swarm_init', { name: 'a b', topology: 'mesh' }), InputError)
+})
+
+test('losing the race to publish current means adopting the winner without owning it', () => {
+  const { root, call } = setup()
+  // Another session publishes `current` while this one is between claiming its id and publishing it.
+  let calls = 0
+  const racing = new Date(NOW)
+  racing.toISOString = () => {
+    if (++calls === 2) writeCurrent(root, 'winner')
+    return NOW.toISOString()
+  }
+  const tools = createTools({ root, now: () => racing })
+  const run = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  run('omnis_task_create', { title: 'x' })
+  assert.equal(readCurrent(root), 'winner')
+  assert.match(run('omnis_swarm_end').text, /another session/)
+  assert.equal(readCurrent(root), 'winner')
+  assert.equal(call('omnis_swarm_status').text.includes('winner'), true)
 })

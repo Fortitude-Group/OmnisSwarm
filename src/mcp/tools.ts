@@ -3,7 +3,7 @@ import { TASK_STATES, TOPOLOGIES, clip, isSafeKey, makeEvent, type SwarmEvent } 
 import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/log.ts'
 import { loadState } from '../core/snapshot.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
-import { announceSwarm, ensureSwarm, uniqueSwarmId } from '../core/swarm.ts'
+import { announceSwarm, publishCurrent, uniqueSwarmId } from '../core/swarm.ts'
 import { MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
@@ -76,16 +76,17 @@ export function createTools(ctx: ToolContext): ToolDef[] {
     if (id !== null) return id
     const idHint = `session-${stamp(now)}`
     const current = readCurrent(root)
-    if (current !== null) {
-      // current names an ended swarm (mySwarm skipped it): start a fresh one and replace it
-      const id = uniqueSwarmId(root, idHint)
-      announceSwarm(root, id, { src: 'mcp', now })
-      writeCurrent(root, id)
-      mine = id
+    const claimed = uniqueSwarmId(root, idHint)
+    announceSwarm(root, claimed, { src: 'mcp', now })
+    if (current !== null && hasEnded(current)) {
+      // current names an ended swarm: replace it, as an explicit init would
+      writeCurrent(root, claimed)
+      mine = claimed
     } else {
-      mine = ensureSwarm(root, { idHint, src: 'mcp', now })
+      // Another session may publish first; then we adopt its swarm and don't own it.
+      mine = publishCurrent(root, claimed)
     }
-    owned = true
+    owned = mine === claimed
     return mine
   }
   const runningSwarm = (): string => {
