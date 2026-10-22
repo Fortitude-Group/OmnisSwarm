@@ -5,9 +5,9 @@ import { FIVE_AT } from '../../tests/fixtures/swarm-five.ts'
 import { engine, RUN } from './test-engine.ts'
 
 test('the /omnis text is what it was before the split', async () => {
-  expect(COMMAND_DESCRIPTION).toBe('OmnisSwarm: /omnis pane shows the live swarm pane, /omnis pane close hides it, /omnis pane style robot|globe picks the node style')
-  expect(COMMAND_HINT).toBe('pane [close | style robot|globe]')
-  expect(USAGE).toBe('Usage: /omnis pane, /omnis pane close, or /omnis pane style robot|globe.')
+  expect(COMMAND_DESCRIPTION).toBe('OmnisSwarm: /omnis pane shows the live swarm pane, /omnis pane close hides it, /omnis pane style robot|globe picks the node style, /omnis replay [swarm] [speed] replays a recorded swarm')
+  expect(COMMAND_HINT).toBe('pane [close | style robot|globe] | replay [swarm] [speed] | replay stop')
+  expect(USAGE).toBe('Usage: /omnis pane, /omnis pane close, or /omnis pane style robot|globe. Usage: /omnis replay [swarm] [speed 1-60], or /omnis replay stop.')
 })
 
 test('an unknown subcommand answers the usage, and pane still opens', async ($, on) => {

@@ -9,8 +9,8 @@ import type { Grid } from '../render/grid.ts'
 import { CELL_W } from '../render/svg.ts'
 import { COMMAND_DESCRIPTION, COMMAND_HINT, runOmnis } from './commands.ts'
 import { COMMAND_FAILED, chipRow, maybeAutoOpen, resetAutoOpen } from './pane-commands.ts'
-import { animate, closed, frameAt, hooks, mounted, spent, stopAll, stopFrames, svgSource, waitingText, wakeFor } from './pane-draw.ts'
-import { PANE_ID, resume, startPulling, wake } from './pane-pull.ts'
+import { animate, closed, frameAt, hooks, mounted, spent, startLive, stopAll, stopFrames, svgSource, waitingText, wakeFor } from './pane-draw.ts'
+import { PANE_ID, resume, wake } from './pane-pull.ts'
 import { hostOf, loadSaved, panelOf, resetRuntime, rt } from './pane-runtime.ts'
 
 export { PANE_ID }
@@ -56,7 +56,7 @@ export function registerPane(on: On, options: PluginOptions): void {
       rows: Math.max(1, Math.floor(Number(e.props.scroll.bodyRows) || 1)),
     }
     if (rt.host !== null) {
-      startPulling(hooks, rt.host)
+      startLive(rt.host)
       // A re-render (a resize, or shown again) means someone is looking: pull at full speed.
       wake(hooks, rt.host)
     }

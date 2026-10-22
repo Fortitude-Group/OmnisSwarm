@@ -13,10 +13,10 @@ import { applyReply, feedArgs, markDegraded, type PaneModel } from './pane-model
 
 export const PANE_ID = 'omnis-swarm'
 /** While the pane is hidden it only looks at $.ui.panes(), this often. */
-const HIDDEN_PULL_MS = 1_000
+export const HIDDEN_PULL_MS = 1_000
 /** After this many replies in a row with no news, a shown pane pulls every IDLE_PULL_MS until news or a wake. */
 const IDLE_AFTER = 8
-const IDLE_PULL_MS = 1_500
+export const IDLE_PULL_MS = 1_500
 /** While replies are unreadable the period doubles from PULL_MS up to this; a readable reply resets it. */
 const UNREADABLE_MAX_MS = 5_000
 /** After a failed connect, the wait before the next try: from the first, doubling to the last; reset by a success. */
@@ -72,6 +72,8 @@ export type PaneHooks<H extends PullHost = PullHost> = {
   show: (host: H, now: number) => void
   /** A different swarm arrived: forget the spotlight, the glide and the last frame. */
   swarmChanged: () => void
+  /** True while the live pulls must not run (a replay is on screen); nothing starts them until it is false again. */
+  paused?: () => boolean
 }
 
 /** A failed read: keep the last good state, flag it, and show the note. */
@@ -231,7 +233,7 @@ export async function pull<H extends PullHost>(pane: PaneHooks<H>, host: H): Pro
 }
 
 export function startPulling<H extends PullHost>(pane: PaneHooks<H>, host: H): void {
-  if (pane.state().pullTimer !== null) return
+  if (pane.state().pullTimer !== null || pane.paused?.() === true) return
   pullEvery(pane, host, PULL_MS)
   void pull(pane, host)
 }

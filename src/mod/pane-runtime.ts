@@ -1,9 +1,10 @@
 /** The pane's state and the host it binds from `$`: shared by the drawing (pane-draw.ts) and the commands (pane-commands.ts). */
 import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, Timer } from 'claude-code'
+import type { SwarmEvent } from '../core/events.ts'
 import type { Grid } from '../render/grid.ts'
 import type { Frame, Size, Spot, Tween } from '../render/types.ts'
-import { emptyModel } from './pane-model.ts'
+import { emptyModel, type PaneModel } from './pane-model.ts'
 import type { PullHost, PullState } from './pane-pull.ts'
 import { connectServer } from './server.ts'
 
@@ -50,6 +51,17 @@ export function hostOf($: EngineInterface): Host {
   }
 }
 
+/**
+ * A replay playing in the pane (replay.ts): the events re-timed onto the replay clock, with the log time and replay
+ * offset of each, when it started, how far it has folded into its own model, its tick timer, and whether it has ended.
+ * `looking`/`sinceLook`: a look at $.ui.panes() in flight, and the ms since the last began, counted in tick periods.
+ * `lookMs`: once ended, the period of the look-only timer that replaced the tick. `drawnSecond`: the clock second last drawn.
+ */
+export type ReplayRun = {
+  swarm: string; speed: number; events: SwarmEvent[]; logTs: number[]; offsets: number[]; startMs: number; cursor: number
+  model: PaneModel; timer: Timer | null; ended: boolean; looking: boolean; sinceLook: number; lookMs: number; drawnSecond: number
+}
+
 export type Runtime = PullState & {
   panel: Panel
   host: Host | null
@@ -77,6 +89,8 @@ export type Runtime = PullState & {
   onScreen: { top: Grid | null; bottom: Grid | null }
   /** Per Raster: the last blit sent, and whether the engine refused it, so the next frame sends its cells again. */
   blitId: { top: number; bottom: number }; refused: { top: boolean; bottom: boolean }
+  /** The replay on screen in place of the live swarm, or null when the pane is live. */
+  replay: ReplayRun | null
 }
 
 export const panelOf = (x: unknown): Panel => (x === 'auto' || x === 'off' ? x : 'command')
@@ -84,7 +98,7 @@ export const fresh = (panel: Panel): Runtime => ({
   panel, host: null, open: false, shown: false, closedByPerson: false, server: null, model: emptyModel(), pulling: false, pullSeq: 0, stalledMs: 0, stallMarked: false,
   pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0, quiet: 0, unreadableMs: 0,
   frameTimer: null, frameMs: 0, renderMs: 0, renderAvgMs: 0, wakeTimer: null, wakeAt: 0, style: 'globe', drawnAt: 0, redrawWait: null, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
-  onScreen: { top: null, bottom: null }, blitId: { top: 0, bottom: 0 }, refused: { top: false, bottom: false },
+  onScreen: { top: null, bottom: null }, blitId: { top: 0, bottom: 0 }, refused: { top: false, bottom: false }, replay: null,
 })
 
 /** Module state. A hot reload starts it over and the pane pulls a fresh state within one PULL_MS; the pin is in $.state. */
