@@ -39,6 +39,8 @@ export type SkinSprite = {
   haloRows: number
   eyes: { open: readonly string[]; closed: readonly string[]; cross?: readonly string[] }
   arms: { down: readonly string[]; up: readonly string[] }
+  /** The warned sweat-drop pixels (pane.md 13.2); the nudged copy is mirrored, x to w - 1 - x. */
+  sweat: readonly (readonly [number, number])[]
 }
 export type Skin = { bodyColor: number; sprites: Readonly<Record<RobotSize, SkinSprite>> }
 
@@ -52,12 +54,12 @@ export const ROBOT_SKINS: Readonly<Record<string, Skin>> = {
     bodyColor: 0xd77757,
     sprites: {
       S: {
-        w: 8, h: 5, body: [1, 0, 6, 3], haloRows: 3,
+        w: 8, h: 5, body: [1, 0, 6, 3], haloRows: 3, sweat: [[7, 0], [7, 1]],
         eyes: { open: CLAWD_S_OPEN, closed: ['.BBBBBB.', '.BBBBBB.', 'ABBBBBBA', '.BBBBBB.', '..L..L..'] },
         arms: { down: CLAWD_S_OPEN, up: ['.BBBBBB.', 'ABEBBEBA', '.BBBBBB.', '.BBBBBB.', '..L..L..'] },
       },
       M: {
-        w: 11, h: 6, body: [1, 0, 9, 4], haloRows: 4,
+        w: 11, h: 6, body: [1, 0, 9, 4], haloRows: 4, sweat: [[9, 0], [8, 1], [9, 1]],
         eyes: {
           open: CLAWD_M_OPEN,
           closed: ['.BBBBBBBBB.', '.BBBBBBBBB.', '.BEEEBEEEB.', 'ABBBBBBBBBA', '.BBBBBBBBB.', '.L.L...L.L.'],
@@ -66,7 +68,7 @@ export const ROBOT_SKINS: Readonly<Record<string, Skin>> = {
         arms: { down: CLAWD_M_OPEN, up: ['ABBBBBBBBBA', 'ABBEBBBEBBA', '.BBEBBBEBB.', '.BBBBBBBBB.', '.BBBBBBBBB.', '.L.L...L.L.'] },
       },
       L: {
-        w: 13, h: 7, body: [1, 0, 11, 5], haloRows: 5,
+        w: 13, h: 7, body: [1, 0, 11, 5], haloRows: 5, sweat: [[11, 0], [10, 1], [11, 1], [10, 2], [11, 2]],
         eyes: {
           open: CLAWD_L_OPEN,
           closed: ['.BBBBBBBBBBB.', '.BBBBBBBBBBB.', '.BEEEBBBEEEB.', 'ABBBBBBBBBBBA', 'ABBBBBBBBBBBA', '.BBBBBBBBBBB.', '..L.L...L.L..'],
