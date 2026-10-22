@@ -5,12 +5,24 @@
  */
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
+import { isValidSwarmId } from '../core/events.ts'
 import { INTERNAL_TOOL, RECORD_TOOL, type RecordBody } from '../core/recording.ts'
+// An import cycle (budget-guard imports record): neither file uses the other's exports at load, only in hooks.
+import { guardStarted } from './budget-guard.ts'
 import { Outbox } from './outbox.ts'
 import { connectServer } from './server.ts'
 import {
   agentFinished, agentStarted, agentUsage, messageSent, protocolMessage, sessionMeasure, toolEvent, whoOf, type Fields,
 } from './record-events.ts'
+
+/**
+ * Told about each event the server accepted. The budget guard is the only observer; it binds its host through
+ * guardStarted, called directly, because the validator lets $ reach only functions declared or imported here.
+ */
+export type RecordObserver = {
+  /** omnis_record accepted `body` (stamped `ts`) into `swarm`. */
+  recorded: (body: RecordBody, ts: string, swarm: string) => void
+}
 
 const MAX_SEEN = 1000
 const seenAtom = atom({ plugin: 'omnis-swarm', key: 'seen' } as const, [] as string[])
@@ -28,6 +40,8 @@ const rec = {
   saving: false,
   dirty: false,
 }
+/** Told about each event the server accepted; set by registerRecorder. */
+let observer: RecordObserver | null = null
 
 function saveDropped($: EngineInterface): void {
   if (rec.saving) {
@@ -58,7 +72,7 @@ function remember($: EngineInterface, id: string): void {
  * Fire and forget: never throws, and the hooks never await it. Arguments are plain data and the time is the hook's own.
  * The promise settles once the call has (or at once when nothing was sent), so a later event can be chained behind it.
  */
-function send($: EngineInterface, body: RecordBody | null, ts = new Date(Date.now()).toISOString()): Promise<void> {
+export function record($: EngineInterface, body: RecordBody | null, ts = new Date(Date.now()).toISOString()): Promise<void> {
   if (body === null) return Promise.resolve()
   const { sessionId, server } = rec
   if (sessionId === null || server === null) return Promise.resolve()
@@ -74,7 +88,20 @@ function send($: EngineInterface, body: RecordBody | null, ts = new Date(Date.no
     saveDropped($)
   }
   try {
-    return $.mcp.call(server, RECORD_TOOL, args).then(result => (result.isError ? failed() : rec.outbox.settle(true, carried)), failed)
+    return $.mcp.call(server, RECORD_TOOL, args).then(result => {
+      if (result.isError) return failed()
+      rec.outbox.settle(true, carried)
+      const block = result.content[0]
+      const swarm = block !== undefined && block.type === 'text' && typeof block.text === 'string' && block.text.startsWith('ok ') ? block.text.slice(3) : ''
+      // A throw in the observer must not count as a failed call.
+      if (observer !== null && isValidSwarmId(swarm)) {
+        try {
+          observer.recorded(body, ts, swarm)
+        } catch {
+          // The guard keeps its last state.
+        }
+      }
+    }, failed)
   } catch {
     failed()
     return Promise.resolve()
@@ -114,8 +141,8 @@ function endBodies(
 function chainEnd($: EngineInterface, started: Promise<void>, end: RecordBody | null, message: RecordBody | null, ts: string): void {
   void started.then(() =>
     safely($, () => {
-      void send($, end, ts)
-      void send($, message, ts)
+      void record($, end, ts)
+      void record($, message, ts)
     }),
   )
 }
@@ -145,16 +172,21 @@ async function start($: EngineInterface): Promise<void> {
     const body = agentStarted({ name: agent.name, subagentType: agent.type, description: agent.description, parentAgentId: agent.parentId }, agent.id)
     if (body === null) continue
     remember($, agent.id)
-    void send($, body)
+    void record($, body)
   }
 }
 
-export function registerRecorder(on: On): void {
+export function registerRecorder(on: On, given?: RecordObserver): void {
+  observer = given ?? null
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     // Not awaited: connecting spawns the server, and a slow one must not hold up the session. Events before it
     // finishes find no session or server and are skipped. A failure leaves recording off; the session is untouched.
     void start($).catch(() => {})
+    if (observer !== null) {
+      // The guard is the only observer (see RecordObserver), so an observer means the guard binds here.
+      safely($, () => guardStarted($))
+    }
     return result
   })
 
@@ -166,7 +198,7 @@ export function registerRecorder(on: On): void {
       const body = agentStarted(e, id)
       if (body === null) return
       remember($, id)
-      void send($, body)
+      void record($, body)
     })
     return result
   }).catch((_$, e, next) => next(e))
@@ -178,7 +210,7 @@ export function registerRecorder(on: On): void {
     let started: Promise<void> = Promise.resolve()
     safely($, () => {
       agent = INTERNAL_TOOL.test(tool) ? null : whoOf(args.agentId, rec.seen)
-      if (agent !== null) started = send($, toolEvent('start', tool, args, agent))
+      if (agent !== null) started = record($, toolEvent('start', tool, args, agent))
     })
     const result = await next(e)
     const who: string | null = agent
@@ -196,7 +228,7 @@ export function registerRecorder(on: On): void {
     const result = yield* next(e)
     safely($, () => {
       const agent = whoOf(e.agentId, rec.seen)
-      if (agent !== null && result.usage !== null) void send($, agentUsage(result.usage, agent))
+      if (agent !== null && result.usage !== null) void record($, agentUsage(result.usage, agent))
     })
     return result
   })
@@ -206,7 +238,7 @@ export function registerRecorder(on: On): void {
     safely($, () => {
       if (e.agentId === undefined) return
       const agent = whoOf(e.agentId, rec.seen)
-      if (agent !== null) void send($, agentFinished(e.reason, agent))
+      if (agent !== null) void record($, agentFinished(e.reason, agent))
     })
     return result
   })
@@ -216,14 +248,14 @@ export function registerRecorder(on: On): void {
     safely($, () => {
       if (e.origin.kind !== 'model' || result.isDelivered !== true) return
       const agent = whoOf(e.agentId, rec.seen)
-      if (agent !== null) void send($, messageSent(e.to, e.text, agent))
+      if (agent !== null) void record($, messageSent(e.to, e.text, agent))
     })
     return result
   }).catch((_$, e, next) => next(e))
 
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
-    safely($, () => void send($, sessionMeasure(e)))
+    safely($, () => void record($, sessionMeasure(e)))
     return result
   })
 }

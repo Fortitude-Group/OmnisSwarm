@@ -19,11 +19,14 @@ export const OPTION_KEYS: Record<BudgetKey, string> = { agentMinutes: 'budgetAge
 const round2 = (n: number): number => Math.round(n * 100) / 100
 const valid = (key: BudgetKey, x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x > 0 && x <= BUDGET_MAX[key]
 
+/** userConfig's floors, as plugin.json states them: a time-box of at least a minute, any dollar amount above 0. */
+const OPTION_MIN: Limits = { agentMinutes: 1, agentUsd: 0, swarmUsd: 0 }
+
 export function limitsFrom(options: Readonly<Record<string, unknown>>): Limits {
   const out = { ...DEFAULT_LIMITS }
   for (const key of BUDGET_KEYS) {
     const v = options[OPTION_KEYS[key]]
-    if (valid(key, v)) out[key] = v
+    if (valid(key, v) && v >= OPTION_MIN[key]) out[key] = v
   }
   return out
 }
