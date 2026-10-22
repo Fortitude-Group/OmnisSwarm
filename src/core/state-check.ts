@@ -40,9 +40,9 @@ const usage = (x: unknown): boolean =>
 
 const guardRec = (x: unknown): boolean =>
   exact(x, ['timeWarn', 'timeAct', 'costWarn', 'costAct']) && Object.values(x).every(nnum)
+/** `d` is a signed saving, so it may be negative. */
 const routeRec = (x: unknown): boolean =>
-  exact(x, ['calls', 'requested', 'baselineUsd', 'baselineKnown']) && num(x.calls) && str(x.requested, 80) &&
-  num(x.baselineUsd) && typeof x.baselineKnown === 'boolean'
+  exact(x, ['q', 'd']) && str(x.q, 80) && typeof x.d === 'number' && Number.isFinite(x.d)
 const budget = (x: unknown): boolean => exact(x, ['agentMinutes', 'agentUsd', 'swarmUsd']) && Object.values(x).every(nnum)
 const swarmGuard = (x: unknown): boolean => exact(x, ['warn', 'block']) && Object.values(x).every(nnum)
 

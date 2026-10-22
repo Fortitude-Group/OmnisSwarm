@@ -30,6 +30,7 @@ export const FEED_MARK = { agent: '•', message: '›', memory: '+', task: '#' 
 
 export const GLYPH = {
   running: '▶', waiting: '◌', done: '✓', failed: '✕', lead: '◆', unknown: '?', stuck: '!', clash: '!', gap: '⚠', dot: '●', pinned: '◉', times: '×',
+  cheaper: '↓', dearer: '↑',
 } as const
 
 /**
@@ -74,21 +75,20 @@ export function modelFamily(model: string | null): ModelFamily {
 
 export const modelColor = (model: string | null): number => MODEL[modelFamily(model)]
 
-/** Both ends of a routed call: family names when the families differ ("sonnet", "haiku"), otherwise the full ids. */
-export function routeEnds(requested: string, model: string): [string, string] {
-  const from = modelFamily(requested)
-  const to = modelFamily(model)
-  if (from === to) return [requested, model]
-  return [from === 'other' ? requested : from, to === 'other' ? model : to]
+type Routed = { model: string | null; route: RouteStats | null }
+
+/** pane.md 13.5: a model badge only when both families are known and differ (two Sonnet versions show none). */
+export function routedFamilies(s: Routed): { asked: ModelFamily; answered: ModelFamily } | null {
+  if (s.route === null || s.model === null) return null
+  const asked = modelFamily(s.route.requested)
+  const answered = modelFamily(s.model)
+  return asked === answered || asked === 'other' || answered === 'other' ? null : { asked, answered }
 }
 
-export const routeLabel = (requested: string, model: string): string => routeEnds(requested, model).join(' → ')
-
-/** The routing badge's figure: "saved 64%", "cost +20%" when routed to a dearer model, or "routed" when unpriced. */
-export function routeText(r: RouteStats): { text: string; color: number } {
-  if (r.savedPct === null || !Number.isFinite(r.savedPct)) return { text: 'routed', color: TEXT.dim }
-  const pct = Math.round(Math.abs(r.savedPct) * 100)
-  return r.savedPct >= 0 ? { text: `saved ${pct}%`, color: TEXT.dim } : { text: `cost +${pct}%`, color: STATUS.warn }
+/** The graph label's and tree row's mark after the name: ↓ dim when the answer was cheaper, ↑ amber when dearer. */
+export function routeMark(s: Routed): [string, number] | null {
+  const d = routedFamilies(s) === null ? 0 : (s.route?.deltaUsd ?? 0)
+  return d > 0 ? [GLYPH.cheaper, TEXT.dim] : d < 0 ? [GLYPH.dearer, STATUS.warn] : null
 }
 
 export const statusGlyph = (status: AgentStatus, placeholder = false): string => (placeholder ? GLYPH.unknown : GLYPH[status])
