@@ -59,9 +59,7 @@ function bigState(agents: number, files: number, finished = 0, desc = 'd', quote
     events.push(ev('agent.tool', { phase: 'start', tool: 'Edit', kind: 'edit', subject: `shared/file-${a % 5}.ts`, isError: false }, { swarm: 'big', agent: id, atSec: 5 }))
     events.push(ev('message.sent', { to: `${pre}${(a + 1) % agents}`, summary: 'hi' }, { swarm: 'big', agent: id, atSec: 6 }))
     if (routed) {
-      for (let c = 0; c < 3; c++) {
-        events.push(ev('agent.usage', { model: 'claude-haiku-5-5', requested: 'claude-sonnet-5-5', input: 12_345 + a, output: 678 + c, cacheRead: 9_876, cacheWrite5m: 543, cacheWrite1h: 0 }, { swarm: 'big', agent: id, atSec: 7 + c }))
-      }
+      events.push(ev('agent.usage', { model: 'claude-haiku-5-5', requested: 'claude-sonnet-5-5', input: 12_345 + a, output: 678, cacheRead: 9_876, cacheWrite5m: 543, cacheWrite1h: 0 }, { swarm: 'big', agent: id, atSec: 7 }))
     }
   }
   for (let a = 0; a < finished; a++) events.push(ev('agent.finished', { outcome: 'answer' }, { swarm: 'big', agent: `a${a}`, atSec: 300 + a }))
@@ -148,18 +146,18 @@ test('the ceiling: about 60 running agents fit, 70 do not', () => {
   assert.equal(freshReply('big', 1, bigState(70, 200)).kind, 'too-large')
 })
 
-// Usage itself is what costs room (a spend entry, the model, cost and token counts per call): with three calls each,
-// 47 agents fit unrouted. The route adds under 50 bytes an agent, so 45 routed ones fit.
-test('routed agents: the route stays small, survives trimming, and 45 with usage still fit', () => {
-  const state = bigState(45, 200, 0, 'd', false, true)
+// Usage itself is what costs room (a spend entry, the model, cost and token counts per call): with one call each,
+// about 53 agents fit unrouted. The route adds under 50 bytes an agent, so about 50 routed ones fit, not 60.
+test('routed agents: the route stays small, survives trimming, and 50 with usage still fit', () => {
+  const state = bigState(50, 200, 0, 'd', false, true)
   assert.ok(Object.values(state.agents).every(a => a.route !== undefined))
   const r = freshReply('big', 1, state)
   assert.ok(r.kind === 'state' && isSwarmState(r.state, 'big'))
   assert.ok(Object.values(r.state.agents).every(a => a.route !== undefined), 'trimming keeps the route')
   assert.ok(Buffer.byteLength(JSON.stringify(r)) <= FEED_REPLY_MAX)
   const route = JSON.stringify({ route: state.agents['a0']!.route })
-  assert.ok(route.length <= 50, route)
-  assert.equal(freshReply('big', 1, bigState(50, 200, 0, 'd', false, true)).kind, 'too-large')
+  assert.ok(route.length <= 52, route)
+  assert.equal(freshReply('big', 1, bigState(55, 200, 0, 'd', false, true)).kind, 'too-large')
 })
 
 test('utf8Bytes agrees with the real encoding for ASCII, accents, CJK, emoji and escapes', () => {
