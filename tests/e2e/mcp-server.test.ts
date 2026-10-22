@@ -12,6 +12,8 @@ import { tmpRoot } from '../helpers.ts'
 
 const SERVER = fileURLToPath(new URL('../../src/mcp/server.ts', import.meta.url))
 const NOISY = fileURLToPath(new URL('./fixtures/noisy-server.ts', import.meta.url))
+const START = fileURLToPath(new URL('../../src/mcp/start.mjs', import.meta.url))
+const MANIFEST = JSON.parse(readFileSync(fileURLToPath(new URL('../../.claude-plugin/plugin.json', import.meta.url)), 'utf8')) as { version: string }
 
 function start(script: string, env: Record<string, string>) {
   const child = spawn(process.execPath, [script], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -102,6 +104,19 @@ test('console output from modules imported before the server goes to stderr, nev
     for (const line of s.stdoutLines) assert.doesNotThrow(() => JSON.parse(line), `non-JSON on stdout: ${line}`)
     assert.match(s.out.stderr, /omnis-noisy-import/)
     assert.match(s.out.stderr, /noisy: true/)
+  } finally {
+    await s.stop()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('start.mjs runs the server: initialize answers with the manifest version, and stdout stays protocol-only', async () => {
+  const root = tmpRoot()
+  const s = start(START, { OMNIS_PROJECT_DIR: root })
+  try {
+    const reply = await s.call(1, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0' } })
+    assert.deepEqual(reply.result.serverInfo, { name: 'omnis-swarm', version: MANIFEST.version })
+    for (const line of s.stdoutLines) assert.doesNotThrow(() => JSON.parse(line), `non-JSON on stdout: ${line}`)
   } finally {
     await s.stop()
     rmSync(root, { recursive: true, force: true })
