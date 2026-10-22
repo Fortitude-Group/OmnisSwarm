@@ -2,13 +2,19 @@
 import type { EventData } from './events.ts'
 
 /** The only event types omnis_record accepts. The server writes the swarm, memory and task events itself. */
-export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure'] as const
+export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked'] as const
 export type RecorderType = (typeof RECORDER_TYPES)[number]
 
 export const RECORD_TOOL = 'omnis_record'
 
 /** The internal tool the pane pulls the swarm from. */
 export const FEED_TOOL = 'omnis_feed'
+
+/** The internal tool the pane replays a finished swarm from. */
+export const REPLAY_TOOL = 'omnis_replay'
+
+/** The internal tool that renders a swarm to a GIF. */
+export const EXPORT_TOOL = 'omnis_export'
 
 /** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
 export const SERVER_KEY = 'omnis-swarm'
@@ -24,7 +30,7 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
  * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export)$/
 
 /** An internal tool may be called only from this plugin's own hooks. Every other tool is not the guard's business. */
 export function guardVerdict(tool: string, origin: string, self: string): 'pass' | 'deny' {

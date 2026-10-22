@@ -40,7 +40,7 @@ test('offers exactly omnis_record, with an object schema', () => {
 
 test('the first event starts the session swarm, then lands in it as written by the recorder', () => {
   const { root, call, events } = setup()
-  assert.deepEqual(call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL }), { text: 'ok' })
+  assert.match(call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL }).text, /^ok [a-z0-9]/)
   assert.equal(readCurrent(root), SWARM)
   const [started, tool] = events(SWARM)
   assert.equal(started?.type, 'swarm.started')

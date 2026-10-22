@@ -1,14 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Files a Claude Code mod may import. A mod has web APIs only: no Buffer, process or require.
-// Add a file name here to put it under the same rules.
-const MOD_SAFE = ['events.ts', 'fold.ts', 'prices.ts', 'recording.ts', 'stats.ts']
-
 const coreDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'core')
+// Every core file is mod-safe except these, which the server alone uses. A new core file is checked without editing this.
+const NODE_ONLY = new Set(['log.ts', 'snapshot.ts', 'swarm.ts'])
+const MOD_SAFE = readdirSync(coreDir).filter(f => f.endsWith('.ts') && !NODE_ONLY.has(f))
 const source = (name: string) => readFileSync(join(coreDir, name), 'utf8')
 
 const BANNED: Array<[string, RegExp]> = [

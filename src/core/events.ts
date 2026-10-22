@@ -17,6 +17,15 @@ export type ToolKind = (typeof TOOL_KINDS)[number]
 export const AGENT_OUTCOMES = ['answer', 'aborted', 'failed'] as const
 export type AgentOutcome = (typeof AGENT_OUTCOMES)[number]
 
+export const GUARD_LIMITS = ['time', 'agentCost', 'swarmCost'] as const
+export type GuardLimit = (typeof GUARD_LIMITS)[number]
+/** The highest each budget limit may be set to (spec section 2.3). Minutes, dollars, dollars. */
+export const BUDGET_MAX = { agentMinutes: 1440, agentUsd: 1000, swarmUsd: 1000 } as const
+export type BudgetKey = keyof typeof BUDGET_MAX
+export const BUDGET_KEYS: readonly BudgetKey[] = ['agentMinutes', 'agentUsd', 'swarmUsd']
+/** The bound on a guard event's value and threshold. */
+export const GUARD_MAX = 1e6
+
 export type EventData = {
   'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean; session?: string }
   'swarm.ended': { outcome?: string }
@@ -29,13 +38,17 @@ export type EventData = {
   'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[] }
   'task.updated': { id: string; state: TaskState; assignee?: string; note?: string }
   'session.measure': { contextTokens?: number; contextWindow: number; contextPercent?: number; costUsd?: number }
+  'budget.set': { agentMinutes?: number; agentUsd?: number; swarmUsd?: number }
+  'guard.warned': { limit: GuardLimit; value: number; threshold: number }
+  'guard.nudged': { limit: Exclude<GuardLimit, 'swarmCost'>; value: number; threshold: number; delivered: boolean; reason?: string }
+  'guard.blocked': { value: number; threshold: number }
 }
 export type EventType = keyof EventData
 
 export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
-  'session.measure',
+  'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {

@@ -1,7 +1,7 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
-  AGENT_OUTCOMES, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, GUARD_LIMITS, GUARD_MAX, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
+  type AgentOutcome, type BudgetKey, type GuardLimit, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
 import { costOf, type Usage } from './prices.ts'
 
@@ -21,6 +21,9 @@ export const MAX_EDITS = 10
 const SPEND_KEEP_MS = 600_000
 
 export type UsageSample = { at: number; output: number; gapMs: number }
+
+/** The threshold each guard stage last fired at, or null. */
+export type AgentGuard = { timeWarn: number | null; timeAct: number | null; costWarn: number | null; costAct: number | null }
 
 export type AgentState = {
   id: string
@@ -50,6 +53,8 @@ export type AgentState = {
   messagesIn: number
   messagesOut: number
   lastActivity: number
+  /** Absent until a guard stage first fires; readers treat absent as all null. */
+  guard?: AgentGuard
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -86,6 +91,8 @@ export type SwarmState = {
   events: number
   lastAt: number
   gaps: number
+  budget: Record<BudgetKey, number | null>
+  guard: { warn: number | null; block: number | null }
 }
 
 export function emptyState(id: string): SwarmState {
@@ -94,6 +101,7 @@ export function emptyState(id: string): SwarmState {
     session: { contextTokens: null, contextWindow: null, contextPercent: null, costUsd: null, at: null },
     agents: {}, byName: {}, links: {}, memory: {}, tasks: {}, feed: [], edits: {}, spend: [],
     events: 0, lastAt: 0, gaps: 0,
+    budget: { agentMinutes: null, agentUsd: null, swarmUsd: null }, guard: { warn: null, block: null },
   }
 }
 
@@ -149,6 +157,14 @@ function revive(a: AgentState, at: number): void {
   a.startedAt = at
   a.runs++
 }
+
+const guardNum = (x: unknown, min: number): number | null =>
+  typeof x === 'number' && Number.isFinite(x) && x >= min && x <= GUARD_MAX ? x : null
+/** ≈$5.20: two decimals, as the pane shows estimates. */
+const usdText = (usd: number): string => `≈$${usd.toFixed(2)}`
+/** A limit as set: 20 min, $10, $2.50. */
+export const limitText = (limit: GuardLimit, n: number): string =>
+  limit === 'time' ? `${n} min` : `$${Number.isInteger(n) ? n : n.toFixed(2)}`
 
 function feed(state: SwarmState, item: FeedItem): void {
   state.feed.push(item)
@@ -322,6 +338,44 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
         costUsd: cost ?? prev.costUsd,
         at,
       }
+      break
+    }
+    case 'budget.set': {
+      for (const key of BUDGET_KEYS) {
+        const v = (e.data as Record<string, unknown>)[key]
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= BUDGET_MAX[key]) state.budget[key] = v
+      }
+      break
+    }
+    case 'guard.warned':
+    case 'guard.nudged': {
+      const d = e.data
+      const value = guardNum(d.value, 0)
+      const threshold = guardNum(d.threshold, Number.MIN_VALUE)
+      if (value === null || threshold === null || !isOneOf(GUARD_LIMITS, d.limit)) break
+      if (d.limit === 'swarmCost') {
+        if (e.type !== 'guard.warned') break
+        state.guard.warn = threshold
+        feed(state, { at, kind: 'agent', agent: LEAD, text: `swarm: ${usdText(value)}, past its ${limitText('swarmCost', threshold)} warning` })
+        break
+      }
+      const a = agentOf(state, who, at)
+      const act = e.type === 'guard.nudged'
+      a.guard ??= { timeWarn: null, timeAct: null, costWarn: null, costAct: null }
+      if (d.limit === 'time') a.guard[act ? 'timeAct' : 'timeWarn'] = threshold
+      else a.guard[act ? 'costAct' : 'costWarn'] = threshold
+      const shown = d.limit === 'time' ? `${Math.floor(value)} min` : usdText(value)
+      const text = act
+        ? `${a.name} asked to wrap up at ${shown}${(d as { delivered?: unknown }).delivered === true ? '' : ' (not delivered)'}`
+        : `${a.name}: ${shown}, past its ${limitText(d.limit, threshold)} warning`
+      feed(state, { at, kind: 'agent', agent: a.id, text })
+      break
+    }
+    case 'guard.blocked': {
+      const threshold = guardNum(e.data.threshold, Number.MIN_VALUE)
+      if (threshold === null || guardNum(e.data.value, 0) === null) break
+      state.guard.block = threshold
+      feed(state, { at, kind: 'agent', agent: LEAD, text: `swarm budget ${limitText('swarmCost', threshold)} reached: new agents blocked` })
       break
     }
     case 'task.updated': {

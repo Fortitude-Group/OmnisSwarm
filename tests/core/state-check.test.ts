@@ -37,6 +37,26 @@ test('wrong shapes are rejected', () => {
   }
 })
 
+test('a malformed or padded guard record is rejected, and an absent one is fine', () => {
+  const fired = (): any => {
+    const s = clone()
+    s.agents.a1.guard = { timeWarn: 20, timeAct: null, costWarn: null, costAct: null }
+    return s
+  }
+  assert.equal(isSwarmState(fired(), 's1'), true)
+  assert.equal(isSwarmState(clone(), 's1'), true)
+  const bad = fired(); bad.agents.a1.guard.timeWarn = 'x'
+  assert.equal(isSwarmState(bad, 's1'), false)
+  const neg = fired(); neg.agents.a1.guard.costAct = -1
+  assert.equal(isSwarmState(neg, 's1'), false)
+  const extra = fired(); extra.agents.a1.guard.extra = 1
+  assert.equal(isSwarmState(extra, 's1'), false)
+  const missing = fired(); delete missing.agents.a1.guard.costAct
+  assert.equal(isSwarmState(missing, 's1'), false)
+  const sw = clone(); sw.guard.extra = 1
+  assert.equal(isSwarmState(sw, 's1'), false)
+})
+
 test('unsafe keys are rejected', () => {
   const bad: unknown = JSON.parse(JSON.stringify(rich()).replace('"a1":', '"__proto__":'))
   assert.ok(!isSwarmState(bad, 's1'))
