@@ -1,11 +1,12 @@
 {
   "name": "omnis-swarm",
+  "description": "Fortitude Omnis plugins for Claude Code. One so far: OmnisSwarm, swarm coordination with a live pane that shows every agent at work.",
   "owner": { "name": "Fortitude Omnis" },
   "plugins": [
     {
       "name": "omnis-swarm",
       "source": "./",
-      "description": "Swarm coordination and a live read-only swarm pane for Claude Code."
+      "description": "Swarm coordination for Claude Code, with a live read-only pane that draws your agents as they work."
     }
   ]
 }
