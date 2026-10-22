@@ -5,7 +5,7 @@ import { agentStatus, type AgentStats } from '../core/stats.ts'
 import { clipText, fmtDuration, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
 import { guardWords } from './guard-badge.ts'
 import { type Grid, type Part, writeParts, writeRight } from './grid.ts'
-import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
+import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, routeEnds, routeText, statusGlyph } from './tokens.ts'
 import type { Pulse, Rect, Spot } from './types.ts'
 
 const SCORE_WINDOW_MS = 30_000
@@ -77,11 +77,19 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   const usd = noUsage ? '–' : fmtUsd(s.costUsd)
   const usdColor = noUsage ? TEXT.dim : TEXT.primary
   const width = (parts: readonly Part[]): number => parts.reduce((n, [text]) => n + [...text].length, 0)
+  const route = s.route !== null && s.model !== null ? routeText(s.route) : null
+  const saving: Part[] = route === null ? [] : [[`${route.text}  `, route.color]]
+  const modelParts: Part[] = s.model === null
+    ? [['model –', TEXT.dim]]
+    : s.route === null
+      ? [[s.model, color]]
+      : (([from, to]) => [[from, modelColor(s.route!.requested)], [' → ', TEXT.faint], [to, color]] as Part[])(routeEnds(s.route.requested, s.model))
 
   if (compact) {
     writeParts(grid, x, area.y, [
       [`${GLYPH.dot} `, color], [clipText(s.name, 24), TEXT.primary], [' ', TEXT.dim], ...status, SEP,
       [`${tok(s.tokens.total)} tok`, TEXT.dim], SEP, [usd, usdColor], [' · ctx ', TEXT.faint], fillPart,
+      ...(route === null ? [] : [SEP, [route.text, route.color] as Part]),
     ], maxX, bg)
     return
   }
@@ -91,19 +99,20 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   // 0: who
   const leftMax0 = Math.max(x, maxX - width(status) - 2)
   writeParts(grid, x, row(0), [
-    [`${GLYPH.dot} `, color], [clipText(s.name, 32), TEXT.primary], SEP, [clipText(s.role, 24), TEXT.dim], SEP, [s.model ?? 'model –', s.model === null ? TEXT.dim : color],
+    [`${GLYPH.dot} `, color], [clipText(s.name, 32), TEXT.primary], SEP, [clipText(s.role, 24), TEXT.dim], SEP, ...modelParts,
   ], leftMax0, bg)
   writeRight(grid, row(0), status, x, maxX, bg)
   // 1: tokens and cost
   if (rows > 1) {
     const t = s.tokens
-    const leftMax1 = Math.max(x, maxX - width([[usd, usdColor]]) - 2)
+    const right1: Part[] = [...saving, [usd, usdColor]]
+    const leftMax1 = Math.max(x, maxX - width(right1) - 2)
     writeParts(grid, x, row(1), [
       ['tokens ', TEXT.dim], [`in ${tok(t.input)}`, TEXT.primary], ['  ', TEXT.dim], [`out ${tok(t.output)}`, TEXT.primary],
       ['  cache ', TEXT.dim], [`r ${tok(t.cacheRead)} w ${tok(t.cacheWrite5m + t.cacheWrite1h)}`, TEXT.primary],
       ['  = ', TEXT.dim], [tok(t.total), TEXT.primary],
     ], leftMax1, bg)
-    writeRight(grid, row(1), [[usd, usdColor]], x, maxX, bg)
+    writeRight(grid, row(1), right1, x, maxX, bg)
   }
   // 2: context bar and cache hit rate
   if (rows > 2) {

@@ -78,6 +78,7 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
         model: text(d, 'model', 80),
         input: count(d, 'input', MAX_USAGE), output: count(d, 'output', MAX_USAGE), cacheRead: count(d, 'cacheRead', MAX_USAGE),
         cacheWrite5m: count(d, 'cacheWrite5m', MAX_USAGE), cacheWrite1h: count(d, 'cacheWrite1h', MAX_USAGE),
+        ...(d.requested !== undefined && { requested: text(d, 'requested', 80, true) }),
       }
     case 'agent.tool': {
       const isError = d.isError

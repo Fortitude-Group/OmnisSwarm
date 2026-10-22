@@ -81,6 +81,15 @@ test('unknown keys in data are not copied into the log', () => {
   assert.deepEqual(events(SWARM)[1]!.data, TOOL)
 })
 
+test('agent.usage keeps a requested model when one is sent, and leaves the key out when not', () => {
+  const { call, events } = setup()
+  const usage = { model: 'claude-haiku-5-5', input: 1, output: 1, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }
+  call({ sessionId: SID, ts: TS, type: 'agent.usage', agent: 'lead', data: { ...usage, requested: 'claude-sonnet-5-5' } })
+  call({ sessionId: SID, ts: TS, type: 'agent.usage', agent: 'lead', data: usage })
+  assert.deepEqual(events(SWARM)[1]!.data, { ...usage, requested: 'claude-sonnet-5-5' })
+  assert.deepEqual(events(SWARM)[2]!.data, usage)
+})
+
 test('dropped rides in data and folds into gaps', () => {
   const { session, call, events } = setup()
   call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL, dropped: 3 })
@@ -108,6 +117,8 @@ test('bad calls are refused with an InputError and write nothing', () => {
     { ...good, data: { ...TOOL, tool: '' } },
     { ...good, type: 'agent.usage', data: { model: 'm', input: -1, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 } },
     { ...good, type: 'agent.usage', data: { model: 'm', input: 1.5, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 } },
+    { ...good, type: 'agent.usage', data: { model: 'm', input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, requested: 'r'.repeat(81) } },
+    { ...good, type: 'agent.usage', data: { model: 'm', input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, requested: 7 } },
     { ...good, type: 'agent.finished', data: { outcome: 'exploded' } },
     { ...good, type: 'agent.started', data: { name: 'n', role: 'r', description: 'd', parent: 'not valid' } },
     { ...good, type: 'message.sent', data: { to: '', summary: 'x' } },

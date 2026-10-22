@@ -228,7 +228,7 @@ export function registerRecorder(on: On, given?: RecordObserver): void {
     const result = yield* next(e)
     safely($, () => {
       const agent = whoOf(e.agentId, rec.seen)
-      if (agent !== null && result.usage !== null) void record($, agentUsage(result.usage, agent))
+      if (agent !== null && result.usage !== null) void record($, agentUsage(result.usage, agent, e.model))
     })
     return result
   })

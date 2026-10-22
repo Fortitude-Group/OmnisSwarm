@@ -31,7 +31,8 @@ export type EventData = {
   'swarm.ended': { outcome?: string }
   'agent.started': { name: string; role: string; description: string; parent: string }
   'agent.finished': { outcome: AgentOutcome; reason?: string }
-  'agent.usage': { model: string; input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number }
+  /** `requested`: the model the request named, only when a gateway (OmnisRouter) answered with another. */
+  'agent.usage': { model: string; input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number; requested?: string }
   'agent.tool': { phase: 'start' | 'end'; tool: string; kind: ToolKind; subject: string; isError: boolean }
   'message.sent': { to: string; summary: string }
   'memory.put': { key: string; bytes: number; preview: string }
