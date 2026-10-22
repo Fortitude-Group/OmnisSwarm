@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { RUN } from './test-engine.ts'
 
 // The kit loads the plugin's own register.ts (recorder and budget guard included); a test's userConfig goes in its options.
 // A test's own import of budget-guard.ts is a separate copy, so limits are raised here through omnis_swarm_init's
@@ -230,4 +231,36 @@ test("an agent's estimated spend warns at $3 and nudges at $5", LOADED, async ($
   expect(seen.sends.length).toBe(1)
   expect(dataOf(seen, 'guard.nudged')).toEqual({ limit: 'agentCost', value: 5, threshold: 5, delivered: true })
   expect(seen.appends[0]).toContain('[OmnisSwarm budget guard] coder-b passed its $5 budget')
+})
+
+const omnis = ($: Engine, args: string) => $.command.run({ command: 'omnis', args, ...RUN }).then(r => r.text)
+
+test('/omnis budget 30 is recorded, lifts the block, and the guard blocks again at the new limit', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 21)
+  await clock.settle()
+  expect((await leadSpawn($, 't8')).decision).toBe('deny')
+  expect(await omnis($, 'budget 30')).toBe('Swarm budget set to $30. New agents: allowed.')
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'budget.set').map(r => r.data)).toEqual([{ swarmUsd: 30 }])
+  expect((await leadSpawn($, 't9')).decision).toBe('allow')
+  await measure($, 31)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 21, threshold: 20 }, { value: 31, threshold: 30 }])
+  expect((await leadSpawn($, 't10')).decision).toBe('deny')
+})
+
+test('/omnis budget with no swarm running waits for the next swarm, shows it, and records it when the swarm begins', LOADED, async ($, on) => {
+  const clock = mock.clock(on, { now: T0 })
+  const seen = engine(on)
+  await $.session.start({ cwd: '/p', surface: null, isInteractive: false })
+  await clock.settle()
+  expect(await omnis($, 'budget 30')).toBe('No swarm is running. The swarm budget will be $30 for the next swarm.')
+  expect(await omnis($, 'budget')).toContain("New agents: allowed. Next swarm's budget: $30.")
+  expect(seen.records.filter(r => r.type === 'budget.set')).toEqual([])
+  await measure($, 25)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'budget.set').map(r => r.data)).toEqual([{ swarmUsd: 30 }])
+  expect((await leadSpawn($, 't1')).decision).toBe('allow')
+  expect(await omnis($, 'budget')).toContain('swarm $30 (warns at $15). Swarm so far ≈$25.00.')
 })
