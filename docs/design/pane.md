@@ -892,8 +892,8 @@ real terminal, render time, pair counts in a golden, and the GIF encoder's palet
 
 | Token | Value | Use | Check |
 |---|---|---|---|
-| `GUARD.drop` | `#e0f4ff` | The sweat drop on robots and globes | 16.95:1 on `CANVAS`; 2.78:1 on terracotta, 4.89:1 on waiting terracotta; OKLab ×100 from terracotta 32.5 / 36.1 / 29.5 / 34.1 (normal / protanopia / deuteranopia / tritanopia); from `KIND.read` 17.0 / 10.8 / 15.1 / 17.1 |
-| `GUARD.dripMix` | 0.7 | The drip pixel: `mix(body, GUARD.drop, 0.7)` | 2.08:1 on terracotta (motion carries it) |
+| `GUARD.drop` | **`#7cc4ff`** (was `#e0f4ff`) | The sweat drop on robots and globes, and the drip | 10.23:1 on `CANVAS`; 1.68:1 on terracotta, 2.95:1 on waiting terracotta (a hue change, not a lightness one: OKLab ×100 from terracotta 26.6 / 26.2 / 22.1, normal / protanopia / deuteranopia). Nearest model colour: `MODEL.opus` 16.0 / 16.1 / 17.3; `MODEL.fable` 18.7 / **5.3** / 7.7. Nearest other: `LINK.active` 4.3 / 2.8 / 4.0, `KIND.read` 7.8 / 6.1 / 5.1, `STATUS.waiting` 12.0 / 12.3 / 11.0 |
+| `GUARD.dripMix` | **1.0** (was 0.7) | The drip pixel: `mix(body, GUARD.drop, 1.0)`, i.e. the drop colour. At 0.7 the blue drip was 1.38:1 on terracotta and vanished | as `GUARD.drop` |
 | `GUARD.flashMs` | 450 (= `pulseMs`) | Drop flash when a `guard.warned` or `guard.nudged` event arrives | — |
 | `REPLAY.raised` | `#202337` = `mix(CANVAS_RAISED, ACCENT, 0.08)` | Header background (both rows, the 1-row header and the summary line) during a replay and in a GIF | On it: `TEXT.primary` 13.10, `TEXT.dim` 6.14, `STATUS.failed` 4.62, `STATUS.warn` 6.87, `STATUS.running` 10.07, `ACCENT` 6.00. A 0.10 tint would put failed text at 4.47, under 4.5, so the tint stays at 0.08 and the badge does the work |
 | `REPLAY.badge` | text `CANVAS` on `ACCENT` | ` REPLAY 10× ` | 7.43:1 |
@@ -902,6 +902,15 @@ real terminal, render time, pair counts in a golden, and the GIF encoder's palet
 | `GLYPH.cheaper` / `dearer` | `↓` / `↑` (already in section 5) | Model badge mark after a label | — |
 
 ### 13.2 Guard warning badge: the sweat drop
+
+**Why pale blue (2026-10-22, after the first live look).** At `#e0f4ff` Rob read the drop as "white bits on his
+head": near-white on terracotta reads as glare, not water. `#7cc4ff` is the palest blue that still looks blue on
+the body (checked by eye against `#c4e6ff`, `#b5e0ff`, `#9ad2ff` and `#66b3ff` in `s13-drop-blue.png`). Paler blues
+were rejected because they sit on top of `LINK.active` (`#9ad2ff`: 1.4-1.9 apart) and still look white; `#66b3ff`
+started to read as an opus glow. Two near pairs are accepted, both carried by shape and place: `LINK.active`
+(2.8-4.3) is only ever braille dots along links, which stop at the node box, while the drop is solid half-block
+pixels on the body or touching the ring; `MODEL.fable` under protanopia (5.3) is a pink globe fill, never a 2-5 px
+mark at one o'clock. The white flash (`#ffffff`) is now 19.6-24.0 from the drop, so it shows more clearly than before.
 
 **One mark for both styles.** Robots and globes both get a sweat drop. I've used it instead of the spec's
 "amber rim on globes" because the amber rim already means **stuck** (section 4: an amber rim breathing on the glow

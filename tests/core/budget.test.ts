@@ -107,6 +107,10 @@ test('the words', () => {
   assert.equal(toastText({ kind: 'warn', agent: 'a1', limit: 'time', value: 21.4, threshold: 20 }, 'coder-b', DEFAULT_LIMITS), 'coder-b: 21 min, past its 20 min time-box')
   assert.equal(toastText({ kind: 'warn', agent: 'a1', limit: 'agentCost', value: 3.1, threshold: 3 }, 'coder-b', DEFAULT_LIMITS), 'coder-b: ≈$3.10, past its $3 warning')
   assert.equal(toastText({ kind: 'nudge', agent: 'a1', limit: 'time', value: 31, threshold: 30 }, 'coder-b', DEFAULT_LIMITS), 'coder-b: 31 min, asked to wrap up (30 min time-box)')
+  // Under ten minutes a whole-minute floor would read as short of the limit, so one decimal, never rounded up.
+  assert.equal(toastText({ kind: 'nudge', agent: 'a1', limit: 'time', value: 1.54, threshold: 1.5 }, 'tester', DEFAULT_LIMITS), 'tester: 1.5 min, asked to wrap up (1.5 min time-box)')
+  assert.equal(toastText({ kind: 'warn', agent: 'a1', limit: 'time', value: 1.06, threshold: 1 }, 'tester', DEFAULT_LIMITS), 'tester: 1 min, past its 1 min time-box')
+  assert.equal(toastText({ kind: 'warn', agent: 'a1', limit: 'time', value: 6.99, threshold: 6 }, 'tester', DEFAULT_LIMITS), 'tester: 6.9 min, past its 6 min time-box')
   assert.equal(toastText({ kind: 'block', value: 20, threshold: 20 }, '', DEFAULT_LIMITS), 'Swarm budget $20 reached: new agents are blocked. /omnis budget <usd> raises it.')
   assert.equal(nudgeText(DEFAULT_LIMITS), "You're past your time-box (30 min / $5). Wrap up what you have, report to main, and stop.")
   assert.equal(blockReason(DEFAULT_LIMITS), 'Swarm budget $20 reached. Raise it with /omnis budget <usd> or finish with the agents you have.')

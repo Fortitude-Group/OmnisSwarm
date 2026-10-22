@@ -33,7 +33,7 @@ test('/omnis pane style with no style or an unknown one gets the usage', KIT, as
 })
 
 for (const [what, style] of [['a number', 42], ['an object', { toString: 1 }], ['an unknown word', 'robots']] as const) {
-  test(`a stored style that is ${what} draws exactly the globes that no stored style does`, async ($, on) => {
+  test(`a stored style that is ${what} draws exactly the globes that no stored style does`, KIT, async ($, on) => {
     engine(on)
     let stored: unknown
     on('state.get', (_, e) => ({ value: { value: String(e.key) === 'paneStyle' ? stored : undefined, version: 0 } }))
