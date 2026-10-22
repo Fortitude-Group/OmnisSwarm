@@ -16,10 +16,13 @@ const TIMEOUT_TEXT = `GIF export failed: the server did not answer in ${EXPORT_T
 /** The probe for the most recent swarm id is a plain read of the log. */
 const PROBE_TIMEOUT_MS = 15_000
 
-const textOf = (result: CallResult): string => {
+/** The reply's whole text: a replay page is JSON of up to 40,000 bytes and must be parsed uncut. */
+const fullText = (result: CallResult): string => {
   const block = result.content[0]
-  return block !== undefined && block.type === 'text' && typeof block.text === 'string' ? block.text.slice(0, 300) : ''
+  return block !== undefined && block.type === 'text' && typeof block.text === 'string' ? block.text : ''
 }
+/** Short enough for a toast. */
+const textOf = (result: CallResult): string => fullText(result).slice(0, 300)
 
 /** One call raced against a timer: the result, 'timeout', or 'failed' when the call rejected. */
 function callWithin(host: Host, ms: number, server: string, tool: string, args: Record<string, unknown>): Promise<CallResult | 'timeout' | 'failed'> {
@@ -50,7 +53,7 @@ export async function exportCommand($: EngineInterface, words: readonly string[]
     const probe = await callWithin(host, PROBE_TIMEOUT_MS, server, REPLAY_TOOL, { since: 0 })
     if (probe === 'timeout') return 'The swarm server did not answer in time; try again in a moment.'
     if (probe === 'failed') return 'The swarm log could not be read.'
-    const reply = probe.isError ? null : parseReplayReply(textOf(probe))
+    const reply = probe.isError ? null : parseReplayReply(fullText(probe))
     if (reply === null) return 'The swarm log could not be read.'
     if (reply.kind === 'none') return 'No recorded swarm here yet.'
     swarm = reply.swarm

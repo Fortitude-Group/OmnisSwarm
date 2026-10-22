@@ -58,6 +58,19 @@ test('/omnis export gif without a swarm exports the most recent one', LOADED, as
   expect(seen.calls.find(c => c.tool === 'omnis_export')!.args).toEqual({ swarm: 'beta', style: 'globe' })
 })
 
+test('/omnis export gif without a swarm reads a full-size replay page, not just its first 300 characters', LOADED, async ($, on) => {
+  const seen = engine(on)
+  const tool = (i: number) => ({ v: 1, ts: `2026-10-21T22:47:${String(i % 60).padStart(2, '0')}.000Z`, swarm: 'gamma', src: 'recorder', type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Read', kind: 'read', subject: `src/file-${i}.ts`, isError: false } })
+  const page = JSON.stringify({ v: 1, kind: 'replay', swarm: 'gamma', offset: 9000, done: false, events: Array.from({ length: 40 }, (_, i) => tool(i)), bad: 0 })
+  expect(page.length).toBeGreaterThan(5000)
+  seen.onTool = name => (name === 'omnis_replay' ? page : null)
+  toasting(on)
+  await start($)
+  expect((await $.command.run({ command: 'omnis', args: 'export gif', ...RUN })).text).toBe('Rendering gamma to a GIF; the path follows when it is done.')
+  await settle()
+  expect(seen.calls.find(c => c.tool === 'omnis_export')!.args).toEqual({ swarm: 'gamma', style: 'globe' })
+})
+
 test('/omnis export gif toasts a clear failure when the server never answers', LOADED, async ($, on) => {
   const clock = mock.clock(on, { now: Date.parse('2026-10-22T14:05:00.000Z') })
   const seen = engine(on)
