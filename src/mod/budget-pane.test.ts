@@ -46,7 +46,8 @@ test('the header shows the cost against the budget and BLOCKED, and a raised bud
   on('agent.list', () => ({ value: [] }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.measure', (_, e) => ({ changed: e.changed }))
-  on('tool.call', () => ({ result: { content: 'ok' } as never }))
+  // omnis_swarm_init answers as the server does for a new swarm; the guard reads that reply.
+  on('tool.call', () => ({ result: { content: 'ok' } as never, text: `Swarm "auth refactor" started as ${FIVE_SWARM} (hierarchical).` }))
   const clock = mock.clock(on, { now: FIVE_AT.mid })
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
