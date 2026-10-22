@@ -30,22 +30,24 @@ test('an agent with no routed call has no route', () => {
   assert.equal(agentStats(s, 'a1', at(3))!.route, null)
 })
 
-test('a routed call records the requested model and prices the baseline at it, unrouted calls included', () => {
+test('a routed call keeps the requested model and the signed saving against it, nothing else', () => {
   const s = foldAll('s1', [coder, call(2, 'claude-sonnet-5-5'), call(3, 'claude-haiku-5-5', 'claude-sonnet-5-5')])
   const a = s.agents.a1!
   assert.equal(a.model, 'claude-haiku-5-5')
-  assert.deepEqual(a.route, { calls: 1, requested: 'claude-sonnet-5-5', baselineUsd: 0.024, baselineKnown: true })
-  near(a.costUsd, 0.0126)
-  const r = agentStats(s, 'a1', at(4))!.route!
-  assert.equal(r.requested, 'claude-sonnet-5-5')
-  assert.equal(r.calls, 1)
-  near(r.savedPct, 1 - 0.0126 / 0.024)
+  assert.deepEqual(Object.keys(a.route!).sort(), ['d', 'q'])
+  assert.equal(a.route!.q, 'claude-sonnet-5-5')
+  near(a.route!.d, 0.012 - 0.0006)
+  assert.deepEqual(agentStats(s, 'a1', at(4))!.route, { requested: 'claude-sonnet-5-5', deltaUsd: a.route!.d })
 })
 
-test('unrouted calls after a route still add to the baseline at their own price', () => {
-  const s = foldAll('s1', [coder, call(2, 'claude-haiku-5-5', 'claude-sonnet-5-5'), call(3, 'claude-sonnet-5-5')])
-  near(s.agents.a1!.route!.baselineUsd, 0.024)
-  assert.equal(s.agents.a1!.route!.calls, 1)
+test('unrouted calls before or after a route add nothing to the saving', () => {
+  const s = foldAll('s1', [coder, call(2, 'claude-haiku-5-5', 'claude-sonnet-5-5'), call(3, 'claude-sonnet-5-5'), call(4, 'claude-haiku-5-5')])
+  near(s.agents.a1!.route!.d, 0.0114)
+})
+
+test('routed calls add up, and the saving is kept to six decimal places', () => {
+  const s = foldAll('s1', [coder, call(2, 'claude-haiku-5-5', 'claude-sonnet-5-5'), call(3, 'claude-haiku-5-5', 'claude-sonnet-5-5'), call(4, 'claude-haiku-5-5', 'claude-sonnet-5-5')])
+  assert.equal(s.agents.a1!.route!.d, 0.0342)
 })
 
 test('a requested id that only differs by date or suffix is not a route', () => {
@@ -53,27 +55,28 @@ test('a requested id that only differs by date or suffix is not a route', () => 
   assert.equal(s.agents.a1!.route, undefined)
 })
 
-test('routing up to a dearer model shows a negative saving', () => {
+test('routing up to a dearer model is a negative saving', () => {
   const s = foldAll('s1', [coder, call(2, 'claude-sonnet-5-5', 'claude-haiku-5-5')])
-  near(agentStats(s, 'a1', at(3))!.route!.savedPct, 1 - 0.012 / 0.0006)
+  near(s.agents.a1!.route!.d, -0.0114)
 })
 
-test('an unpriced model on either side leaves the saving unknown but keeps the route', () => {
+test('an unpriced model on either side saves nothing but keeps the route', () => {
   const answered = foldAll('s1', [coder, call(2, 'gpt-5-mini', 'claude-sonnet-5-5')])
-  assert.equal(agentStats(answered, 'a1', at(3))!.route!.savedPct, null)
-  assert.equal(agentStats(answered, 'a1', at(3))!.route!.requested, 'claude-sonnet-5-5')
+  assert.deepEqual(answered.agents.a1!.route, { q: 'claude-sonnet-5-5', d: 0 })
   const requested = foldAll('s1', [coder, call(2, 'claude-haiku-5-5', 'mystery')])
-  assert.equal(requested.agents.a1!.route!.baselineKnown, false)
-  assert.equal(agentStats(requested, 'a1', at(3))!.route!.savedPct, null)
+  assert.deepEqual(requested.agents.a1!.route, { q: 'mystery', d: 0 })
 })
 
 test('a routed state passes the state check, and a malformed route does not', () => {
-  const s = foldAll('s1', [coder, call(2, 'claude-haiku-5-5', 'claude-sonnet-5-5')])
-  assert.ok(isSwarmState(JSON.parse(JSON.stringify(s)), 's1'))
+  const s = foldAll('s1', [coder, call(2, 'claude-sonnet-5-5', 'claude-haiku-5-5')])
+  assert.ok(isSwarmState(JSON.parse(JSON.stringify(s)), 's1'), 'a negative saving is valid')
   const bad = JSON.parse(JSON.stringify(s))
-  bad.agents.a1.route.requested = 'x\u0007'
+  bad.agents.a1.route.q = 'x\u0007'
   assert.ok(!isSwarmState(bad, 's1'))
   const extra = JSON.parse(JSON.stringify(s))
   extra.agents.a1.route.spy = 1
   assert.ok(!isSwarmState(extra, 's1'))
+  const nan = JSON.parse(JSON.stringify(s))
+  nan.agents.a1.route.d = 'lots'
+  assert.ok(!isSwarmState(nan, 's1'))
 })

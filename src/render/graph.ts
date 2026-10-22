@@ -9,7 +9,7 @@ import { type Grid, type Part, cp } from './grid.ts'
 import { dropsFor, globeDrops, guardFlash, type Drops } from './guard-badge.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
 import { type Box, type PaneStyle, boxReach, clearBoxDots, fitBoxes, paintRobot, robotLook, robotPulses } from './robot.ts'
-import { ACCENT, CANVAS, GLYPH, GRAPH, GUARD, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
+import { ACCENT, CANVAS, GLYPH, GRAPH, GUARD, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, routeMark, statusGlyph } from './tokens.ts'
 import type { Point, Rect, View } from './types.ts'
 
 export type GraphInput = {
@@ -254,9 +254,12 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
     const name = clipText(n.s.name, LABEL_MAX)
     // Each part is [text, colour]. The lead reads `◆ lead ▶`: its glyph is the mark, so the status follows the name.
     const stuck: Part[] = n.s.stuck ? [[` ${GLYPH.stuck}`, STATUS.warn]] : []
+    // pane.md 13.5: `▶ coder-1 ↓` when a router answered with a cheaper model family, `↑` when dearer.
+    const mark = routeMark(n.s)
+    const routed: Part[] = mark === null ? [] : [[` ${mark[0]}`, mark[1]]]
     const full: Part[] = isLead
-      ? [[GLYPH.lead, ACCENT], [` ${name}`, nameColor], [` ${status}`, statusColor], ...stuck]
-      : [[status, statusColor], [` ${name}`, nameColor], ...stuck]
+      ? [[GLYPH.lead, ACCENT], [` ${name}`, nameColor], ...routed, [` ${status}`, statusColor], ...stuck]
+      : [[status, statusColor], [` ${name}`, nameColor], ...routed, ...stuck]
     // The glyph-only form keeps the marks: the lead's diamond and a stuck agent's `!`.
     const short: Part[] = [...(isLead ? ([[GLYPH.lead, ACCENT]] as Part[]) : []), [status, statusColor], ...(n.s.stuck ? ([[GLYPH.stuck, STATUS.warn]] as Part[]) : [])]
     for (const parts of [full, short]) {

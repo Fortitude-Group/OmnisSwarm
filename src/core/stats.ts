@@ -71,15 +71,11 @@ export function fileClashes(state: SwarmState, nowMs?: number): Clash[] {
   return clashes.sort((x, y) => x.path.localeCompare(y.path))
 }
 
-/** `savedPct`: the share of the requested model's cost the routing saved (negative when it cost more); null when either side is unpriced. */
-export type RouteStats = { requested: string; calls: number; savedPct: number | null }
+/** `deltaUsd`: dollars saved against the requested model (negative when the answer cost more); 0 when either side is unpriced. */
+export type RouteStats = { requested: string; deltaUsd: number }
 
-export function routeStats(a: AgentState): RouteStats | null {
-  const r = a.route
-  if (r === undefined) return null
-  const savedPct = a.costKnown && r.baselineKnown && r.baselineUsd > 0 ? 1 - a.costUsd / r.baselineUsd : null
-  return { requested: r.requested, calls: r.calls, savedPct }
-}
+export const routeStats = (a: AgentState): RouteStats | null =>
+  a.route === undefined ? null : { requested: a.route.q, deltaUsd: a.route.d }
 
 export type AgentStats = {
   id: string

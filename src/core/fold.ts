@@ -23,10 +23,12 @@ const SPEND_KEEP_MS = 600_000
 export type UsageSample = { at: number; output: number; gapMs: number }
 
 /**
- * Calls a gateway answered with a model other than the one requested. `requested` is the latest routed call's.
- * `baselineUsd` is what every call would have cost at the requested model (an unrouted call at its own price).
+ * Set once a gateway (OmnisRouter) answers one of the agent's calls with another model than the one requested. Short
+ * keys, because every routed agent carries it in the pane's feed reply. `q`: the latest routed call's requested model.
+ * `d`: dollars saved against the requested model, summed over routed calls where both models are priced; negative
+ * when the answering model cost more. Rounded to six decimal places.
  */
-export type AgentRoute = { calls: number; requested: string; baselineUsd: number; baselineKnown: boolean }
+export type AgentRoute = { q: string; d: number }
 
 /** The threshold each guard stage last fired at, or null. */
 export type AgentGuard = { timeWarn: number | null; timeAct: number | null; costWarn: number | null; costAct: number | null }
@@ -129,19 +131,12 @@ const trim = <T>(list: T[], max: number): void => {
   while (list.length > max) list.shift()
 }
 
-/** Runs before the call's own cost is added, so a first route's baseline is what the earlier, unrouted calls cost. */
+/** `usd` is what the call cost at the answering model. An unrouted call leaves the route as it was. */
 function foldRoute(a: AgentState, requested: string, usage: Usage, usd: number | null): void {
-  const routed = requested !== '' && a.model !== null && !sameModel(requested, a.model)
-  if (!routed && a.route === undefined) return
-  const route = a.route ?? { calls: 0, requested, baselineUsd: a.costUsd, baselineKnown: a.costKnown }
-  const base = routed ? costOf(requested, usage) : usd
-  if (routed) {
-    route.calls++
-    route.requested = requested
-  }
-  if (base === null) route.baselineKnown = false
-  else route.baselineUsd += base
-  a.route = route
+  if (requested === '' || a.model === null || sameModel(requested, a.model)) return
+  const asked = costOf(requested, usage)
+  const d = (a.route?.d ?? 0) + (asked !== null && usd !== null ? asked - usd : 0)
+  a.route = { q: requested, d: Math.round(d * 1e6) / 1e6 }
 }
 
 function agentOf(state: SwarmState, id: string, at: number, name?: string): AgentState {

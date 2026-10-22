@@ -5,7 +5,7 @@ import { agentStatus, type AgentStats } from '../core/stats.ts'
 import { clipText, fmtDuration, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
 import { guardWords } from './guard-badge.ts'
 import { type Grid, type Part, writeParts, writeRight } from './grid.ts'
-import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, routeEnds, routeText, statusGlyph } from './tokens.ts'
+import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, routedFamilies, statusGlyph } from './tokens.ts'
 import type { Pulse, Rect, Spot } from './types.ts'
 
 const SCORE_WINDOW_MS = 30_000
@@ -77,19 +77,24 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   const usd = noUsage ? '–' : fmtUsd(s.costUsd)
   const usdColor = noUsage ? TEXT.dim : TEXT.primary
   const width = (parts: readonly Part[]): number => parts.reduce((n, [text]) => n + [...text].length, 0)
-  const route = s.route !== null && s.model !== null ? routeText(s.route) : null
-  const saving: Part[] = route === null ? [] : [[`${route.text}  `, route.color]]
-  const modelParts: Part[] = s.model === null
-    ? [['model –', TEXT.dim]]
-    : s.route === null
-      ? [[s.model, color]]
-      : (([from, to]) => [[from, modelColor(s.route!.requested)], [' → ', TEXT.faint], [to, color]] as Part[])(routeEnds(s.route.requested, s.model))
+  // pane.md 13.5: when a router answered with another model family, the requested one (dim) → the answering one.
+  // Every other colour stays the answering model's. The badge and the saving are each drawn whole or not at all.
+  const families = routedFamilies(s)
+  const badge: Part[] = families === null ? [] : [[families.asked, TEXT.dim], [' → ', TEXT.faint], [families.answered, color]]
+  // A delta that rounds to $0.000 says nothing, so it shows no saving at all.
+  const raw = families === null ? 0 : (s.route?.deltaUsd ?? 0)
+  const delta = Math.abs(raw) < 0.0005 ? 0 : raw
+  const saving: Part[] = delta > 0
+    ? [[' · saves ', TEXT.dim], [fmtUsd(delta), STATUS.running], [' vs requested', TEXT.dim]]
+    : delta < 0 ? [[' · costs ', TEXT.dim], [fmtUsd(-delta), STATUS.warn], [' more vs requested', TEXT.dim]] : []
+  const fits = (from: number, parts: readonly Part[], limit: number): boolean => from + width(parts) <= limit
 
   if (compact) {
+    const who: Part[] = [[`${GLYPH.dot} `, color], [clipText(s.name, 24), TEXT.primary]]
+    const after: Part[] = badge.length > 0 && fits(x, [...who, SEP, ...badge], maxX) ? [SEP, ...badge] : []
     writeParts(grid, x, area.y, [
-      [`${GLYPH.dot} `, color], [clipText(s.name, 24), TEXT.primary], [' ', TEXT.dim], ...status, SEP,
+      ...who, ...after, [' ', TEXT.dim], ...status, SEP,
       [`${tok(s.tokens.total)} tok`, TEXT.dim], SEP, [usd, usdColor], [' · ctx ', TEXT.faint], fillPart,
-      ...(route === null ? [] : [SEP, [route.text, route.color] as Part]),
     ], maxX, bg)
     return
   }
@@ -98,14 +103,16 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   const rows = area.h
   // 0: who
   const leftMax0 = Math.max(x, maxX - width(status) - 2)
-  writeParts(grid, x, row(0), [
-    [`${GLYPH.dot} `, color], [clipText(s.name, 32), TEXT.primary], SEP, [clipText(s.role, 24), TEXT.dim], SEP, ...modelParts,
-  ], leftMax0, bg)
+  const who0: Part[] = [[`${GLYPH.dot} `, color], [clipText(s.name, 32), TEXT.primary], SEP, [clipText(s.role, 24), TEXT.dim], SEP]
+  const model: Part[] = s.model === null
+    ? [['model –', TEXT.dim]]
+    : badge.length === 0 ? [[s.model, color]] : fits(x, [...who0, ...badge], leftMax0) ? badge : []
+  writeParts(grid, x, row(0), model.length > 0 ? [...who0, ...model] : who0.slice(0, -1), leftMax0, bg)
   writeRight(grid, row(0), status, x, maxX, bg)
   // 1: tokens and cost
   if (rows > 1) {
     const t = s.tokens
-    const right1: Part[] = [...saving, [usd, usdColor]]
+    const right1: Part[] = [[usd, usdColor], ...(fits(x, [[usd, usdColor], ...saving], maxX) ? saving : [])]
     const leftMax1 = Math.max(x, maxX - width(right1) - 2)
     writeParts(grid, x, row(1), [
       ['tokens ', TEXT.dim], [`in ${tok(t.input)}`, TEXT.primary], ['  ', TEXT.dim], [`out ${tok(t.output)}`, TEXT.primary],
