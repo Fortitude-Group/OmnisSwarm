@@ -127,16 +127,16 @@ test('older finished agents are left out, with a count; running ones and their r
 })
 
 test('when finished agents are not enough, files and samples are emptied', () => {
-  const r = freshReply('big', 1, bigState(54, 200))
+  const r = freshReply('big', 1, bigState(60, 200))
   assert.ok(r.kind === 'state' && isSwarmState(r.state, 'big'))
   assert.equal(r.hiddenFinished, undefined)
-  assert.equal(Object.keys(r.state.agents).length, 54)
+  assert.equal(Object.keys(r.state.agents).length, 60)
   assert.ok(Object.values(r.state.agents).every(a => a.files.length === 0 && a.samples.length === 0))
   assert.ok(JSON.stringify(r).length <= FEED_REPLY_MAX)
 })
 
-test('the ceiling: about 54 running agents fit, 70 do not', () => {
-  assert.equal(freshReply('big', 1, bigState(54, 200)).kind, 'state')
+test('the ceiling: about 60 running agents fit, 70 do not', () => {
+  assert.equal(freshReply('big', 1, bigState(60, 200)).kind, 'state')
   assert.equal(freshReply('big', 1, bigState(70, 200)).kind, 'too-large')
 })
 

@@ -43,12 +43,14 @@ const guardRec = (x: unknown): boolean =>
 const budget = (x: unknown): boolean => exact(x, ['agentMinutes', 'agentUsd', 'swarmUsd']) && Object.values(x).every(nnum)
 const swarmGuard = (x: unknown): boolean => exact(x, ['warn', 'block']) && Object.values(x).every(nnum)
 
-const agent = (x: unknown): boolean =>
-  exact(x, [
+const AGENT_KEYS = [
     'id', 'name', 'role', 'description', 'parent', 'placeholder', 'startedAt', 'finishedAt', 'runs', 'activeMs', 'outcome', 'reason', 'model',
     'tokens', 'costUsd', 'costKnown', 'calls', 'lastPrompt', 'samples', 'tools', 'openTools', 'errors', 'errorsInRow',
-    'files', 'messagesIn', 'messagesOut', 'lastActivity', 'guard',
-  ]) &&
+    'files', 'messagesIn', 'messagesOut', 'lastActivity',
+]
+
+const agent = (x: unknown): boolean =>
+  exact(x, isPlain(x) && Object.hasOwn(x, 'guard') ? [...AGENT_KEYS, 'guard'] : AGENT_KEYS) &&
   str(x.id, 130) && str(x.name, 64) && str(x.role, 64) && str(x.description, 120) && str(x.parent, 64) &&
   typeof x.placeholder === 'boolean' && num(x.startedAt) && nnum(x.finishedAt) && num(x.runs) && x.runs >= 1 && num(x.activeMs) &&
   (x.outcome === null || isOneOf(AGENT_OUTCOMES, x.outcome)) && nstr(x.reason, 80) && nstr(x.model, 80) &&
@@ -57,7 +59,7 @@ const agent = (x: unknown): boolean =>
   exact(x.tools, TOOL_KINDS) && Object.values(x.tools).every(num) &&
   num(x.openTools) && num(x.errors) && num(x.errorsInRow) &&
   list(x.files, MAX_FILES, f => str(f, 80)) && num(x.messagesIn) && num(x.messagesOut) && num(x.lastActivity) &&
-  guardRec(x.guard)
+  (!Object.hasOwn(x, 'guard') || guardRec(x.guard))
 
 const session = (x: unknown): x is Rec =>
   exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&

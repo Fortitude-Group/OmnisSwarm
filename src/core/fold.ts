@@ -53,7 +53,8 @@ export type AgentState = {
   messagesIn: number
   messagesOut: number
   lastActivity: number
-  guard: AgentGuard
+  /** Absent until a guard stage first fires; readers treat absent as all null. */
+  guard?: AgentGuard
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -128,7 +129,7 @@ function agentOf(state: SwarmState, id: string, at: number, name?: string): Agen
     placeholder: false, startedAt: at, finishedAt: null, runs: 1, activeMs: 0, outcome: null, reason: null, model: null,
     tokens: zeroUsage(), costUsd: 0, costKnown: true, calls: 0, lastPrompt: 0, samples: [],
     tools: zeroTools(), openTools: 0, errors: 0, errorsInRow: 0, files: [], messagesIn: 0, messagesOut: 0,
-    lastActivity: at, guard: { timeWarn: null, timeAct: null, costWarn: null, costAct: null },
+    lastActivity: at,
   }
   state.agents[id] = created
   if (id === LEAD) state.byName[LEAD] = LEAD
@@ -360,6 +361,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       }
       const a = agentOf(state, who, at)
       const act = e.type === 'guard.nudged'
+      a.guard ??= { timeWarn: null, timeAct: null, costWarn: null, costAct: null }
       if (d.limit === 'time') a.guard[act ? 'timeAct' : 'timeWarn'] = threshold
       else a.guard[act ? 'costAct' : 'costWarn'] = threshold
       const shown = d.limit === 'time' ? `${Math.floor(value)} min` : usdText(value)

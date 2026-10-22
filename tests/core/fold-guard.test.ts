@@ -10,7 +10,7 @@ test('a fresh state has no budget overrides and no guard stages', () => {
   const s = foldAll('s1', [start])
   assert.deepEqual(s.budget, { agentMinutes: null, agentUsd: null, swarmUsd: null })
   assert.deepEqual(s.guard, { warn: null, block: null })
-  assert.deepEqual(s.agents.a1!.guard, { timeWarn: null, timeAct: null, costWarn: null, costAct: null })
+  assert.equal(s.agents.a1!.guard, undefined)
 })
 
 test('budget.set merges valid keys and skips bad ones', () => {
@@ -43,5 +43,5 @@ test('guard events record the threshold each stage fired at, and say so in the f
 
 test('a guard event with a bad limit or numbers changes nothing', () => {
   const s = foldAll('s1', [start, ev('guard.warned', { limit: 'nope', value: Number.NaN, threshold: 20 } as never, { agent: 'a1', atSec: 5 })])
-  assert.deepEqual(s.agents.a1!.guard, { timeWarn: null, timeAct: null, costWarn: null, costAct: null })
+  assert.equal(s.agents.a1!.guard, undefined)
 })
