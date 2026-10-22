@@ -3,6 +3,8 @@
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { parseReplay } from './replay-command.ts'
+import { loadReplay } from './replay.ts'
+import type { Host } from './pane-runtime.ts'
 import { PANE, RUN, engine, feedCalls, never, rasterText, settle, KIT } from './test-engine.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../../tests/fixtures/swarm-five.ts'
 
@@ -183,4 +185,25 @@ test('parseReplay reads the swarm, the speed and stop', KIT, async () => {
   expect(parseReplay(['replay', '007'])).toEqual({ swarm: null, speed: 7 })
   expect(parseReplay(['replay', '5', '6'])).toBe(null)
   expect(parseReplay(['replay', '5', 'alpha'])).toBe(null)
+})
+
+test('a restart page drops the events already loaded, so each event is replayed once', KIT, async () => {
+  // This copy of replay.ts is the test's own (rt.server is null in it), so it connects through the fake host.
+  const all = fiveAgentEvents()
+  const pageOf = (offset: number, done: boolean, events: unknown[]) => JSON.stringify({ v: 1, kind: 'replay', swarm: FIVE_SWARM, offset, done, events, bad: 0 })
+  const asked: unknown[] = []
+  const none = { cancel: () => undefined }
+  const host = {
+    every: () => none, after: () => none, invalidate: () => undefined, blit: async () => undefined, panes: async () => [],
+    connect: async () => 'plugin:omnis-swarm:omnis-swarm',
+    call: async (_server: string, _tool: string, args: Record<string, unknown>) => {
+      asked.push(args.since)
+      // The first page, then a restart (the log was rewritten under the cursor), then the whole log from 0.
+      const text = asked.length === 1 ? pageOf(9, false, all.slice(0, 19)) : asked.length === 2 ? pageOf(0, false, []) : pageOf(30, true, all)
+      return { content: [{ type: 'text', text }], isError: false }
+    },
+  } as unknown as Host
+  const loaded = await loadReplay(host, null)
+  expect(asked).toEqual([0, 9, 0])
+  expect(loaded.ok ? loaded.events.length : -1).toBe(all.length)
 })

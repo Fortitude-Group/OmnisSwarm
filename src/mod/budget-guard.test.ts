@@ -10,13 +10,13 @@ import { RUN } from './test-engine.ts'
 const LOADED = { timeoutMs: 60000 }
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const T0 = Date.parse('2026-10-22T10:00:00.000Z')
-type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean; output: number }
+type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean; output: number; reply: 'started' | 'renamed' | 'other'; hold: Promise<void> | null }
 
 function engine(on: On): Seen {
   // The kit stores a plugin's appends itself; mock.session is the test's one session.append hook.
   const session = mock.session(on)
   const seen: Seen = {
-    records: [], toasts: [], sends: [], deliver: true, output: 0,
+    records: [], toasts: [], sends: [], deliver: true, output: 0, reply: 'started', hold: null,
     get appends() { return session.appended().map(row => JSON.stringify(row.message)) },
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -34,14 +34,21 @@ function engine(on: On): Seen {
     seen.toasts.push(String(e.text))
     return { value: undefined }
   })
-  on('session.send', (_$, e) => {
+  on('session.send', async (_$, e) => {
     seen.sends.push({ to: e.to, text: e.text })
+    if (seen.hold !== null) await seen.hold
     return seen.deliver ? { isDelivered: true } : { isDelivered: false, reason: 'No agent is reachable' }
   })
   on('tool.check', () => ({ decision: 'allow' }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }))
-  on('tool.call', () => ({ result: { content: 'ok' } as never }))
+  // omnis_swarm_init answers as the server does: a new swarm, a name for the running implicit one, or (other) wording the guard does not know.
+  on('tool.call', (_$, e) => ({
+    result: { content: 'ok' } as never,
+    ...(String(e.tool).endsWith('__omnis_swarm_init') && {
+      text: { started: 'Swarm "auth" started as auth (hierarchical).', renamed: 'Swarm "auth" (hierarchical) now names the running session swarm s1.', other: 'Swarm auth is ready.' }[seen.reply],
+    }),
+  }))
   // One model step whose usage is seen.output output tokens (claude-opus-5-5: $20 a million, so 150,000 is $3).
   on('turn.step', async function* (_$, e) {
     return {
@@ -187,6 +194,52 @@ test('the swarm warns at half its budget, and a raised budget moves the warn and
   await clock.settle()
   expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 41, threshold: 40 }])
   expect((await leadSpawn($, 't2')).decision).toBe('deny')
+})
+
+test('renaming the running swarm keeps its agents timed and its cost, and applies the budget', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 12)
+  await clock.settle()
+  seen.reply = 'renamed'
+  await swarmInit($, { swarmUsd: 30 })
+  await clock.settle()
+  // Still the swarm that began at $0: $31 is past the new $30 budget.
+  await measure($, 31)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 31, threshold: 30 }])
+  expect((await leadSpawn($, 't1')).decision).toBe('deny')
+  // coder-b is still running, so its time-box still warns.
+  await clock.advance(21 * 60_000)
+  await clock.settle()
+  expectTimeStage(dataOf(seen, 'guard.warned', 'time'), 20)
+})
+
+test('an init reply in unknown wording keeps the swarm and still applies its budget', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 12)
+  await clock.settle()
+  seen.reply = 'other'
+  await swarmInit($, { swarmUsd: 30 })
+  await clock.settle()
+  await measure($, 31)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 31, threshold: 30 }])
+  expect((await leadSpawn($, 't1')).decision).toBe('deny')
+})
+
+test('a nudge answered after omnis_swarm_end is not recorded, so no swarm is started for it', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  let release = (): void => undefined
+  seen.hold = new Promise(resolve => { release = resolve })
+  await clock.advance(31 * 60_000)
+  await clock.settle()
+  expect(seen.sends.length).toBe(1)
+  await $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_end', tool_use_id: 'toolu_end' } as never)
+  await clock.settle()
+  release()
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.nudged')).toEqual([])
+  expect(seen.appends[0]).toContain('[OmnisSwarm budget guard] coder-b passed its 30 min time-box')
 })
 
 test('omnis_swarm_end lets the block go', LOADED, async ($, on) => {

@@ -18,6 +18,8 @@ export const TICK_MS = 15_000
 const SWARM_INIT_TOOL = /^mcp__.+__omnis_swarm_init$/
 const SWARM_END_TOOL = /^mcp__.+__omnis_swarm_end$/
 const TOAST_MS = 8_000
+/** omnis_swarm_init's reply for a new swarm (src/mcp/tools.ts), read from the end, where a swarm name can't reach. */
+const STARTED_REPLY = /" started as [a-z0-9._-]+ \([a-z-]+\)\.$/
 
 /** What the guard needs from the engine, bound from `$` at session.start. */
 type GuardHost = {
@@ -106,6 +108,18 @@ function leave(): void {
   syncTimer()
 }
 
+/** omnis_swarm_init did not start a new swarm (it named the running one): the swarm goes on, so its state stays and only the budget changes. */
+function keepSwarm(patch: BudgetPatch): void {
+  if (g.state === null) {
+    // Not seen yet: the budget waits for its first event. The server has recorded it, so the guard won't.
+    g.nextBudget = patch
+    g.nextRecord = false
+    return
+  }
+  apply({ type: 'budget.set', data: patch }, new Date(Date.now()).toISOString())
+  void check()
+}
+
 const running = (): boolean => g.state !== null && Object.values(g.state.agents).some(a => a.id !== LEAD && !a.placeholder && a.finishedAt === null)
 
 /** The timer runs only while an agent is running, at most every TICK_MS. */
@@ -124,6 +138,9 @@ function send(body: RecordBody): void {
 }
 
 async function nudge(host: GuardHost, a: Extract<GuardAction, { kind: 'nudge' }>, lim: Limits): Promise<void> {
+  const state = g.state
+  // Taken now: an omnis_swarm_end during the send forgets the agents.
+  const name = nameOf(a.agent)
   let delivered = false
   let reason: string | undefined
   try {
@@ -135,8 +152,9 @@ async function nudge(host: GuardHost, a: Extract<GuardAction, { kind: 'nudge' }>
   }
   // The engine's reason is untrusted text: no control characters reach the log or the main conversation.
   const clean = reason === undefined || reason === '' ? undefined : reason.replace(/[\p{Cc}\p{Cf}]/gu, ' ')
-  void host.record({ type: 'guard.nudged', agent: a.agent, data: { limit: a.limit, value: a.value, threshold: a.threshold, delivered, ...(clean !== undefined && { reason: clean }) } }).catch(() => undefined)
-  void host.tellMain(mainText(nameOf(a.agent), a, lim, delivered, clean)).catch(() => undefined)
+  // Recorded only into the swarm it was sent in: after omnis_swarm_end a record would start a new implicit swarm.
+  if (g.state !== null && g.state === state) void host.record({ type: 'guard.nudged', agent: a.agent, data: { limit: a.limit, value: a.value, threshold: a.threshold, delivered, ...(clean !== undefined && { reason: clean }) } }).catch(() => undefined)
+  void host.tellMain(mainText(name, a, lim, delivered, clean)).catch(() => undefined)
 }
 
 /** The body each stage records. A nudge's own event waits for the send's answer, so it is folded as undelivered meanwhile. */
@@ -243,6 +261,15 @@ export async function setSwarmBudget(usd: number): Promise<'now' | 'next' | null
   return 'now'
 }
 
+/** A tool reply's text: core's joined text blocks, else the text blocks of an MCP result a hook answered with. */
+function replyText(result: { text?: unknown; result?: unknown }): string {
+  if (typeof result.text === 'string') return result.text
+  const content = (result.result as { content?: unknown } | undefined)?.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map(b => (typeof b === 'object' && b !== null && typeof (b as { text?: unknown }).text === 'string' ? (b as { text: string }).text : '')).join('')
+}
+
 const failed = (result: { isError?: boolean; deny?: unknown }): boolean => result.isError === true || result.deny !== undefined
 
 export function registerBudgetGuard(on: On, options: PluginOptions): void {
@@ -264,8 +291,14 @@ export function registerBudgetGuard(on: On, options: PluginOptions): void {
         if (SWARM_END_TOOL.test(String(e.tool))) leave()
         else {
           const parsed = parseBudget((e as unknown as { budget?: unknown }).budget)
-          leave()
-          if (parsed.ok) g.nextBudget = parsed.patch
+          const reply = replyText(result)
+          if (STARTED_REPLY.test(reply)) {
+            leave()
+            if (parsed.ok) g.nextBudget = parsed.patch
+          } else if (parsed.ok) {
+            // A rename, or wording the guard doesn't know: the swarm goes on, and its budget is never dropped.
+            keepSwarm(parsed.patch)
+          }
         }
       }
     } catch {

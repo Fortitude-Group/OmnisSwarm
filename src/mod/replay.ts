@@ -46,6 +46,8 @@ export async function loadReplay(host: Host, swarm: string | null): Promise<{ ok
     if (reply === null) return { ok: false, text: 'The swarm log could not be read for a replay.' }
     if (reply.kind === 'none') return { ok: false, text: reply.recent.length === 0 ? 'No recorded swarm here yet.' : `No swarm ${swarm ?? ''} here. Recent: ${reply.recent.join(', ')}.` }
     id = reply.swarm
+    // A restart page (offset 0 after a later since): the log changed under the cursor, so it is read again from the top.
+    if (since > 0 && reply.offset === 0) events.length = 0
     events.push(...reply.events)
     if (events.length > REPLAY_MAX_EVENTS) return { ok: false, text: TOO_LONG }
     if (reply.done) return { ok: true, swarm: reply.swarm, events }

@@ -54,6 +54,14 @@ same user could edit `.omnis-swarm` directly.
 | `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`. Two sessions sharing a swarm can both create the same id; the last write wins (accepted) |
 | `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200) |
 | `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. Merged into the session figures: a field left out keeps its previous value. Percent is clamped to 0-100 |
+| `budget.set` | mcp (`omnis_swarm_init` with a `budget`) or recorder (`/omnis budget`) | `agentMinutes?`, `agentUsd?`, `swarmUsd?`: at least one, each above 0 and at most 1440 minutes, $1000 and $1000. Swarm-level, no `agent`. Overrides the configured limits for the rest of the swarm; a key left out keeps its previous value |
+| `guard.warned` | recorder | `limit` (`time`\|`agentCost`\|`swarmCost`), `value`, `threshold` (minutes for `time`, USD otherwise, both at most 1,000,000). `agent` is required for `time` and `agentCost` and absent for `swarmCost` |
+| `guard.nudged` | recorder | `limit` (`time`\|`agentCost`), `value`, `threshold`, `delivered` (bool: whether the wrap-up message reached the agent), `reason?` (≤80, why it was not delivered). `agent` is required |
+| `guard.blocked` | recorder | `value`, `threshold` (USD): the swarm reached its budget and the lead's new agents are refused until it is raised or the swarm ends. Swarm-level, no `agent` |
+
+`omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
+knows which swarm it is folding. `omnis_replay` and `omnis_export` are internal tools like
+`omnis_record` and `omnis_feed`: the mod refuses them when the model calls them.
 
 ## Reading rules
 
