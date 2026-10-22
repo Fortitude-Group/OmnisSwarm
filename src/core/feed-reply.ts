@@ -2,6 +2,7 @@
 import { isValidSwarmId, parseLine, type SwarmEvent } from './events.ts'
 import { LEAD, type SwarmState } from './fold.ts'
 import { isSwarmState } from './state-check.ts'
+import { BURN_WINDOW_MS } from './stats.ts'
 
 export const FEED_VERSION = 1
 /** The most events one reply carries; further behind than this, the server answers a fresh state. */
@@ -85,6 +86,31 @@ export function fitEvents(events: readonly SwarmEvent[], swarm: string): number 
   return events.length
 }
 
+/** Width of the buckets a trimmed reply merges per-call spend into. */
+export const SPEND_BUCKET_MS = 10_000
+
+/**
+ * The per-call spend list as a trimmed reply sends it: only the burn window before the latest entry (all the pane
+ * reads), merged into SPEND_BUCKET_MS buckets stamped at their earliest call, so the burn can only read a little low.
+ */
+export function compactSpend(spend: SwarmState['spend']): SwarmState['spend'] {
+  if (spend.length === 0) return []
+  let latest = -Infinity
+  for (const s of spend) if (s.at > latest) latest = s.at
+  const buckets = new Map<number, { at: number; usd: number }>()
+  for (const s of spend) {
+    if (s.at < latest - BURN_WINDOW_MS) continue
+    const key = Math.floor(s.at / SPEND_BUCKET_MS)
+    const b = buckets.get(key)
+    if (b === undefined) buckets.set(key, { at: s.at, usd: s.usd })
+    else {
+      b.at = Math.min(b.at, s.at)
+      b.usd += s.usd
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.at - b.at)
+}
+
 const last = <T>(xs: readonly T[], n: number): T[] => (n <= 0 ? [] : xs.slice(-n))
 
 /** A copy of `state` with the stated lists cut; nothing in `state` itself changes. */
@@ -108,7 +134,7 @@ function cut(
     const kept = last(v.filter(e => !drop.has(e.agent)), keep.edits)
     if (kept.length > 0 || v.length === 0) edits[k] = kept
   }
-  return { ...state, agents, byName, links, edits, feed: last(state.feed, keep.feed) }
+  return { ...state, agents, byName, links, edits, feed: last(state.feed, keep.feed), spend: compactSpend(state.spend) }
 }
 
 /** Finished agents kept in full when the state is too big; older finished ones are left out. */
@@ -117,7 +143,8 @@ export const KEEP_FINISHED = 20
 export type FreshReply = Extract<FeedReply, { kind: 'state' | 'too-large' }>
 
 /**
- * A state reply that serialises under FEED_REPLY_MAX. Trims in a fixed order until it fits: oldest feed items, then each
+ * A state reply that serialises under FEED_REPLY_MAX. Every trimming stage also compacts the per-call spend list
+ * (compactSpend). Trims in a fixed order until it fits: oldest feed items, then each
  * agent's files (20) and samples (10), then each link's recent (1), then edits per path (2). Else `too-large`.
  */
 export function freshReply(swarm: string, offset: number, state: SwarmState): FreshReply {
