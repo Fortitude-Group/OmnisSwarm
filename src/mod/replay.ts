@@ -8,8 +8,10 @@ import { REPLAY_TOOL } from '../core/recording.ts'
 import { logTimeAt, retime } from '../core/replay-clock.ts'
 import { parseReplayReply, REPLAY_MAX_EVENTS } from '../core/replay-reply.ts'
 import { emptyModel, markPulses, prunePulses, pulsesFrom } from './pane-model.ts'
-import { pauseLive, show, startLive, stopFrames } from './pane-draw.ts'
-import { rt, type Host } from './pane-runtime.ts'
+import { closed, pauseLive, show, startLive, stopFrames } from './pane-draw.ts'
+import { HIDDEN_PULL_MS, PANE_ID } from './pane-pull.ts'
+import { rt, type Host, type ReplayRun } from './pane-runtime.ts'
+import { PULL_MS } from '../render/tokens.ts'
 
 export const REPLAY_TICK_MS = 100
 const MAX_PAGES = 60
@@ -54,16 +56,50 @@ export function startReplay(host: Host, swarm: string, events: readonly SwarmEve
   rt.replay = {
     swarm, speed, events: timed.events, logTs: timed.logTs, offsets: timed.offsets, startMs, cursor: 0,
     model: { ...emptyModel(), swarm, state: emptyState(swarm) }, timer: host.every(REPLAY_TICK_MS, () => replayTick(host)), ended: false,
+    looking: false, sinceLook: 0,
   }
   host.invalidate()
 }
 
-/** Folds every event now due into the replay model and draws. At the end the timer stops and the final state stays. */
+/**
+ * With the live pulls paused, the replay looks at $.ui.panes() as they would: as often as a shown pane pulls, about
+ * once a second while hidden. Gone ends the replay (the pane closed); hidden stops the drawing; shown again redraws.
+ */
+async function look(host: Host, run: ReplayRun): Promise<void> {
+  try {
+    const me = (await host.panes()).find(p => p.id === PANE_ID)
+    if (rt.replay !== run) return
+    if (me === undefined) closed(false)
+    else if (!me.isPlaced || !me.isShown) {
+      rt.shown = false
+      stopFrames()
+    } else if (!rt.shown) {
+      rt.shown = true
+      host.invalidate()
+    }
+  } catch {
+    // A failed look changes nothing; the next tick looks again.
+  } finally {
+    run.looking = false
+  }
+}
+
+/**
+ * Folds every event now due into the replay model and draws while the pane is shown. At the end the final state stays
+ * and the tick only looks at the pane, so hiding, showing and closing are still noticed.
+ */
 export function replayTick(host: Host): void {
   const run = rt.replay
   if (run === null) return
   try {
     const now = Date.now()
+    run.sinceLook += REPLAY_TICK_MS
+    if (!run.looking && run.sinceLook >= (rt.shown ? PULL_MS : HIDDEN_PULL_MS)) {
+      run.looking = true
+      run.sinceLook = 0
+      void look(host, run)
+    }
+    if (run.ended) return
     const due: SwarmEvent[] = []
     while (run.cursor < run.events.length && Date.parse(run.events[run.cursor]!.ts) <= now) due.push(run.events[run.cursor++]!)
     if (due.length > 0) {
@@ -72,12 +108,8 @@ export function replayTick(host: Host): void {
       const marked = markPulses(pulsesFrom(due), run.model.lastFlicker)
       run.model = { ...run.model, pulses: prunePulses([...run.model.pulses, ...marked.pulses], now), lastFlicker: marked.lastFlicker }
     }
-    if (run.cursor >= run.events.length && !run.ended) {
-      run.ended = true
-      run.timer?.cancel()
-      run.timer = null
-    }
-    show(host, now)
+    if (run.cursor >= run.events.length) run.ended = true
+    if (rt.shown) show(host, now)
   } catch {
     stopReplay(host)
   }

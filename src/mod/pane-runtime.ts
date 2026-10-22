@@ -54,10 +54,11 @@ export function hostOf($: EngineInterface): Host {
 /**
  * A replay playing in the pane (replay.ts): the events re-timed onto the replay clock, with the log time and replay
  * offset of each, when it started, how far it has folded into its own model, its tick timer, and whether it has ended.
+ * `looking`/`sinceLook`: a look at $.ui.panes() in flight, and the ms since the last began, counted in tick periods.
  */
 export type ReplayRun = {
   swarm: string; speed: number; events: SwarmEvent[]; logTs: number[]; offsets: number[]; startMs: number; cursor: number
-  model: PaneModel; timer: Timer | null; ended: boolean
+  model: PaneModel; timer: Timer | null; ended: boolean; looking: boolean; sinceLook: number
 }
 
 export type Runtime = PullState & {

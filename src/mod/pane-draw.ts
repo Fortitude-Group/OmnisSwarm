@@ -214,6 +214,7 @@ export const hooks: PaneHooks<Host> = {
   show: (host, now) => {
     if (rt.replay === null) show(host, now)
   },
+  paused: () => rt.replay !== null,
   swarmChanged: () => {
     if (rt.replay !== null) return
     rt.spot = null
@@ -222,9 +223,9 @@ export const hooks: PaneHooks<Host> = {
   },
 }
 
-/** The live pulls, started unless a replay plays (they stop for it, and start again when it stops). */
+/** The live pulls, started unless a replay plays (hooks.paused: they stop for it, and start again when it stops). */
 export function startLive(host: Host): void {
-  if (rt.replay === null) startPulling(hooks, host)
+  startPulling(hooks, host)
 }
 
 /** Stops the live pulls for a replay; a pull in flight drops its answer. */
