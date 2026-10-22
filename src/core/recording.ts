@@ -42,7 +42,8 @@ const bareName = (name: string): string => name.split('@', 1)[0] ?? ''
  */
 export function guardVerdict(tool: string, origin: string, self: string): 'pass' | 'deny' {
   if (!INTERNAL_TOOL.test(tool)) return 'pass'
-  return origin !== '' && bareName(origin) === bareName(self) ? 'pass' : 'deny'
+  const name = bareName(self)
+  return name !== '' && bareName(origin) === name ? 'pass' : 'deny'
 }
 
 export type RecordBody<K extends RecorderType = RecorderType> = {

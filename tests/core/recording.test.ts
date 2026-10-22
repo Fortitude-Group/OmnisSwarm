@@ -60,4 +60,8 @@ test('the guard matches this plugin by name with or without an @marketplace suff
   assert.equal(guardVerdict(RECORD, 'evil@omnis-swarm', 'omnis-swarm'), 'deny')
   assert.equal(guardVerdict(RECORD, '', 'omnis-swarm'), 'deny')
   assert.equal(guardVerdict(RECORD, 'engine', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, 'xomnis-swarm', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, '@omnis-swarm', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, '@x', ''), 'deny')
+  assert.equal(guardVerdict(RECORD, '', ''), 'deny')
 })
