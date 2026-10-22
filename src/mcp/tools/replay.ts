@@ -2,14 +2,14 @@
  * omnis_replay: hands the pane a recorded swarm's events, page by page, for /omnis replay. Internal: the mod's guard
  * refuses the model (INTERNAL_TOOL). Read-only: it never appends events or changes which swarm the session owns.
  */
-import { existsSync, statSync } from 'node:fs'
+import { lstatSync } from 'node:fs'
 import { isValidSwarmId } from '../../core/events.ts'
 import { fitEvents } from '../../core/feed-reply.ts'
 import { readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
 import { REPLAY_TOOL } from '../../core/recording.ts'
 import type { ReplayReply } from '../../core/replay-reply.ts'
 import { recentSwarmIds } from '../../core/swarm.ts'
-import { offsetAfter } from '../log-cursor.ts'
+import { atLineStart, offsetAfter } from '../log-cursor.ts'
 import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, optString } from '../validate.ts'
@@ -45,13 +45,18 @@ export function createReplayTools(ctx: ToolContext): ToolDef[] {
       try {
         const recent = recentSwarmIds(root, 5)
         const id = named ?? recent[0]
-        if (id === undefined || !existsSync(swarmLogPath(root, id))) return answer({ v: 1, kind: 'none', recent })
+        if (id === undefined) return answer({ v: 1, kind: 'none', recent })
         const file = swarmLogPath(root, id)
+        const stat = lstatSync(file, { throwIfNoEntry: false })
+        // A symlink or directory is not a log: answering for it could loop the pane on empty pages.
+        if (stat === undefined || !stat.isFile()) return answer({ v: 1, kind: 'none', recent })
+        const restart = answer({ v: 1, kind: 'replay', swarm: id, offset: 0, done: false, events: [], bad: 0 })
+        if (from > 0 && !atLineStart(file, from)) return restart
         const read = readEvents(file, from)
-        if (read.reset) return answer({ v: 1, kind: 'replay', swarm: id, offset: 0, done: false, events: [], bad: 0 })
+        if (read.reset) return restart
         const fit = Math.min(fitEvents(read.events, id), 500)
         const cut = fit === read.events.length ? { offset: read.offset, bad: read.bad } : offsetAfter(file, from, fit)
-        const done = cut.offset >= statSync(file).size
+        const done = cut.offset >= lstatSync(file).size
         return answer({ v: 1, kind: 'replay', swarm: id, offset: cut.offset, done, events: sortEvents(read.events.slice(0, fit)), bad: cut.bad })
       } catch (err) {
         process.stderr.write(`omnis: omnis_replay failed: ${err instanceof Error ? err.message : String(err)}\n`)

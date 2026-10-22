@@ -38,3 +38,13 @@ test('fitSpeed finds the slowest speed whose replay fits', () => {
   assert.ok(end(s * 0.99) > 27_000)
   assert.equal(fitSpeed([0, 1_000], 27_000, 0.25), 0.25)
 })
+
+test('a speed of 0, NaN or below zero cannot stall or poison the clock', () => {
+  for (const bad of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.deepEqual(replayOffsets([0, 1_000], bad), [0, 1_000])
+    const out = retime([ev('swarm.ended', {}, { atSec: 1 })], bad, Number.NaN)
+    assert.equal(out.events.length, 1)
+    assert.ok(!Number.isNaN(Date.parse(out.events[0]!.ts)))
+    assert.equal(fitSpeed([0, 1_000], 27_000, bad), 1)
+  }
+})

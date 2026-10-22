@@ -1,3 +1,5 @@
+import { mkdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { appendEvent } from '../../src/core/log.ts'
@@ -53,4 +55,46 @@ test('a bad swarm id or offset is refused', () => {
 test('parseReplayReply refuses events from another swarm and non-replies', () => {
   assert.equal(parseReplayReply('nope'), null)
   assert.equal(parseReplayReply(JSON.stringify({ v: 1, kind: 'replay', swarm: 'a', offset: 1, done: true, events: [{ v: 1, ts: '2026-10-22T10:00:00.000Z', swarm: 'b', src: 'mcp', type: 'swarm.ended', data: {} }], bad: 0 })), null)
+})
+
+const logFile = (root: string, swarm: string) => join(root, '.omnis-swarm', 'swarms', `${swarm}.jsonl`)
+
+test('a since inside a line, or past the end of the file, restarts at 0', () => {
+  const root = tmpRoot()
+  seed(root, 'alpha', 3)
+  for (const since of [5, statSync(logFile(root, 'alpha')).size + 100]) {
+    const reply = parseReplayReply(tool(root).handler({ swarm: 'alpha', since }).text)
+    assert.deepEqual(reply, { v: 1, kind: 'replay', swarm: 'alpha', offset: 0, done: false, events: [], bad: 0 })
+  }
+})
+
+test('a log of only bad lines finishes with no events', () => {
+  const root = tmpRoot()
+  seed(root, 'alpha', 1)
+  writeFileSync(logFile(root, 'junk'), 'not json\nalso not\n')
+  const reply = parseReplayReply(tool(root).handler({ swarm: 'junk', since: 0 }).text)
+  assert.ok(reply !== null && reply.kind === 'replay')
+  assert.equal(reply.events.length, 0)
+  assert.equal(reply.done, true)
+  assert.equal(reply.bad, 2)
+})
+
+test('a directory named like a log answers none', () => {
+  const root = tmpRoot()
+  seed(root, 'alpha', 1)
+  mkdirSync(logFile(root, 'dir'))
+  const reply = parseReplayReply(tool(root).handler({ swarm: 'dir', since: 0 }).text)
+  assert.equal(reply?.kind, 'none')
+})
+
+test('a symlinked log answers none', t => {
+  const root = tmpRoot()
+  seed(root, 'alpha', 1)
+  try {
+    symlinkSync(logFile(root, 'alpha'), logFile(root, 'link'))
+  } catch {
+    t.skip('this machine cannot create symlinks')
+    return
+  }
+  assert.equal(parseReplayReply(tool(root).handler({ swarm: 'link', since: 0 }).text)?.kind, 'none')
 })
