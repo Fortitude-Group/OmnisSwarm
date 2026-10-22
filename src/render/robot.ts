@@ -276,7 +276,7 @@ export function paintRobot(px: Pixels, box: Box, look: Look): void {
     }
   }
   if (look.drop.drops > 0) {
-    // An arm pixel wins over a drop pixel, whatever the skin (clawd S's raised arm covers (7, 1)).
+    // An arm pixel wins over a drop pixel, whatever the skin: a skin whose raised arm lands on a drop pixel keeps the arm.
     for (const [x, y] of spriteDrops(s, look.drop.drops)) if (cells[y]?.[x] !== 'A') px.set(sx + x, sy + y, look.drop.color)
     if (look.drop.slot >= 0) {
       const drip = mix(look.body, GUARD.drop, GUARD.dripMix)
