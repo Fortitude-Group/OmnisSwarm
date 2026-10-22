@@ -65,24 +65,20 @@ export function guardFlash(pulses: readonly Pulse[], agent: string, tEff: number
 const fmtM = (min: number): string => `${Math.floor(min)}m`
 const fmtD = (usd: number): string => `$${Number.isInteger(usd) ? usd : usd.toFixed(2)}`
 
-/** §13.2 words: 'over time-box 21m/20m', 'over $3.20/$3', 'nudged 31m/30m'; the limit furthest past its stage wins. */
+/** §13.2 words: 'over time-box 21m/20m', 'over $3.20/$3', 'nudged 31m/30m'; the limit furthest past its own stage wins. */
 export function guardWords(a: AgentState, now: number): string | null {
-  const drops = dropsFor(a)
-  if (drops === 0) return null
+  if (dropsFor(a) === 0) return null
   const g = a.guard
   if (g === undefined) return null
   const minutes = Math.max(0, now - a.startedAt) / 60_000
-  // Nudged words use the act thresholds, warned words the warn ones; a limit only warned falls back to its warn figure.
-  const time = drops === 2 ? (g.timeAct ?? null) : g.timeWarn
-  const cost = drops === 2 ? (g.costAct ?? null) : g.costWarn
-  const nudgedTime = drops === 2 && g.timeAct !== null
-  const nudgedCost = drops === 2 && g.costAct !== null
-  const t = time ?? g.timeWarn
-  const c = cost ?? g.costWarn
-  const tr = t === null ? -1 : minutes / t
-  const cr = c === null ? -1 : a.costUsd / c
-  if (tr < 0 && cr < 0) return null
-  if (tr >= cr) return nudgedTime ? `nudged ${fmtM(minutes)}/${fmtM(t!)}` : `over time-box ${fmtM(minutes)}/${fmtM(t!)}`
   const spent = Math.round(a.costUsd * 100) / 100
-  return nudgedCost ? `nudged ${fmtD(spent)}/${fmtD(c!)}` : `over ${fmtD(spent)}/${fmtD(c!)}`
+  // Each limit speaks at its own stage: the act threshold once nudged, else the warn one; a limit not reached is silent.
+  const cands: Array<{ ratio: number; words: string }> = []
+  const time = g.timeAct ?? g.timeWarn
+  if (time !== null) cands.push({ ratio: minutes / time, words: `${g.timeAct !== null ? 'nudged' : 'over time-box'} ${fmtM(minutes)}/${fmtM(time)}` })
+  const cost = g.costAct ?? g.costWarn
+  if (cost !== null) cands.push({ ratio: a.costUsd / cost, words: `${g.costAct !== null ? 'nudged' : 'over'} ${fmtD(spent)}/${fmtD(cost)}` })
+  let best: { ratio: number; words: string } | null = null
+  for (const c of cands) if (best === null || c.ratio > best.ratio) best = c
+  return best === null ? null : best.words
 }

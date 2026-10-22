@@ -52,6 +52,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
   const maxX = area.x + area.w - 1
   rows.forEach((row, i) => {
     const s = stats[row.id]!
+    const agent = state.agents[row.id]
     const nameColor = s.status === 'failed' ? STATUS.failed : s.placeholder ? TEXT.dim : modelColor(s.model)
     writeParts(grid, area.x + 1, area.y + i, [
       ['  '.repeat(Math.min(row.depth, MAX_INDENT)), TEXT.dim],
@@ -59,7 +60,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
       [clipText(s.name, 24), nameColor],
       ['  ', TEXT.dim],
       [s.model === null ? '– tok · –' : `${fmtTokens(s.tokens.total)} tok · ${fmtUsd(s.costUsd)}`, TEXT.dim],
-      ...((state.agents[row.id] !== undefined && dropsFor(state.agents[row.id]!) > 0) ? [[' over', STATUS.warn] as Part] : []),
+      ...(agent !== undefined && dropsFor(agent) > 0 ? [[' over', STATUS.warn] as Part] : []),
     ], maxX)
   })
   if (total > room) writeParts(grid, area.x + 1, area.y + room - 1, [[`… ${total - rows.length} more`, TEXT.dim]], maxX)

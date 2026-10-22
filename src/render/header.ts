@@ -22,7 +22,7 @@ const BLOCKED: Part = [' BLOCKED ', GUARD.blockedBadge.fg, GUARD.blockedBadge.bg
 /** Row 0's cost group: unchanged below the warn level; from it the figure in warn (failed from the limit), then `/$limit`. */
 function costGroup(t: SwarmTotals, b: ViewBudget | null | undefined): Part[] {
   if (b === null || b === undefined || !(b.swarmUsd >= b.warn)) return [SEP, [cost(t), TEXT.primary]]
-  return [SEP, [fmtUsd(b.swarmUsd), b.swarmUsd >= b.limit ? STATUS.failed : STATUS.warn], [`/$${b.limit}`, TEXT.dim]]
+  return [SEP, [`${fmtUsd(b.swarmUsd)}${t.costPartial ? '+' : ''}`, b.swarmUsd >= b.limit ? STATUS.failed : STATUS.warn], [`/$${b.limit}`, TEXT.dim]]
 }
 const ctxPart = (t: SwarmTotals): Part =>
   t.contextPercent === null ? ['–', TEXT.dim] : [fmtPercent(t.contextPercent / 100), contextColor(t.contextPercent / 100)]
@@ -77,12 +77,17 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   if (totals.clashes > 0) second.push(SEP, [`${GLYPH.clash} ${totals.clashes} clash${totals.clashes === 1 ? '' : 'es'}`, STATUS.failed])
   const end = writeParts(grid, x, area.y + 1, second, maxX, bg)
   // Right of the tasks, in priority order: the notes, then the goal if all of it or MIN_GOAL cells of it fit.
-  const groups1: Part[][] = [
-    ...(blocked ? [[BLOCKED, [' new agents', TEXT.dim], SEP, ['/omnis budget <usd>', TEXT.dim]] as Part[]] : []),
-    ...hn.notes.map((n): Part[] => [n]),
-    ...(hn.overBudget !== undefined && hn.overBudget > 0 ? [[[`${hn.overBudget} over budget`, STATUS.warn]] as Part[]] : []),
-  ]
-  const right1: Part[] = groups1.flatMap((g, i): Part[] => (i === 0 ? g : [SEP, ...g]))
+  const build = (hint: boolean): Part[] => {
+    const groups1: Part[][] = [
+      ...(blocked ? [[BLOCKED, [' new agents', TEXT.dim], ...(hint ? [SEP, ['/omnis budget <usd>', TEXT.dim] as Part] : [])] as Part[]] : []),
+      ...hn.notes.map((n): Part[] => [n]),
+      ...(hn.overBudget !== undefined && hn.overBudget > 0 ? [[[`${hn.overBudget} over budget`, STATUS.warn]] as Part[]] : []),
+    ]
+    return groups1.flatMap((g, i): Part[] => (i === 0 ? g : [SEP, ...g]))
+  }
+  // The hint is dropped whole when the notes do not fit with it; the badge stays.
+  const full = build(true)
+  const right1: Part[] = width(full) <= maxX - end - 3 ? full : build(false)
   const avail = maxX - end - 3 - width(right1) - (right1.length > 0 ? width([SEP]) : 0)
   const goal = state.swarm.goal
   if (goal !== null && goal !== '' && ([...goal].length <= avail || avail >= MIN_GOAL)) {

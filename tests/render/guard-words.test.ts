@@ -5,6 +5,7 @@ import type { SwarmEvent } from '../../src/core/events.ts'
 import { guardWords } from '../../src/render/guard-badge.ts'
 import { render } from '../../src/render/frame.ts'
 import { gridText } from '../../src/render/grid.ts'
+import { GUARD, STATUS, TEXT } from '../../src/render/tokens.ts'
 import { emptyView, type View } from '../../src/render/types.ts'
 import { at, ev } from '../helpers.ts'
 
@@ -55,4 +56,54 @@ test('a one-row header shows BLOCKED right-aligned before the gaps marker', () =
   const gapped = foldAll('s1', [...warnedTime, ev('agent.started', { name: 'z', role: 'r', description: '', parent: LEAD, dropped: 2 } as never, { agent: 'a2', atSec: 1300 })])
   const lines = gridText(render(gapped, { ...emptyView(), budget: { swarmUsd: 21, limit: 20, warn: 10, blocked: true } }, at(21 * 60), { columns: 100, rows: 12 }).top)
   assert.match(lines[0]!, / BLOCKED {2}\S+ 2 gaps $/, lines.join(String.fromCharCode(10)))
+})
+
+const colAt = (rows: string[], y: number, needle: string): number => [...rows[y]!].join('').indexOf(needle)
+
+test('colours: warn below the limit, failed at it, the badge on its own background', () => {
+  const warn = render(foldAll('s1', warnedTime), { ...emptyView(), budget: { swarmUsd: 11.2, limit: 20, warn: 10, blocked: true } }, at(21 * 60), { columns: 120, rows: 44 }).top
+  const lim = render(foldAll('s1', warnedTime), { ...emptyView(), budget: { swarmUsd: 20.4, limit: 20, warn: 10, blocked: false } }, at(21 * 60), { columns: 120, rows: 44 }).top
+  const x = colAt(gridText(warn), 0, '≈$11.20')
+  assert.equal(warn.fg(x + 1, 0), STATUS.warn)
+  assert.equal(warn.fg(x + 8, 0), TEXT.dim)
+  assert.equal(lim.fg(colAt(gridText(lim), 0, '≈$20.40') + 1, 0), STATUS.failed)
+  const b = colAt(gridText(warn), 1, 'BLOCKED')
+  assert.equal(warn.bg(b, 1), GUARD.blockedBadge.bg)
+  assert.equal(warn.fg(b, 1), GUARD.blockedBadge.fg)
+})
+
+test('the partial-cost marker stays on the warn figure', () => {
+  const s = foldAll('s1', [...warnedTime, ev('agent.usage', { model: 'mystery-model', input: 1, output: 1, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 1210 })])
+  const t = gridText(render(s, { ...emptyView(), budget: { swarmUsd: 11.2, limit: 20, warn: 10, blocked: false } }, at(21 * 60), { columns: 120, rows: 44 }).top)[0]!
+  assert.match(t, /≈\$11\.20(\+)?\/\$20/)
+})
+
+test('a cost-only nudge never reads time-box', () => {
+  const s = foldAll('s1', [
+    start,
+    ev('agent.usage', { model: 'claude-opus-5-5', input: 0, output: 200_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 100 }),
+    ev('guard.warned', { limit: 'agentCost', value: 3.2, threshold: 3 }, { agent: 'a1', atSec: 101 }),
+    ev('guard.nudged', { limit: 'agentCost', value: 5, threshold: 5, delivered: true }, { agent: 'a1', atSec: 102 }),
+  ])
+  assert.equal(guardWords(s.agents.a1!, at(120)), 'nudged $4/$5')
+})
+
+test('BLOCKED leads the notes ahead of the degraded note', () => {
+  const f = render(foldAll('s1', warnedTime), { ...emptyView(), budget: { swarmUsd: 21, limit: 20, warn: 10, blocked: true } }, at(21 * 60), { columns: 160, rows: 44 }, { degraded: 'unreadable' })
+  const r = gridText(f.top)[1]!
+  assert.ok(r.indexOf('BLOCKED') < r.indexOf('Waiting'), r)
+  assert.ok(r.indexOf('Waiting') < r.indexOf('over budget'), r)
+})
+
+test('at a narrow width the hint goes whole and the badge stays', () => {
+  const f = render(foldAll('s1', warnedTime), { ...emptyView(), budget: { swarmUsd: 21, limit: 20, warn: 10, blocked: true } }, at(21 * 60), { columns: 100, rows: 29 })
+  const r = gridText(f.top)[1]!
+  assert.match(r, / BLOCKED /)
+  assert.doesNotMatch(r, /\/omnis|<usd|\/om/)
+})
+
+test('the spotlight words are dropped whole when they do not fit', () => {
+  const f = render(foldAll('s1', warnedTime), { ...emptyView(), pinned: 'a1' }, at(21 * 60), { columns: 60, rows: 44 })
+  const text = gridText(f.bottom!).join('\n')
+  assert.doesNotMatch(text, /over time|time-box|21m\/2/)
 })
