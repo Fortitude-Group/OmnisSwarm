@@ -14,6 +14,8 @@ test('limits come from the options, a bad value falling back to the default', ()
   assert.deepEqual(limitsFrom({}), DEFAULT_LIMITS)
   assert.deepEqual(limitsFrom({ budgetAgentMinutes: 45, budgetAgentUsd: -2, budgetSwarmUsd: 'x' }), { ...DEFAULT_LIMITS, agentMinutes: 45 })
   assert.deepEqual(limitsFrom({ budgetSwarmUsd: 1001 }), DEFAULT_LIMITS)
+  assert.deepEqual(limitsFrom({ budgetAgentMinutes: 0.5 }), DEFAULT_LIMITS)
+  assert.deepEqual(limitsFrom({ budgetAgentMinutes: 1, budgetAgentUsd: 0.5, budgetSwarmUsd: 1000 }), { agentMinutes: 1, agentUsd: 0.5, swarmUsd: 1000 })
 })
 
 test('warn levels are the spec fractions of the act level', () => {
