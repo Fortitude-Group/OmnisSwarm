@@ -32,9 +32,18 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  */
 export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export)$/
 
-/** An internal tool may be called only from this plugin's own hooks. Every other tool is not the guard's business. */
+/** A plugin name without an `@marketplace` suffix. Plugin names can't contain `@`, so the part before it is the name. */
+const bareName = (name: string): string => name.split('@', 1)[0] ?? ''
+
+/**
+ * An internal tool may be called only from this plugin's own hooks. Every other tool is not the guard's business.
+ * Both names come from the host: $.plugin.name and next.origin.plugin are the manifest name today, and the match
+ * also holds if either ever carries the install id (`omnis-swarm@omnis-swarm`).
+ */
 export function guardVerdict(tool: string, origin: string, self: string): 'pass' | 'deny' {
-  return INTERNAL_TOOL.test(tool) && origin !== self ? 'deny' : 'pass'
+  if (!INTERNAL_TOOL.test(tool)) return 'pass'
+  const name = bareName(self)
+  return name !== '' && bareName(origin) === name ? 'pass' : 'deny'
 }
 
 export type RecordBody<K extends RecorderType = RecorderType> = {
