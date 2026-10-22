@@ -1,16 +1,9 @@
-/** OmnisSwarm MCP server: `node src/mcp/server.ts`. Logs only to stderr; stdout carries the protocol. */
+/** OmnisSwarm MCP server, started by start.mjs. Logs only to stderr; stdout carries the protocol. */
 import './stdio-guard.ts' // must stay the first import
 import { resolve } from 'node:path'
-import { nodeVersionProblem } from './node-version.ts'
 import { runStdio } from './protocol.ts'
 import { toolFactories } from './registry.ts'
 import { Session } from './session.ts'
-
-const versionProblem = nodeVersionProblem(process.versions.node)
-if (versionProblem !== null) {
-  process.stderr.write(`${versionProblem}\n`)
-  process.exit(1)
-}
 
 /** First non-empty candidate that isn't an unexpanded `${...}` placeholder. */
 const pick = (...candidates: Array<string | undefined>): string | undefined =>
