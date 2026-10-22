@@ -24,7 +24,7 @@ export function busiest(state: SwarmState, pulses: readonly Pulse[], now: number
     if (a.placeholder) continue
     let score = agentStatus(a, now) === 'running' ? 1 : 0
     for (const s of a.samples) if (s.at <= now && now - s.at <= SCORE_WINDOW_MS) score += s.output
-    for (const p of pulses) if (p.agent === a.id && p.at <= now && now - p.at <= PULSE_WINDOW_MS) score += PULSE_SCORE
+    for (const p of pulses) if (p.guard !== true && p.agent === a.id && p.at <= now && now - p.at <= PULSE_WINDOW_MS) score += PULSE_SCORE
     if (score > bestScore || (score === bestScore && a.lastActivity > bestAt)) {
       best = a.id
       bestScore = score

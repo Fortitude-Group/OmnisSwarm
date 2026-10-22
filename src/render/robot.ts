@@ -7,9 +7,10 @@ import type { ToolKind } from '../core/events.ts'
 import type { AgentStats } from '../core/stats.ts'
 import type { Dots, Pixels } from './canvas.ts'
 import { add, clamp01, desaturate, mix, quantise, scale } from './color.ts'
+import { dripPixels, dropsFor, spriteDrops, type Drops } from './guard-badge.ts'
 import { FULL_MOTION, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { ROBOT, ROBOT_SIZES, activeSkin, composite, type Arms, type Eyes, type RobotSize, type Skin } from './sprites.ts'
-import { CANVAS, KIND, LINK, MOTION, STATUS, TEXT, contextColor, modelColor } from './tokens.ts'
+import { CANVAS, GUARD, KIND, LINK, MOTION, STATUS, TEXT, contextColor, modelColor } from './tokens.ts'
 import type { Point, View } from './types.ts'
 
 export type PaneStyle = 'globe' | 'robot'
@@ -118,7 +119,7 @@ export type RobotPulse = { wave: number; kind: ToolKind; error: number }
 export function robotPulses(view: View, tEff: number, motion: Readonly<Motion>): Map<string, RobotPulse> {
   const out = new Map<string, RobotPulse & { waveAt: number; errorAt: number }>()
   for (const p of view.pulses) {
-    if (p.coalesced === true || !Number.isFinite(p.at)) continue
+    if (p.coalesced === true || p.guard === true || !Number.isFinite(p.at)) continue
     const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
     const steps = p.isError ? 4 : 3
     const age = tEff - p.at
@@ -143,6 +144,8 @@ export type Look = {
   glow: { color: number; k: number } | null
   wH: number
   outline: { color: number; k: number } | null
+  /** The guard's sweat drop (pane.md 13.2): how many, their colour, and the hop slot the drip runs in (-1: no drip). */
+  drop: { drops: Drops; color: number; slot: number }
   /** `hot`: the amber or red of a filled bar from 70%, ghosted with a done robot. */
   bar: { fill: number | null; tone: number; hot: number } | null
 }
@@ -169,6 +172,8 @@ export function nextBlinkAt(stats: Readonly<Record<string, AgentStats>>, now: nu
 export type LookInput = {
   id: string; r: number; size: RobotSize; s: AgentStats; a: AgentState; now: number; motion: Readonly<Motion>
   pulse: RobotPulse | undefined; clash: boolean; still: boolean
+  /** The drop's flash colour while a guard pulse is live (guardFlash); ignored in a still frame. */
+  flash?: number | null
 }
 
 /** pane.md 12.2 and 12.5: body, eyes, arms, lift, glow, outline and bar for one agent's state at `now`. */
@@ -188,7 +193,7 @@ export function robotLook(i: LookInput): Look {
   }
   if (s.placeholder) {
     const body = mix(CANVAS, TEXT.faint, motion.fadeIn ? quantise(fadeIn(a.startedAt, now), 8) : now >= a.startedAt ? 1 : 0)
-    return { body, eye: CANVAS, eyes: 'closed', arms: 'down', armColor: null, lift: 0, glow: null, wH, outline: null, bar: null }
+    return { body, eye: CANVAS, eyes: 'closed', arms: 'down', armColor: null, lift: 0, glow: null, wH, outline: null, drop: NO_DROP, bar: null }
   }
   const failed = s.status === 'failed'
   const settled = failed || s.status === 'done'
@@ -216,6 +221,10 @@ export function robotLook(i: LookInput): Look {
   const lift = s.status !== 'running' ? 0 : motion.breathe
     ? range.hop[Math.floor(10 * frac(now / MOTION.glowPeriodMs + seed + 0.5)) % 10]!
     : 1
+  // The drop is for live agents only; the drip needs the hop's slot clock and breathing, and a still frame has neither.
+  const drops = settled ? 0 : dropsFor(a)
+  const slot = Math.floor(10 * frac(now / MOTION.glowPeriodMs + seed + 0.5)) % 10
+  const drop = { drops, color: (i.still ? null : i.flash) ?? GUARD.drop, slot: motion.breathe && !i.still ? slot : -1 }
   return {
     body: stateTone(skin.bodyColor, s, a, now, motion, ROBOT.dead),
     eye: failed ? STATUS.failed : CANVAS,
@@ -226,10 +235,12 @@ export function robotLook(i: LookInput): Look {
     glow: glowOf,
     wH,
     outline,
+    drop,
     bar: { fill: s.contextFill, tone: stateTone(model, s, a, now, motion, model), hot: hotOf(s.contextFill) },
   }
 }
 
+const NO_DROP: Look['drop'] = { drops: 0, color: GUARD.drop, slot: -1 }
 const frac = (t: number): number => (Number.isFinite(t) ? t - Math.floor(t) : 0)
 
 /** Paints one robot in its box: halo and outline round the trunk, then the sprite, then the context bar. */
@@ -262,6 +273,14 @@ export function paintRobot(px: Pixels, box: Box, look: Look): void {
     for (let x = 0; x < s.w; x++) {
       const ch = row[x]!
       if (ch !== '.') px.set(sx + x, sy + y, shade[ch] ?? look.body)
+    }
+  }
+  if (look.drop.drops > 0) {
+    // At S the arm-up arm is on the drop's second pixel: the arm wins.
+    for (const [x, y] of spriteDrops(s, look.drop.drops)) if (cells[y]?.[x] !== 'A') px.set(sx + x, sy + y, look.drop.color)
+    if (look.drop.slot >= 0) {
+      const drip = mix(look.body, GUARD.drop, GUARD.dripMix)
+      for (const [x, y] of dripPixels(s, box.size, look.drop.drops, look.drop.slot)) px.set(sx + x, sy + y, drip)
     }
   }
   if (look.bar !== null) {

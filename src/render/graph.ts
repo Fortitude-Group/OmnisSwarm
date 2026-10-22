@@ -6,9 +6,10 @@ import { add, clamp01, desaturate, mix, quantise, scale } from './color.ts'
 import { clipText } from './format.ts'
 import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
+import { dropsFor, globeDrops, guardFlash, type Drops } from './guard-badge.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
 import { type Box, type PaneStyle, boxReach, clearBoxDots, fitBoxes, paintRobot, robotLook, robotPulses } from './robot.ts'
-import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
+import { ACCENT, CANVAS, GLYPH, GRAPH, GUARD, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
 import type { Point, Rect, View } from './types.ts'
 
 export type GraphInput = {
@@ -138,7 +139,7 @@ export function pulseRims(view: View, tEff: number, motion: Readonly<Motion>): M
   const out = new Map<string, NonNullable<Rim>>()
   const failing = new Set<string>()
   for (const p of view.pulses) {
-    if (p.coalesced === true || !Number.isFinite(p.at)) continue
+    if (p.coalesced === true || p.guard === true || !Number.isFinite(p.at)) continue
     const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
     const age = tEff - p.at
     const k = motion.pulseFade ? quantise(flash(p.at, tEff, ms), 3) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? 1 : 0
@@ -214,7 +215,10 @@ function dotPath(dots: Dots, path: (t: number) => Point, length: number, color: 
   }
 }
 
-/** Cells holding a node's disc or ring: labels keep clear of them. */
+/** The sweat drops a globe shows: none once the agent is done or failed (pane.md 13.2). */
+const globeDropCount = (n: Node): Drops => (n.s.status === 'done' || n.s.status === 'failed' || n.s.placeholder ? 0 : dropsFor(n.a))
+
+/** Cells holding a node's disc or ring, and a globe's sweat drops: labels keep clear of them. */
 function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
   const solid = new Uint8Array(area.w * area.h)
   for (const n of nodes) {
@@ -225,6 +229,13 @@ function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
     const x0 = Math.max(0, Math.floor(b !== undefined ? b.left : n.p.x - reach))
     const x1 = Math.min(area.w - 1, Math.floor(b !== undefined ? b.left + b.w - 1 : n.p.x + reach))
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) solid[y * area.w + x] = 1
+    if (b === undefined) {
+      for (const [x, y] of globeDrops(n.p, n.r, GRAPH.ringPx, globeDropCount(n))) {
+        const cx = Math.floor(x)
+        const cy = Math.floor(y / 2)
+        if (cx >= 0 && cx < area.w && cy >= 0 && cy < area.h) solid[cy * area.w + cx] = 1
+      }
+    }
   }
   return solid
 }
@@ -358,7 +369,7 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const pulses = robots ? robotPulses(view, tEff, motion) : null
   for (const n of robots ? nodes.values() : []) {
     const box = n.box!
-    const look = robotLook({ id: n.id, r: n.r, size: box.size, s: n.s, a: n.a, now, motion, pulse: pulses!.get(n.id), clash: flashing.has(n.id), still: input.still === true })
+    const look = robotLook({ id: n.id, r: n.r, size: box.size, s: n.s, a: n.a, now, motion, pulse: pulses!.get(n.id), clash: flashing.has(n.id), still: input.still === true, flash: guardFlash(view.pulses, n.id, tEff, motion) })
     paintRobot(px, box, look)
   }
   for (const n of robots ? [] : nodes.values()) {
@@ -370,6 +381,12 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     const fill = n.s.contextFill
     const glowK = n.s.status !== 'running' ? 0 : motion.breathe ? quantise(0.45 + 0.55 * glow(now, seed), 5) : 0.7
     paintNode(px, n, glowK, fill !== null && n.r >= 2.2 ? { fill, color: contextColor(fill) } : null, rim)
+    // The guard's sweat drop, after the halo and rims and before links; a still frame shows no flash.
+    const drops = globeDropCount(n)
+    if (drops > 0) {
+      const colour = (input.still === true ? null : guardFlash(view.pulses, n.id, tEff, motion)) ?? GUARD.drop
+      for (const [x, y] of globeDrops(n.p, n.r, GRAPH.ringPx, drops)) px.set(x, y, colour)
+    }
   }
 
   // 3. The swarm's shape: faint dotted edges.

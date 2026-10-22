@@ -31,9 +31,14 @@ export const feedArgs = (m: PaneModel): { since: number; swarm?: string } =>
 export function pulsesFrom(events: readonly SwarmEvent[]): Pulse[] {
   const out: Pulse[] = []
   for (const e of events) {
-    if (e.type !== 'agent.tool') continue
+    if (e.type !== 'agent.tool' && e.type !== 'guard.warned' && e.type !== 'guard.nudged') continue
     const at = Date.parse(e.ts)
     if (Number.isNaN(at)) continue
+    if (e.type !== 'agent.tool') {
+      // The drop flash. A swarm-wide warning has no agent and no drop to flash.
+      if (e.agent !== undefined && e.data.limit !== 'swarmCost') out.push({ agent: e.agent, kind: 'other', at, isError: false, guard: true })
+      continue
+    }
     const kind = isOneOf(TOOL_KINDS, e.data.kind) ? e.data.kind : 'other'
     const agent = e.agent ?? LEAD
     if (e.data.phase === 'start') out.push({ agent, kind, at, isError: false })
@@ -52,6 +57,11 @@ export function markPulses(fresh: readonly Pulse[], last: Readonly<Record<string
   const lastFlicker: Record<string, number> = Object.assign(Object.create(null) as Record<string, number>, last)
   const pulses: Pulse[] = []
   for (const p of [...fresh].filter(p => Number.isFinite(p.at)).sort((a, b) => a.at - b.at)) {
+    // A guard pulse is never coalesced and does not restart the agent's flicker clock.
+    if (p.guard === true) {
+      pulses.push(p)
+      continue
+    }
     const prev = Object.hasOwn(lastFlicker, p.agent) ? lastFlicker[p.agent] : undefined
     if (!p.isError && prev !== undefined && p.at - prev < COALESCE_MS) {
       pulses.push({ ...p, coalesced: true })

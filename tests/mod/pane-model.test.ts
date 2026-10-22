@@ -174,3 +174,14 @@ test('the last-flicker entry of a long-gone agent is dropped, a recent one is ke
   assert.deepEqual(Object.keys(next.lastFlicker).sort(), ['busy', 'recent'])
   assert.deepEqual(Object.keys(markPulses([], next.lastFlicker).lastFlicker).sort(), ['busy', 'recent'])
 })
+
+test('a guard event becomes a guard pulse that is never coalesced', () => {
+  const evs = [
+    ev('agent.tool', { phase: 'start', tool: 'Read', kind: 'read', subject: 'a', isError: false }, { agent: 'a1', atSec: 1 }),
+    ev('guard.warned', { limit: 'time', value: 21, threshold: 20 }, { agent: 'a1', atSec: 1 }),
+  ]
+  const marked = markPulses(pulsesFrom(evs), {})
+  const guard = marked.pulses.find(p => p.guard === true)!
+  assert.equal(guard.coalesced, undefined)
+  assert.equal(guard.kind, 'other')
+})

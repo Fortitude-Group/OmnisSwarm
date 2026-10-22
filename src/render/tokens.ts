@@ -29,8 +29,16 @@ export const FEED_COLOR = { agent: 0x9aa4b2, message: 0x9ecbff, memory: 0xd2a8ff
 export const FEED_MARK = { agent: '•', message: '›', memory: '+', task: '#' } as const
 
 export const GLYPH = {
-  running: '▶', waiting: '◌', done: '✓', failed: '✕', lead: '◆', unknown: '?', stuck: '!', clash: '!', gap: '⚠', dot: '●', pinned: '◉',
+  running: '▶', waiting: '◌', done: '✓', failed: '✕', lead: '◆', unknown: '?', stuck: '!', clash: '!', gap: '⚠', dot: '●', pinned: '◉', times: '×',
 } as const
+
+/**
+ * The budget guard (pane.md 13.1). `drop` is 16.95:1 on CANVAS, 2.78:1 on terracotta; `dripMix` is the drip pixel's
+ * mix of body toward drop (2.08:1 on terracotta; motion carries it). `blockedBadge` is 5.72:1.
+ */
+export const GUARD = { drop: 0xe0f4ff, dripMix: 0.7, flashMs: 450, blockedBadge: { fg: CANVAS, bg: STATUS.failed } } as const
+/** A replay (pane.md 13.1): `raised` = mix(CANVAS_RAISED, ACCENT, 0.08), `TEXT.primary` 13.10 on it; the badge is 7.43:1. */
+export const REPLAY = { raised: 0x202337, badge: { fg: CANVAS, bg: ACCENT } } as const
 
 export const MOTION = {
   fadeInMs: 600, ghostMs: 1500, glowPeriodMs: 2000, cometMs: 900, trailMs: 450, trailDots: 6, linkFadeMs: 3000,

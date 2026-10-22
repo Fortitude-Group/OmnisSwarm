@@ -232,6 +232,17 @@ test('every frame stays inside its colour-pair budget and the Raster limits', ()
   }
 })
 
+test('a swarm with warned and nudged agents stays inside the pair budget too', () => {
+  // pane.md 13.6: the drop adds one or two colours per node.
+  const evs = [...fiveAgentEvents(), ev('guard.warned', { limit: 'time', value: 21, threshold: 20 }, { agent: 'a-cod1', atSec: 5 }), ev('guard.nudged', { limit: 'time', value: 31, threshold: 30, delivered: true }, { agent: 'a-arch', atSec: 5 })]
+  const s = foldAll(FIVE_SWARM, evs)
+  for (const style of ['globe', 'robot'] as const) {
+    const f = render(s, { ...emptyView(), style }, FIVE_AT.idle, FULL)
+    assert.ok(pairCount(f.top) <= PAIR_BUDGET.top)
+    assert.ok(pairCount(f.bottom!) <= PAIR_BUDGET.bottom)
+  }
+})
+
 test('render is deterministic', () => {
   const s = five()
   const a = render(s, emptyView(), FIVE_AT.mid, FULL)
