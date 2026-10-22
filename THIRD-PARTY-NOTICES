@@ -1,4 +1,5 @@
-OmnisSwarm includes the third-party material listed below.
+OmnisSwarm includes the third-party material listed below. There is no other
+third-party material in it, and it has no runtime dependencies.
 
 ------------------------------------------------------------------------------
 Spleen 8x16 2.2.0

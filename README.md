@@ -1,6 +1,6 @@
 # OmnisSwarm
 
-![OmnisSwarm](assets/icon.svg)
+![OmnisSwarm](assets/icon.png)
 
 OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
 
@@ -9,7 +9,7 @@ OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: 
 - **Claude Code 2.1.271 or later.** The plugin's settings use `userConfig` options, and older versions don't support them.
 - **Node on your PATH:** 22.18 or later on the 22 line, or 23.6 or later. Node 24 is the one to pick if you're installing fresh.
 
-What does a too-old Node look like? The OmnisSwarm server doesn't start, and `/mcp` shows it as failed with a one-line reason. Upgrade Node, restart Claude Code, done.
+What does a too-old Node look like? The OmnisSwarm server doesn't start, and `/mcp` shows it as failed. The reason is one line in its error output, naming the Node it found. Upgrade Node, restart Claude Code, done.
 
 ## Install
 
@@ -66,7 +66,7 @@ Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omn
 
 ## Limits
 
-**Swarm size.** The pane draws about 45 to 50 agents doing real work. Past that you get "⚠ Swarm too large to draw" with the agent count, and no graph. Why? Every reply the server sends the pane is capped at 40,000 bytes (`FEED_REPLY_MAX` in `src/core/feed-reply.ts`), because Claude Code swaps anything much over 50,000 characters for a "saved to a file" notice. Older finished agents get left out first, so it's the busy ones that count.
+**Swarm size.** The pane draws about 50 to 60 agents doing real work. Past that you get "⚠ Swarm too large to draw" with the agent count, and no graph. Why? Every reply the server sends the pane is capped at 40,000 bytes (`FEED_REPLY_MAX` in `src/core/feed-reply.ts`), because Claude Code swaps anything much over 50,000 characters for a "saved to a file" notice. Older finished agents get left out first, so it's the busy ones that count.
 
 **Hooks.** Each recorder event and each pane pull is an MCP tool call, so each one runs your PreToolUse hooks. Got a catch-all PreToolUse *command* hook? Then every one of those calls starts a process. The pane pulls up to four times a second while it's visible, slows to once every 1.5 seconds once the swarm goes quiet, and doesn't call the server at all while it's hidden (`src/mod/pane-pull.ts` has the details).
 
