@@ -2,62 +2,20 @@
  * omnis_feed: how the pane reads the swarm. Internal: the mod refuses the model's calls at tool.check and defers the
  * tool. It never appends events or changes which swarm the session owns (it can write a snapshot cache).
  */
-import { closeSync, existsSync, openSync, readSync } from 'node:fs'
-import { LIMITS, isValidSwarmId, parseLine } from '../../core/events.ts'
+import { existsSync } from 'node:fs'
+import { isValidSwarmId } from '../../core/events.ts'
 import { FEED_MAX_EVENTS, fitEvents, freshReply, type FeedReply } from '../../core/feed-reply.ts'
-import { MAX_READ_BYTES, readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
+import { readCurrent, readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
 import { FEED_TOOL } from '../../core/recording.ts'
 import { swarmOwner } from '../../core/swarm.ts'
 import type { Loaded } from '../../core/snapshot.ts'
+import { atLineStart, offsetAfter } from '../log-cursor.ts'
 import type { Args, ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, optString } from '../validate.ts'
 
 /** For the input schema only; the handler checks with isValidSwarmId, which also refuses reserved names. */
 const SWARM_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
-/** True when the byte before `offset` is a newline, so `offset` starts a line. */
-function atLineStart(file: string, offset: number): boolean {
-  const fd = openSync(file, 'r')
-  try {
-    const buf = Buffer.alloc(1)
-    return readSync(fd, buf, 0, 1, offset - 1) === 1 && buf[0] === 0x0a
-  } finally {
-    closeSync(fd)
-  }
-}
-
-/**
- * Where the log stands just after the `count`th event line at or beyond `since`, and how many bad lines came before it.
- * Walks the lines the way readEvents does, so the two agree on what is an event.
- */
-function offsetAfter(file: string, since: number, count: number): { offset: number; bad: number } {
-  const fd = openSync(file, 'r')
-  try {
-    const buf = Buffer.alloc(MAX_READ_BYTES)
-    const data = buf.subarray(0, readSync(fd, buf, 0, buf.length, since))
-    let from = 0
-    let seen = 0
-    let bad = 0
-    for (let nl = data.indexOf(0x0a, from); nl !== -1; nl = data.indexOf(0x0a, from)) {
-      const raw = data.subarray(from, nl)
-      from = nl + 1
-      if (raw.length > LIMITS.line) {
-        bad++
-        continue
-      }
-      const line = raw.toString('utf8')
-      if (line.trim() === '') continue
-      const parsed = parseLine(line)
-      if (parsed.ok) {
-        if (++seen === count) return { offset: since + from, bad }
-      } else if (parsed.reason !== 'version') bad++
-    }
-    throw new Error('the log changed under the feed')
-  } finally {
-    closeSync(fd)
-  }
-}
-
 const FAILED = 'Could not read the swarm files in .omnis-swarm/ (see the server log).'
 
 function optOffset(args: Args, key: string): number | undefined {
