@@ -10,13 +10,13 @@ import { RUN } from './test-engine.ts'
 const LOADED = { timeoutMs: 60000 }
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const T0 = Date.parse('2026-10-22T10:00:00.000Z')
-type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean; output: number; renames: boolean; hold: Promise<void> | null }
+type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean; output: number; reply: 'started' | 'renamed' | 'other'; hold: Promise<void> | null }
 
 function engine(on: On): Seen {
   // The kit stores a plugin's appends itself; mock.session is the test's one session.append hook.
   const session = mock.session(on)
   const seen: Seen = {
-    records: [], toasts: [], sends: [], deliver: true, output: 0, renames: false, hold: null,
+    records: [], toasts: [], sends: [], deliver: true, output: 0, reply: 'started', hold: null,
     get appends() { return session.appended().map(row => JSON.stringify(row.message)) },
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -42,11 +42,11 @@ function engine(on: On): Seen {
   on('tool.check', () => ({ decision: 'allow' }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }))
-  // omnis_swarm_init answers as the server does: a new swarm, or (seen.renames) a name for the running implicit one.
+  // omnis_swarm_init answers as the server does: a new swarm, a name for the running implicit one, or (other) wording the guard does not know.
   on('tool.call', (_$, e) => ({
     result: { content: 'ok' } as never,
     ...(String(e.tool).endsWith('__omnis_swarm_init') && {
-      text: seen.renames ? 'Swarm "auth" (hierarchical) now names the running session swarm s1.' : 'Swarm "auth" started as auth (hierarchical).',
+      text: { started: 'Swarm "auth" started as auth (hierarchical).', renamed: 'Swarm "auth" (hierarchical) now names the running session swarm s1.', other: 'Swarm auth is ready.' }[seen.reply],
     }),
   }))
   // One model step whose usage is seen.output output tokens (claude-opus-5-5: $20 a million, so 150,000 is $3).
@@ -200,7 +200,7 @@ test('renaming the running swarm keeps its agents timed and its cost, and applie
   const { clock, seen } = await boot($, on)
   await measure($, 12)
   await clock.settle()
-  seen.renames = true
+  seen.reply = 'renamed'
   await swarmInit($, { swarmUsd: 30 })
   await clock.settle()
   // Still the swarm that began at $0: $31 is past the new $30 budget.
@@ -212,6 +212,19 @@ test('renaming the running swarm keeps its agents timed and its cost, and applie
   await clock.advance(21 * 60_000)
   await clock.settle()
   expectTimeStage(dataOf(seen, 'guard.warned', 'time'), 20)
+})
+
+test('an init reply in unknown wording keeps the swarm and still applies its budget', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 12)
+  await clock.settle()
+  seen.reply = 'other'
+  await swarmInit($, { swarmUsd: 30 })
+  await clock.settle()
+  await measure($, 31)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 31, threshold: 30 }])
+  expect((await leadSpawn($, 't1')).decision).toBe('deny')
 })
 
 test('a nudge answered after omnis_swarm_end is not recorded, so no swarm is started for it', LOADED, async ($, on) => {

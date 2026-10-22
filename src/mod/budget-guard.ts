@@ -18,9 +18,8 @@ export const TICK_MS = 15_000
 const SWARM_INIT_TOOL = /^mcp__.+__omnis_swarm_init$/
 const SWARM_END_TOOL = /^mcp__.+__omnis_swarm_end$/
 const TOAST_MS = 8_000
-/** omnis_swarm_init's replies (src/mcp/tools.ts), read from the end, where a swarm name can't reach. */
+/** omnis_swarm_init's reply for a new swarm (src/mcp/tools.ts), read from the end, where a swarm name can't reach. */
 const STARTED_REPLY = /" started as [a-z0-9._-]+ \([a-z-]+\)\.$/
-const RENAMED_REPLY = /\) now names the running session swarm [a-z0-9._-]+\.$/
 
 /** What the guard needs from the engine, bound from `$` at session.start. */
 type GuardHost = {
@@ -109,8 +108,8 @@ function leave(): void {
   syncTimer()
 }
 
-/** omnis_swarm_init named the running implicit swarm: the same swarm goes on, so its state stays and only the budget changes. */
-function renamed(patch: BudgetPatch): void {
+/** omnis_swarm_init did not start a new swarm (it named the running one): the swarm goes on, so its state stays and only the budget changes. */
+function keepSwarm(patch: BudgetPatch): void {
   if (g.state === null) {
     // Not seen yet: the budget waits for its first event. The server has recorded it, so the guard won't.
     g.nextBudget = patch
@@ -296,7 +295,10 @@ export function registerBudgetGuard(on: On, options: PluginOptions): void {
           if (STARTED_REPLY.test(reply)) {
             leave()
             if (parsed.ok) g.nextBudget = parsed.patch
-          } else if (RENAMED_REPLY.test(reply) && parsed.ok) renamed(parsed.patch)
+          } else if (parsed.ok) {
+            // A rename, or wording the guard doesn't know: the swarm goes on, and its budget is never dropped.
+            keepSwarm(parsed.patch)
+          }
         }
       }
     } catch {
