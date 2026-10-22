@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -49,4 +49,37 @@ test("the MCP declarations hold no other server's tools: the repo does not descr
   const names = [...read('claude-code-mcp').matchAll(/^ {4}"?(mcp__[^"\s:]+)"?: \{/gm)].map(m => m[1] ?? '')
   assert.ok(names.length > 0)
   assert.deepEqual(names.filter(n => !/^mcp__(plugin_omnis-swarm_omnis-swarm|omnis-swarm)__/.test(n)), [])
+})
+
+const WRITTEN_BY = /^\/\/ Written by Claude Code (\d+)\.(\d+)\.(\d+)\./
+const versionOf = (file: string): [number, number, number] | null => {
+  const m = WRITTEN_BY.exec(readFileSync(file, 'utf8').split(/\r?\n/, 1)[0] ?? '')
+  return m === null ? null : [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+/** Negative when a is older than b. */
+const compareVersions = (a: readonly number[], b: readonly number[]): number => a[0]! - b[0]! || a[1]! - b[1]! || a[2]! - b[2]!
+
+test('compareVersions orders major, then minor, then patch', () => {
+  assert.ok(compareVersions([2, 1, 307], [2, 1, 308]) < 0)
+  assert.ok(compareVersions([2, 2, 0], [2, 1, 999]) > 0)
+  assert.equal(compareVersions([2, 1, 308], [2, 1, 308]), 0)
+})
+
+test('the vendored types are not older than the ones the engine last laid down (warns, never fails)', t => {
+  const engineFile = join(typesDir, '..', '.claude-plugin', 'types', 'claude-code', 'index.d.ts')
+  if (!existsSync(engineFile)) {
+    t.skip('no engine-laid types here (they appear once Claude Code loads the mod from this folder)')
+    return
+  }
+  const vendored = versionOf(join(typesDir, 'claude-code', 'index.d.ts'))
+  const engine = versionOf(engineFile)
+  assert.ok(vendored !== null, 'the vendored types/claude-code/index.d.ts starts with a "Written by Claude Code x.y.z." line')
+  if (engine === null) {
+    t.diagnostic('engine types have no version line')
+    return
+  }
+  if (compareVersions(vendored, engine) < 0) {
+    t.diagnostic(`WARNING: types/claude-code is from Claude Code ${vendored.join('.')}, the engine laid down ${engine.join('.')}. ` +
+      'Refresh: copy .claude-plugin/types/claude-code{,-tools,-mcp}/index.d.ts over types/ (keep the vendored headers), then npm run check.')
+  }
 })

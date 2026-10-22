@@ -1,6 +1,6 @@
 // Vendored from the engine-written .claude-plugin/types/claude-code-tools/index.d.ts,
-// as a Claude Code 2.1.306 session laid it down beside this mod (2026-10-21). Unedited below this header.
-// The core declarations in ../claude-code are 2.1.307. Refresh: see docs/superpowers/plans/2026-10-21-omnisswarm-phase2-recorder.md, Task 1 Step 6.
+// as a Claude Code 2.1.308 session laid it down beside this mod (2026-10-22). Unedited below this header.
+// The core declarations in ../claude-code are 2.1.308. Refresh: see docs/superpowers/plans/2026-10-21-omnisswarm-phase2-recorder.md, Task 1 Step 6.
 // The inputs of the built-in tools this build has, from each tool's
 // input schema. Merges into ToolCallInput (BuiltinToolInputs) so
 // `e.tool === "Bash"` narrows to the tool's arguments.
@@ -708,8 +708,20 @@ declare module 'claude-code' {
       to: unknown & unknown
       /** A 5-10 word label for your own transcript row (not transmitted — the recipient previews the first line of `message`). Truncated to 200 characters rather than rejected. */
       summary?: string
-      /** Plain text message content. The recipient's human sees only the FIRST LINE as a one-line preview until they expand it, so make the first line a clear, self-contained sentence saying what this is about — not a greeting, preamble, or bare @-mention. */
-      message: string
+      message: string | {
+        type: "shutdown_request"
+        reason?: string
+      } | {
+        type: "shutdown_response"
+        request_id: unknown & unknown
+        approve: boolean
+        reason?: string
+      } | {
+        type: "plan_approval_response"
+        request_id: unknown & unknown
+        approve: boolean
+        feedback?: string
+      }
       /** Ask a session ON THIS MACHINE to send you ONE notice when it next goes idle (finishes its turn with nothing queued) or exits — opt-in, one-shot, no polling. With a message: deliver it now AND subscribe. Without a message (omit it): a pure subscription that costs the other session nothing. */
       notify_when_idle?: boolean
     }
