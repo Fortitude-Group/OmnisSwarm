@@ -1,5 +1,6 @@
 /** The omnis_* MCP tools. Each validates its input, appends events and reads folded state. */
-import { NAME, TASK_STATES, TOPOLOGIES, clip, isSafeKey, makeEvent, type SwarmEvent } from '../core/events.ts'
+import { BUDGET_MAX, NAME, TASK_STATES, TOPOLOGIES, clip, isSafeKey, makeEvent, type SwarmEvent } from '../core/events.ts'
+import { parseBudget, type BudgetPatch } from '../core/budget.ts'
 import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/log.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { uniqueSwarmId } from '../core/swarm.ts'
@@ -66,15 +67,34 @@ export function createTools(ctx: ToolContext): ToolDef[] {
           name: { type: 'string', minLength: 1, maxLength: 64, description: 'Human name, e.g. "auth refactor".' },
           topology: { type: 'string', enum: [...TOPOLOGIES], description: 'hierarchical: a lead with workers. mesh: peers talk to each other. star: everything goes through one hub.' },
           goal: { type: 'string', maxLength: 200, description: 'One line on what the swarm is for.' },
+          budget: {
+            type: 'object',
+            description: 'Optional limits for this swarm. Warnings come at 2/3 of the minutes, 3/5 of the agent dollars and 1/2 of the swarm dollars.',
+            properties: {
+              agentMinutes: { type: 'number', exclusiveMinimum: 0, maximum: BUDGET_MAX.agentMinutes, description: 'Minutes an agent may run before it is asked to wrap up.' },
+              agentUsd: { type: 'number', exclusiveMinimum: 0, maximum: BUDGET_MAX.agentUsd, description: 'Approximate dollars an agent may spend before it is asked to wrap up.' },
+              swarmUsd: { type: 'number', exclusiveMinimum: 0, maximum: BUDGET_MAX.swarmUsd, description: 'Dollars the swarm may spend before new agents are blocked.' },
+            },
+            additionalProperties: false,
+          },
         },
         required: ['name', 'topology'],
         additionalProperties: false,
       },
       handler: args => {
+        let budget: BudgetPatch | null = null
+        if (args.budget !== undefined && args.budget !== null) {
+          const parsed = parseBudget(args.budget)
+          if (!parsed.ok) throw new InputError(parsed.error)
+          budget = parsed.patch
+        }
         const name = reqText(args, 'name', 64)
         const topology = reqEnum(args, 'topology', TOPOLOGIES)
         const goal = optText(args, 'goal', 200)
         const now = clock()
+        const noteBudget = (swarm: string): void => {
+          if (budget !== null) emit(makeEvent({ type: 'budget.set', swarm, src: 'mcp', data: budget, now }))
+        }
         const data = { name, topology, ...(goal !== undefined && { goal }), implicit: false, ...(session.sessionKey !== null && { session: session.sessionKey }) }
         const existing = session.mySwarm(false) // init never takes over a swarm it didn't start
         let replaced: string | null = null
@@ -82,6 +102,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
           const { state } = session.state(existing)
           if (state.swarm.implicit) {
             emit(makeEvent({ type: 'swarm.started', swarm: existing, src: 'mcp', data, now }))
+            noteBudget(existing)
             return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.` }
           }
           replaced = existing
@@ -91,6 +112,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         writeCurrent(root, id)
         session.begin(id)
         emit(makeEvent({ type: 'swarm.started', swarm: id, src: 'mcp', data, now }))
+        noteBudget(id)
         return { text: `Swarm "${name}" started as ${id} (${topology}).` }
       },
     },
