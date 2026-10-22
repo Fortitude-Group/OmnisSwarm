@@ -22,8 +22,12 @@ test('omnis_record answers ok and the swarm the event landed in', () => {
 
 test('guard events are rebuilt from known fields', () => {
   const root = tmpRoot()
-  call(root, { type: 'guard.nudged', agent: 'a1', data: { limit: 'time', value: 31, threshold: 30, delivered: false, reason: 'gone', extra: 'x' } })
-  call(root, { type: 'guard.blocked', data: { value: 20.5, threshold: 20 } })
+  const last = (swarm: string) => JSON.parse(readFileSync(swarmLogPath(root, swarm), 'utf8').trim().split('\n').at(-1)!)
+  const nudged = call(root, { type: 'guard.nudged', agent: 'a1', data: { limit: 'time', value: 31, threshold: 30, delivered: false, reason: 'gone', extra: 'x' } })
+  const swarm = nudged.text.slice(3)
+  assert.deepEqual(last(swarm).data, { limit: 'time', value: 31, threshold: 30, delivered: false, reason: 'gone' })
+  call(root, { type: 'guard.blocked', data: { value: 20.5, threshold: 20, extra: 'x' } })
+  assert.deepEqual(last(swarm).data, { value: 20.5, threshold: 20 })
 })
 
 for (const [label, body] of [

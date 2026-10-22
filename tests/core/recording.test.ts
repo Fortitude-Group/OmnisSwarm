@@ -33,6 +33,12 @@ test('the internal tool pattern matches our two tools by full name and nothing p
   assert.ok(INTERNAL_TOOL.test(FEED))
   assert.ok(INTERNAL_TOOL.test('mcp__omnis-swarm__omnis_record'))
   assert.ok(INTERNAL_TOOL.test('mcp__other__omnis_record'))
+  for (const name of ['omnis_replay', 'omnis_export']) {
+    assert.ok(INTERNAL_TOOL.test(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`), name)
+    assert.ok(INTERNAL_TOOL.test(`mcp__omnis-swarm__${name}`), name)
+    assert.equal(guardVerdict(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`, 'engine', 'omnis-swarm'), 'deny', name)
+    assert.equal(guardVerdict(`mcp__omnis-swarm__${name}`, 'omnis-swarm', 'omnis-swarm'), 'pass', name)
+  }
   for (const other of ['omnis_record', 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_status', 'Bash']) {
     assert.equal(INTERNAL_TOOL.test(other), false, other)
   }
