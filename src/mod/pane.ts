@@ -332,7 +332,8 @@ function chipRow($: EngineInterface, kit: Kit, frame: Frame, columns: number): R
     plain: true,
     ...(chip.pinned && { variant: 'primary' as const }),
     onPress: () => {
-      void togglePin($, chip.id)
+      // A pin that could not be saved leaves the pane as it was.
+      void togglePin($, chip.id).catch(() => undefined)
       if (rt.host !== null) wake(hooks, rt.host)
     },
     children: [kit.Text({ color: hex(chip.color), children: chip.pinned ? GLYPH.pinned : GLYPH.dot }), ` ${chip.label}`],

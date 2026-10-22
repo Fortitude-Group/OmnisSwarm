@@ -38,6 +38,21 @@ test('a pin chip changes only what is shown: it pins the spotlight, and pressing
   await ui.unmount()
 })
 
+test('a pin press whose state write never lands changes nothing and leaves no rejection behind', async ($, on) => {
+  engine(on)
+  // Every write misses its version, as if another write always beat it.
+  on('state.set', () => ({ value: { isSet: false, version: 1 } }))
+  const clock = mock.clock(on, { now: FIVE_AT.mid })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'pin:a-test' })
+  await clock.settle()
+  expect((await ui.find({ type: 'Button', key: 'pin:a-test' }))?.props.variant).toBeUndefined()
+  await ui.unmount()
+})
+
 test('pulls run at most 4 a second and stop when the pane closes', async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
@@ -202,10 +217,12 @@ test('a Raster whose cells have not changed is not blitted again', async ($, on)
   await ui.unmount()
 })
 
-test('a refused blit is sent again by the next frame, even when its cells have not changed', async ($, on) => {
+test('a refused blit is sent again by the next frame, even when its cells have not changed', { timeoutMs: 15_000 }, async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
   await untilBlit(seen, clock)
   seen.refuse = 1
+  // A blit comes only once enough real time has passed for the picture to move (see untilBlit), so this cap is
+  // generous; the test's own time limit bounds it.
   for (let i = 0; i < 400 && seen.blitLog.filter(b => !b.ok).length === 0; i++) await clock.advance(250)
   const refused = seen.blitLog.find(b => !b.ok)
   expect(refused).toBeDefined()
@@ -215,7 +232,7 @@ test('a refused blit is sent again by the next frame, even when its cells have n
   // stub, so the answers mark frames: the resend must come no later than the frame drawn for the first answer after
   // the refusal, so before the second answer. Without the fix, identical frames send nothing until the picture moves.
   const newsAfter = () => seen.news.filter(n => n > refused!.at)
-  for (let i = 0; i < 400 && newsAfter().length < 2; i++) await clock.advance(50)
+  for (let i = 0; i < 80 && newsAfter().length < 2; i++) await clock.advance(50)
   expect(newsAfter().length).toBeGreaterThanOrEqual(2)
   const resend = seen.blitLog.find(b => b.at > refused!.at && b.key === refused!.key)
   expect(resend).toBeDefined()
@@ -342,7 +359,14 @@ test('a pull that does not settle shows the degraded note after 5 s, and a new p
 })
 
 test('giving up on a hung pull drops the server and backs off before connecting again', { timeoutMs: 30_000 }, async ($, on) => {
-  const { seen, clock, ui } = await opened($, on, true)
+  // Off the terminal there is no frame loop, so moving the clock 36 s costs little real time. The kit gives the hung
+  // feed call 10 real seconds before it drops the stub; with frames drawn, a busy machine went past that.
+  const seen = engine(on)
+  const clock = mock.clock(on, { now: FIVE_AT.mid })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await clock.advance(300)
   seen.late = never
   seen.feed = 'late'
@@ -369,10 +393,16 @@ for (const fault of ['panes', 'register'] as const) {
 
 test('auto opens the pane while a foreground Agent call is still running', { options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
-  on('tool.call', () => never())
+  // The Agent call runs until the test lets it finish. Left hanging, the kit rejects it once the test ends.
+  let finish: (() => void) | null = null
+  on('tool.call', () => new Promise<{ result: never }>(resolve => { finish = () => resolve({ result: {} as never }) }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  void $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' })
-  await until(() => seen.opens === 1)
+  let done = false
+  const running = $.tool.call({ tool: 'Agent', prompt: 'Review the auth module', description: 'review auth' }).finally(() => { done = true })
+  await until(() => seen.opens === 1 && finish !== null)
+  expect(done).toBe(false)
+  finish!()
+  expect((await running).result).toEqual({})
 })
 
 for (const [what, pin] of [['a number', 42], ['an object', { toString: 1, valueOf: 1 }], ['an unknown agent', 'a-gone']] as const) {

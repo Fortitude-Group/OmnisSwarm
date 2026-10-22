@@ -261,6 +261,8 @@ head -1 types/claude-code/index.d.ts
 
 Expected: `// Written by Claude Code 2.1.304.` If that folder is gone, load the `plugin-authoring` skill (Skill tool): its text names the current `types/claude-code.d.ts` path. Copy that file instead. To refresh it after a Claude Code update, repeat this step; never edit it by hand.
 
+Since fix/cc307 (2026-10-22) `types/` follows the engine's own layout. `types/claude-code/index.d.ts` is the API: the 2.1.307 core, taken from the binary because no 2.1.307 session had written one. `types/claude-code-tools/index.d.ts` holds the built-in tool schemas, and `types/claude-code-mcp/index.d.ts` the MCP tools that were connected. Both come from what a 2.1.306 session wrote into `.claude-plugin/types/`, with a source header added on top. To refresh, open an interactive session with the plugin loaded so the engine writes `.claude-plugin/types/` again. Then copy each of the three `index.d.ts` files over its namesake in `types/`, and keep or update the header naming the source version. Trim the MCP file to omnis-swarm's own entries, under both `mcp__plugin_omnis-swarm_omnis-swarm__` and `mcp__omnis-swarm__`, because the repo must not describe whoever ran the session. `tests/core/vendored-types.test.ts` fails if the tool or MCP schemas go missing or another server's tools come back.
+
 - [ ] **Step 7: Write the state contract, hooks manifest and the module**
 
 Create `types/index.d.ts`:

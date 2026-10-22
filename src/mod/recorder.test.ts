@@ -191,7 +191,9 @@ test('delivered model messages are recorded from session.send; undelivered and p
 test('a protocol SendMessage is recorded from the tool call, without its free text; a plain-text one is not', LOADED, async ($, on) => {
   const sent = engine(on)
   await start($)
-  await call($, { tool: 'SendMessage', to: 'probe-worker', message: { type: 'shutdown_response', request_id: 'r1', approve: false, reason: 'still busy' } })
+  // The engine's generated schema types message as text, but the tool takes protocol payloads too.
+  const protocol = { type: 'shutdown_response', request_id: 'r1', approve: false, reason: 'still busy' } as unknown as string
+  await call($, { tool: 'SendMessage', to: 'probe-worker', message: protocol })
   await call($, { tool: 'SendMessage', to: 'probe-worker', message: 'plain text', summary: 'hi' })
   await until(() => sent.length === 5)
   await settle()
