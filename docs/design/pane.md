@@ -576,3 +576,304 @@ To check on the goldens (Task 13):
 - [ ] No header figure is cut part-way (`cc $1.2`); the goal shows whole, or at least 12 cells of it, or not at all.
 - [ ] A degraded read shows `⚠` and its note in `STATUS.warn`, not in dim text alone.
 - [ ] Timeline bars are `▅` with a quiet body and a full-colour end; the timeline weighs less than the graph.
+
+## 12. Robot node style
+
+An alternative look for nodes: each agent is drawn as a small pixel robot instead of a globe. The robot's pixels
+come from a swappable **skin** (12.4); for now the only skin is `clawd`, after the Claude Code mascot (block body, two
+dark eyes, short arms, four stubby legs). Everything else in the graph stays as it is:
+layout, links, comets, clashes, labels, the frame budget.
+
+**What was checked and how.** The bitmaps below come from a throwaway preview script that draws them on a `Pixels`
+canvas with the rules in this section and writes PNGs (one canvas pixel = 8×8 image pixels, so a cell is 8×16).
+I looked at every size × state render and changed the sprites until each state read clearly; two first attempts
+failed and are noted below. The colour figures use the same WCAG and Machado/OKLab method as section 3.
+**Not checked:** a real terminal, render time, or pair counts in a golden frame.
+
+### 12.1 Switch
+
+- One pane-wide setting, `pane.style`: `globe` (default) or `robot`, set with `/omnis pane style robot|globe`.
+  The whole graph uses one style; there are never globes and robots in one swarm.
+- The tree, timeline, spotlight, chips and labels don't change. Svg (desktop) draws the still frame (12.6).
+
+### 12.2 Colour: skin-coloured body, model in the glow and the bar
+
+Rob chose a fixed body colour (2026-10-22). Every robot's body is its **skin's `bodyColor`** (`clawd`: terracotta
+`#d77757`, 6.09:1 on `CANVAS`), so the robots read as one family. Status changes the body's tone and shape, and the
+**model colour moves to the two places that already exist round the robot: the glow and the context bar** under its
+feet.
+
+| State | Body | Eyes (colour) | Glow | Bar (12.4) |
+|---|---|---|---|---|
+| running | `bodyColor` | `CANVAS` | model colour, breathing (as a globe's halo) | model tone |
+| waiting | `scale(bodyColor, 0.72)` (`#9b563f`, 3.47:1) | `CANVAS` | none | model × 0.72 |
+| done | ghost of `bodyColor`: `mix(bodyColor, mix(desaturate(bodyColor, 0.7), CANVAS, 0.55), q6(ghost))` (`#504646` at the end, 2.11:1) | `CANVAS` | none | model ghosted the same way |
+| failed | **`ROBOT.dead` `#2a2e36`** (a dead robot), held | **`STATUS.failed`** | `STATUS.failed`, steady at `glowK` 0.7 (no breathing) | model tone |
+| error flash | unchanged | `CANVAS` | `STATUS.failed` at full strength on the red steps (12.5), with a red outline | unchanged |
+| placeholder | `TEXT.faint` | `CANVAS` | none | none |
+
+Everything fades in from the canvas as globes do (`mix(CANVAS, c, q8(fadeIn))` on body, glow and bar).
+
+**Why error and failed never use red on the body.** Terracotta against `STATUS.failed` is OKLab ×100 **1.9 under
+deuteranopia** (5.1 protanopia), and red ✕ eyes on terracotta are 1.06:1. A red body flash or red eyes on a live
+robot would be invisible to a deuteranope. So:
+- failed changes the **body** to dark grey, a lightness change that every viewer sees, and puts the red on the eyes
+  (4.06:1 on `ROBOT.dead`) and the glow;
+- an error flash keeps the body, flashes the **glow and outline** red, and switches to the hurt eyes in `CANVAS`.
+
+**Eye rule (every skin):** eye pixels must reach 3:1 against the body under them. `CANVAS` on terracotta 6.09,
+on waiting terracotta 3.47; `STATUS.failed` on `ROBOT.dead` 4.06. On the done ghost they are 2.11 by design (faint,
+out of play).
+
+**What carries each distinction** (OKLab ×100; normal / protanopia / deuteranopia / tritanopia; about 2 is just
+noticeable, 10 or more clearly different):
+
+| Pair | Carried by | Distance |
+|---|---|---|
+| failed vs running | body: dead grey vs terracotta | 39.5 / 32.1 / 39.5 / 41.4 |
+| failed vs waiting | body: dead vs terracotta × 0.72 | 25.3 / 19.4 / 25.2 / 27.0 |
+| failed vs done | body: dead vs terracotta ghost | 10.7 / 9.7 / 10.8 / 10.9 |
+| failed vs any (eyes) | red eyes vs dark eyes | 54.1 / 39.9 / 53.0 / 54.1 |
+| error vs running: glow | red glow vs model glow, worst model per vision | fable 21.5 normal; other 10.8 protanopia; **sonnet 9.3 deuteranopia**; fable 21.6 tritanopia |
+| waiting vs running | body tone | 14.4 / 12.8 / 14.5 / 14.7 |
+| done vs waiting | body tone (and closed eyes) | 15.1 / 10.0 / 14.6 / 16.7 |
+
+Every pair also differs by shape or motion: failed has the hurt eyes (except S, see 12.4); error has the hurt eyes
+for 900 ms and two flashes; done has closed eyes; running hops. The weakest colour pair is the error glow on a sonnet
+robot under deuteranopia (9.3); the hurt eyes and the flashing carry it there. A first dead grey, `#4b5160`, was
+only 4.2-4.9 from the done ghost and gave red eyes 2.37:1, so it was rejected. The chosen grey is only 1.41:1 on the
+canvas by itself, but a failed robot always has its steady red glow, which draws the edge.
+
+**The chip-dot key.** Chips still show the theme-neutral model dot (section 2). That dot now keys to the glow and
+the bar instead of a disc. Checked in `models-M.png`: each dot sits over robots whose glow and bar are the same
+hue. The key is weaker than before. A running robot shows the model in a 1-3 px halo plus the bar, but a waiting or
+done robot shows it only in the 1 px bar, dimmed (and nearly gone once ghosted). The spotlight's `●` and model name,
+and the timeline bars, are unchanged and stay the full key.
+
+### 12.3 Sizes (shared by every skin)
+
+Three size steps. The **box** is what the robot owns: hop headroom on top, the sprite, then one row for the context
+bar (12.4). The sprite sits at the bottom of its box; hopping moves it up into the headroom, so the
+box (and the label under it) never moves. These values belong to the robot style, not to a skin:
+
+| Size | Radius `r` | Headroom (= highest lift, 12.5) | Gauge row | Halo `rLo` / `rHi` | Sprite limit (w×h) |
+|---|---|---|---|---|---|
+| S | `r < 2.8` (under about 20k tokens) | 1 | yes | 1.6 / 2.8 | 8×5 |
+| M | `2.8 ≤ r < 4.0` (about 20k-460k) | 2 | yes | 2.8 / 4.0 | 11×6 |
+| L | `r ≥ 4.0` (about 460k and up) | 2 | yes | 4.0 / 6.0 | 13×7 |
+
+A skin's sprite at each size may be smaller than the limit, never larger, so the size rule and the layout never
+depend on which skin is on. Box = sprite width × (headroom + sprite height + 1 bar row). With the `clawd` skin the
+boxes are **8×7, 11×9 and 13×10**. S now has a bar too, because the bar is where a waiting or done robot shows its
+model. The M and L limits are a little wider than the brief's 12×10 guess: a ✕ eye needs
+3×3 pixels, and two of them need a gap between and a margin outside. A 13-wide L is still inside a maximum globe's
+footprint (`2 × (6 + ringPx)` = 14.4 px).
+
+**Bucket rule.**
+1. Work out `r` exactly as for a globe (`nodeRadius(tokens, min(maxR, room))`, placeholders `minRadius`) and take its
+   size from the table. The radius cap already shrinks crowded graphs, so crowded robots step down too.
+2. **Graph-wide fit.** Find the largest size at which no two nodes' boxes, each grown by 1 px on every side, overlap.
+   No node is drawn bigger than that size. If even S boxes overlap, the legibility guard (section 7) shows the tree.
+3. **Edge fit.** Per node, step down while the box would leave the canvas (top < 0, left < 0, right ≥ width, or
+   bottom > `height - 3`, which keeps the label row on the grid).
+
+**Placement.** `left = round(p.x - w / 2)`, `top = round(p.y - H / 2)` for a box of `w × H`. Label row:
+`floor((top + H - 1) / 2) + 1`. For label clearance, the solid cells are every cell the box touches (as
+`solidCells` does for a disc and its ring).
+
+**Token weight in the glow.** Inside a size the halo width follows `r`: `wH = 1 + round(2 × clamp01((r - rLo) /
+(rHi - rLo)))`, so 1-3 px. A heavier agent glows wider. Waiting and done agents have no glow (as globes), so for them
+weight shows only as the size.
+
+### 12.4 Skins
+
+All of a robot's look lives in one table, `ROBOT_SKINS`, keyed by skin name. The renderer reads only that table for
+pixels; every rule in 12.3, 12.5 and 12.6 is written against the **contract** below, never against one skin's shape.
+A new skin (the planned original `omnis` robot) is one new entry and nothing else. The active skin is one token,
+`ROBOT.skin` (`'clawd'` for now); `/omnis pane style robot` uses it. It is not a user setting while there is only one
+skin.
+
+**The skin contract.** For each size S, M and L a skin gives:
+
+| Field | Meaning | Used by |
+|---|---|---|
+| `bodyColor` | One per skin (not per size): the body's colour. `clawd`: `#d77757` | body, every state tone (12.2) |
+| `w`, `h` | Sprite size, within the size's limit (12.3) | box, placement |
+| `body` | The body rectangle `[x0, y0, x1, y1]` in sprite pixels: the solid trunk, without arms, legs or ears | halo, outline, bar columns |
+| `haloRows` | The last sprite row the halo may paint (usually the row above the feet), so gaps between legs stay clear | halo |
+| `eyes.open`, `eyes.closed` | Required eye variants: the whole sprite with that eye state, arms down | every state |
+| `eyes.cross` | Optional: the "hurt" eyes (✕ or any shape that reads as broken). **If missing**, failed uses `eyes.open` with red eyes and an error leaves the eyes as they are | error, failed |
+| `arms.down`, `arms.up` | Required arm variants: the whole sprite with arms in that pose. Only the `A` cells are read from these | tool wave |
+
+Bitmap letters, the same for every skin:
+- `.` clear (canvas, halo or outline shows through), `B` body = `body` (the state's tone of `bodyColor`, 12.2),
+  `E` eye = the state's eye colour (12.2), `A` arm = `body` (`KIND[kind]` during a tool wave), `L` leg = `body`.
+- A skin may add shade letters, but **every colour except `bodyColor` itself must be worked out from `body`**: `D` =
+  `scale(body, 0.8)` and `H` = `mix(body, #ffffff, 0.2)` are the two allowed today. So waiting, done and failed tone
+  the whole robot together, and a skin can't paint a second fixed colour that means something else.
+
+**Compositing (skin-independent).** Take the eye variant the state asks for, turn its `A` cells to `.`, then set `A`
+wherever the arm variant has `A`. Arms up with ✕ eyes, or arms up with closed eyes, need no extra bitmaps.
+
+**Checks a skin must pass** (a unit test over `ROBOT_SKINS`, so a broken skin fails the build, not the pane):
+every variant is `w × h`; `w × h` is within the size's limit; outside `A` cells, `arms.up` and `arms.down` match
+`eyes.open` cell for cell; every `E` lies inside `body`; `eyes.closed` and `eyes.cross` differ from `eyes.open` (the
+eyes are what carry waiting/done/failed in a still frame); `haloRows < h`; only the letters above appear. On `bodyColor`: at least 4.5:1 on `CANVAS`; `CANVAS` eyes at
+least 3:1 on it and on its waiting tone; at least 9 OKLab ×100 from `ROBOT.dead`, and its done ghost at least 9 from
+`ROBOT.dead`, under normal vision, protanopia and deuteranopia (`clawd`: 6.09; 6.09 and 3.47; 32.1 and 9.7 at worst).
+
+#### Skin `clawd`
+
+After the Claude Code mascot. Proportions from the start-up logo (`▐▛███▜▌` / `▝▜█████▛▘` / `▘▘ ▝▝`), worked out
+from its quadrant blocks: body 6:4 wide to tall, arms one sixth of the body width on the third body row, legs in
+pairs, eyes one sixth in from each side. Placeholder likeness: the legal check expects the public release to need an
+original skin. `bodyColor` `#d77757` (the mascot's terracotta). No shade letters.
+
+| Size | `w×h` | `body` | `haloRows` | `cross` |
+|---|---|---|---|---|
+| S | 8×5 | `[1, 0, 6, 3]` | 3 | none (6 pixels of face can't hold two 3×3 crosses) |
+| M | 11×6 | `[1, 0, 9, 4]` | 4 | a `> <` squint |
+| L | 13×7 | `[1, 0, 11, 5]` | 5 | two crosses, 3 px apart |
+
+Column 0 is the box's left edge; row 0 is the sprite's top row (box row `headroom - lift`). `arms.down` is
+`eyes.open`.
+
+**S (8×5)**
+```
+eyes.open         arms.up           eyes.closed
+.BBBBBB.          .BBBBBB.          .BBBBBB.
+.BEBBEB.          ABEBBEBA          .BBBBBB.
+ABBBBBBA          .BBBBBB.          ABBBBBBA
+.BBBBBB.          .BBBBBB.          .BBBBBB.
+..L..L..          ..L..L..          ..L..L..
+```
+
+**M (11×6).** Its `cross` is a squint: 3×3 crosses with one pixel between them read as a checkerboard in the
+preview (first attempt, rejected).
+```
+eyes.open         arms.up           eyes.closed       eyes.cross
+.BBBBBBBBB.       ABBBBBBBBBA       .BBBBBBBBB.       .BBBBBBBBB.
+.BBEBBBEBB.       ABBEBBBEBBA       .BBBBBBBBB.       .BEBBBBBEB.
+.BBEBBBEBB.       .BBEBBBEBB.       .BEEEBEEEB.       .BBEBBBEBB.
+ABBBBBBBBBA       .BBBBBBBBB.       ABBBBBBBBBA       ABEBBBBBEBA
+.BBBBBBBBB.       .BBBBBBBBB.       .BBBBBBBBB.       .BBBBBBBBB.
+.L.L...L.L.       .L.L...L.L.       .L.L...L.L.       .L.L...L.L.
+```
+
+**L (13×7)**
+```
+eyes.open         arms.up           eyes.closed       eyes.cross
+.BBBBBBBBBBB.     ABBBBBBBBBBBA     .BBBBBBBBBBB.     .BBBBBBBBBBB.
+.BBEBBBBBEBB.     ABBEBBBBBEBBA     .BBBBBBBBBBB.     .BEBEBBBEBEB.
+.BBEBBBBBEBB.     .BBEBBBBBEBB.     .BEEEBBBEEEB.     .BBEBBBBBEBB.
+ABBBBBBBBBBBA     .BBBBBBBBBBB.     ABBBBBBBBBBBA     ABEBEBBBEBEBA
+ABBBBBBBBBBBA     .BBBBBBBBBBB.     ABBBBBBBBBBBA     ABBBBBBBBBBBA
+.BBBBBBBBBBB.     .BBBBBBBBBBB.     .BBBBBBBBBBB.     .BBBBBBBBBBB.
+..L.L...L.L..     ..L.L...L.L..     ..L.L...L.L..     ..L.L...L.L..
+```
+
+#### Drawn round every skin
+
+**Context bar (every size; replaces the context ring and carries the model).** The box's bottom row, under the
+skin's `body` columns (`x0` to `x1`): the ground the robot stands on. Let `tone` be the model colour in the agent's
+state (running and failed: as is; waiting: × 0.72; done: ghosted as the body). Pixel `i` of `n` is filled when
+`(i + 0.5) / n ≤ fill`, filled from the left: in `tone` below 70%, in `contextColor(fill)` from 70% (`STATUS.warn`,
+then `STATUS.failed` from 90%), so the warning thresholds still show. Unfilled pixels are the track,
+`mix(CANVAS, tone, 0.35)`, so the model hue is there even at 0% context. With no context figure the whole row is
+track. Placeholders have no bar.
+
+**Halo (running only).** For each non-sprite pixel from `wH` rows above the sprite down to sprite row `haloRows`,
+and from `wH` columns left of `body` to `wH` right of it: `d = ceil(hypot(dx, dy) - 0.25)`, where `dx`, `dy` are the
+distances to the `body` rectangle (0 inside it). Pixels with `1 ≤ d ≤ wH` get
+`add(under, glowColour, 0.8 × q5(1 - d / (wH + 1)) × glowK)`. Running: `glowColour` is the model colour (fade-in
+applied) and `glowK` is worked out as for a globe. Failed: `STATUS.failed` at a steady 0.7. Error flash: see 12.5. *Rejected first:* a
+Chebyshev halo round the whole sprite filled the leg gaps and drew a square frame, so the robot read as a TV set.
+
+**Outline (stuck and clash; replaces the rim).** The `d = 1` pixels of the same field (non-sprite pixels only):
+`mix(under, colour, k)`, drawn after the halo. Stuck: `STATUS.warn`, `k` as the stuck rim (section 4). Clash:
+`LINK.clash` at 0.9 on the blink. Error flash: `STATUS.failed` at 0.9 on the red steps. Clash beats error, error
+beats stuck. The outline can show at the same time as a tool wave or an
+error flash, because those draw on the sprite and the outline draws around it.
+
+### 12.5 States and motion (shared by every skin)
+
+These rules name skin variants (`eyes.open`, `eyes.closed`, `eyes.cross`, `arms.down`, `arms.up`) and whole-sprite
+offsets only. They never refer to a pixel of a particular skin, so a new skin gets every state and motion for free.
+
+| State | Body | Eyes | Arms | Lift | Other |
+|---|---|---|---|---|---|
+| running | `bodyColor`, model glow | `eyes.open` | `arms.down` | hop table | halo breathes as a globe's |
+| tool call (`pulseMs` 450, 3 steps) | as its state | as its state | **wave**: `q3(flash)` 3 → `arms.up`, 2 → `arms.down`, 1 → `arms.up`, 0 → as its state. Arm pixels in `KIND[kind]` for all three steps | as its state | replaces the rim flicker; coalesced as section 4 |
+| error (`errorPulseMs` 900, 4 steps) | unchanged. `q4(flash)` 4 and 2: **glow `STATUS.failed` at `glowK` 1 and red outline** (drawn even if the agent has no glow); 3 and 1: the state's own glow, no outline | `eyes.cross` in `CANVAS` for the whole 900 ms | as its state | as its state | replaces the red rim pulse; never coalesced |
+| waiting | `bodyColor` × 0.72 | `eyes.open`; **blink** to `eyes.closed` | `arms.down` | 0 | — |
+| done | `bodyColor` ghost fade, then still | `eyes.closed` from `finishedAt` | `arms.down` | 0 | still |
+| failed | `ROBOT.dead`, held; steady red glow | `eyes.cross` in `STATUS.failed` | `arms.down` | 0 | still |
+| stuck | as its state | as its state | as its state | as its state | amber outline breathing |
+| placeholder | `TEXT.faint`, always S | `eyes.closed` | `arms.down` | 0 | no bar, no glow |
+
+The error flash is two red glow blinks in 900 ms (2.2 a second), under the 3-a-second limit.
+
+**Hop (running).** The loop is `glowPeriodMs` (2000 ms) cut into 10 slots of 200 ms:
+`slot = floor(10 × frac(now / glowPeriodMs + seed + 0.5))`, with `seed = hashUnit(id)` as for the glow. The `+ 0.5`
+puts the top of the hop at the brightest point of the breath. Lift is a whole-sprite offset in pixels, by size, the same for every skin (the headroom in 12.3 is its maximum):
+
+| Size | Slots 0-9 | Poses |
+|---|---|---|
+| S | `0 0 0 0 0 0 0 1 1 0` | 2 (ground, up 1) |
+| M, L | `0 0 0 0 0 0 1 2 2 1` | 3 (ground, up 1, up 2) |
+
+So a running robot stands still for 1.2-1.4 s, then makes one short hop: one hop every 2 s, out of step with its
+neighbours. A faster hop was rejected: with five running agents, constant bouncing breaks "quiet by default". The
+slots match `FPS.glow` (one frame a slot), so the hop needs no frame rate beyond what the glow already asks for.
+
+**Blink (waiting).** Every 6000 ms per agent, eyes closed for 200 ms:
+`closed = frac((now + seed × 6000) / 6000) < 200 / 6000`. A waiting agent otherwise needs only `FPS.tick` (1), so
+the loop **schedules one frame at each blink edge** (start and end) instead of raising the rate: two extra frames
+per waiting agent every 6 s.
+
+**Precedence on the sprite:** while an error pulse is live the arms are body colour (in the wave position if a wave
+is live too) and the glow flashes as above; a tool wave alone colours the arms. `eyes.cross` during an error beats a
+blink. Done and failed ignore the hop, the blink and the wave.
+
+**Degradation (section 6), robot form:**
+1. *Breathing off:* no hop and no blink. **A running robot holds at lift 1** (one pixel off its bar), so running
+   still differs from waiting by shape when nothing moves. Halo steady at 0.7, as for globes.
+2. *Slow fades off:* the ghost jumps to its end state; `eyes.closed` at once.
+3. *Clash blink off:* the clash outline is steady.
+4. *Fade-in off:* robots appear at full colour.
+5. *Pulse fade off:* a tool call is one frame with the arms up in `KIND` colour, held for `pulseHoldMs`; an error is
+   one frame of red glow and outline with `eyes.cross`, held the same way.
+6. *Comets off:* no change for robots.
+
+### 12.6 Still frame (Svg, and any frame where motion is off)
+
+Running is lift 1 with a steady halo, waiting is grounded with open eyes, done is a ghost with closed eyes, failed
+is a dark grey robot with red `eyes.cross` in a steady red glow, and tool calls and errors show nothing. In greyscale,
+running and waiting differ by lift, halo, body tone and label glyph; waiting and done by the eyes and body tone;
+failed by its dark body (25+ OKLab from running and waiting, 10 from done) and `eyes.cross` (at S, where `clawd` has
+no cross, by the dark body, red eyes and the label's `✕`).
+
+### 12.7 Budget
+
+- **Frames:** nothing beyond the globe style. The hop and the glow share `FPS.glow`; the wave and the error flash
+  live inside the existing pulse windows at `FPS.busy`; a blink adds two scheduled frames per waiting agent every 6 s.
+- **Pairs:** a robot draws one body colour (plus up to two shades if its skin uses `D` or `H`), the eye colour, at
+  most one arm colour, 5 halo levels and 2-3 bar colours. A globe draws 4 disc shades, 5 halo levels and 2 ring colours, so a robot frame should come in at or below
+  a globe frame. Not measured: check `pairCount` on robot goldens.
+- **Paint cost:** a box of at most 13×10 plus a halo of at most 3 px; less per node than a 6 px globe's disc, ring
+  and glow loop.
+
+### 12.8 To check on the robot goldens
+
+- [ ] Every size × state matches the active skin's bitmaps pixel for pixel (a robot golden per size and state).
+- [ ] Every skin in `ROBOT_SKINS` passes the skin checks in 12.4.
+- [ ] No rule outside `ROBOT_SKINS` names a pixel position, row or column of a particular skin.
+- [ ] No two robot boxes (grown by 1 px) overlap; where S would, the tree shows.
+- [ ] Labels sit one row under the box and never move during a hop.
+- [ ] A tool wave on a haiku robot with an edit (`KIND.edit` against haiku: OKLab 8.3 normal, 4.8 deuteranopia):
+      the wave's shape carries it, not the colour.
+- [ ] A degraded running robot is drawn at lift 1.
+- [ ] No robot body is ever red; failed is `ROBOT.dead` with red eyes and a red glow, and an error flashes only
+      the glow and outline.
+- [ ] Each chip dot's hue matches its robot's glow and bar.
+- [ ] `pairCount` on robot goldens is at or below the matching globe goldens.
