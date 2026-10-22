@@ -10,6 +10,7 @@ import { Grid, limitPairs, writeParts, type Part } from './grid.ts'
 import { drawHeader, drawSummary, summaryText, type HeaderNotes } from './header.ts'
 import { layoutNodes, nodesKey, orderAgents, structuralEdges, type Edge } from './layout.ts'
 import { planRegions } from './regions.ts'
+import { nextBlinkAt, robotCrowded } from './robot.ts'
 import { busiest, drawSpotlight } from './spotlight.ts'
 import { drawTimeline } from './timeline.ts'
 import { CANVAS, CANVAS_RAISED, FPS, GRAPH, MOTION, PAIR_BUDGET, STATUS, TEXT, modelColor } from './tokens.ts'
@@ -106,7 +107,7 @@ export function smoothRenderMs(averageMs: number, sampleMs: number): number {
  * A state object is checked first by its event count (the pane folds events into the same object, and hands the same
  * object back when nothing arrived); otherwise the nodes' key decides, so a fresh state with the same nodes reuses it.
  */
-type Sized = { positions: Record<string, Point>; crowded: boolean }
+type Sized = { positions: Record<string, Point>; crowded: boolean; robotCrowded?: boolean }
 type Shape = { key: string; ids: string[]; edges: Edge[]; sized: Map<string, Sized> }
 const shapeOfState = new WeakMap<SwarmState, { events: number; shape: Shape }>()
 let lastShape: Shape | null = null
@@ -189,6 +190,8 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
   const hn: HeaderNotes = { notes: noteParts, short }
 
   let positions: Record<string, Point> = {}
+  const robots = view.style === 'robot'
+  let wakeAt: number | null = null
   if (regions.step === 'summary') drawSummary(top, regions.header, state, totals, hn)
   else {
     drawHeader(top, regions.header, state, totals, hn)
@@ -196,9 +199,17 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
     if (regions.graph !== null) {
       const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2)
       positions = tween(target.positions, motion.glide ? view.tween : null, nowMs)
-      // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead.
-      if (target.crowded) drawTree(top, regions.graph, state, stats)
-      else drawGraph(top, regions.graph, { state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges, motion })
+      // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead. Robots
+      // need their smallest boxes, grown by a pixel, to stay apart.
+      if (robots) target.robotCrowded ??= robotCrowded(target.positions)
+      if (robots ? target.robotCrowded : target.crowded) drawTree(top, regions.graph, state, stats)
+      else {
+        drawGraph(top, regions.graph, {
+          state, stats, positions, clashes, view, now: nowMs, tEff: nowMs - lagOf(view), edges: cached.edges, motion,
+          style: robots ? 'robot' : 'globe', still: view.still === true,
+        })
+        if (robots && motion.breathe && view.still !== true) wakeAt = nextBlinkAt(stats, nowMs)
+      }
     }
   }
 
@@ -234,5 +245,6 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
   return {
     step: regions.step, top, bottom, chips, treeKey, nodesKey: cached.key, positions,
     fps: targetFps(state, view, nowMs, stats, clashes, motion), spotlight, alt: summaryText(state, totals),
+    ...(wakeAt !== null && { wakeAt }),
   }
 }

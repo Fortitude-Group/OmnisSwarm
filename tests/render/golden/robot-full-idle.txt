@@ -1,0 +1,172 @@
+# robot-full-idle: hierarchical at +400000 ms in 120x44; step full, fps 5, spotlight a-arch
+## top 120x26 pairs 43 sha fc90561fd0666969
+### glyphs
+ ◆ auth refactor · hierarchical · 6 agents 0▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0/min · cc $1.20                       
+ tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash                   move sessions to signed tokens 
+                                                                                                                        
+                                                                                                                        
+                                                          ▀   ▀                                                         
+                                                       ▀  ▀   ▀  ▀                                                      
+                                                     ⠠⠄  ▀ ▀▀▀ ▀   ⣀                                                    
+                                                 ⢀⠄⠈⠁   ▀▀▀▀▀▀▀▀▀    ⠒ ⡀                                                
+                                             ⢀⠄⠐⠁       ◆ lead ◌       ⠈ ⠢ ⡀                                            
+                                         ⢀⠄⠐⠁         ⠘          ⠃         ⠈ ⠢ ⡀                                        
+                                     ⢀⡀⠐⠁            ⠊            ⠑            ⠈ ⠤                                      
+                                  ⡀⠐⠂               ⠃              ⠘▀▀▀▀▀▀▀        ⠉ ⠤                                  
+                       ▀▀▀▀▀▀▀▀▀             ▀▀▀▀▀▀▀▀              ▀▀▀▀▀▀▀▀            ⠁ ▀▀▀▀▀▀                         
+                                             ▀ ▀  ▀ ▀              ▀ ▀  ▀ ▀             ▀      ▀                        
+                      ▀         ▀ ⠤ ⡀        ▀▀ ▀▀ ▀▀             ▀▀▀ ▀▀ ▀▀▀             ▀ ▀▀ ▀                         
+                       ▀▀▀▀▀▀▀▀▀    ⠈ ⠒ ⠤ ⡀   ▀▀▀▀▀▀                ▀▀▀▀▀▀                                              
+                      ◌ architect         ⠈ ◌ tester !            ✕ reviewer             ? ghost                        
+                                  ⢄             ⠈ ⠒ ⠤ ⡀                                                                 
+                                    ⡄                 ⠈ ⠒ ⠤ ⡀                                                           
+                                     ⠠                      ⠈ ⠒ ⠤ ⡀                                                     
+                                                                  ⠈ ⠒ ⠤ ⡀                                               
+                                        ▀   ▀                                                                           
+                                     ▀  ▀   ▀  ▀ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ▀ ▀▀▀ ▀▀▀ ▀                                    
+                                       ▀ ▀▀▀ ▀                             ▀ ▀▀▀ ▀                                      
+                                      ▀▀▀▀▀▀▀▀▀                           ▀▀▀▀▀▀▀▀▀                                     
+                                      ◌ coder-1                           ✓ coder-2                                     
+### colours
+abbcccccccccccccdddeeeeeeeeeeeedddcccccccceeedddcccccccdddeeeeeeedddeeeeeeeedddeeeeeeedddeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaaaaaaaaaaaaaaaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeeea
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiijiiijiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhkiikiiikiikhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhllhijijjjijihhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhllllhhhmmmmmmmmmhhhhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhllllhhhhhhlnooooooolhhhhhhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhllllhhhhhhhhhlhhhhhhhhhhlhhhhhhhhhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhllllhhhhhhhhhhhhlhhhhhhhhhhhhlhhhhhhhhhhhhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlllhhhhhhhhhhhhhhhlhhhhhhhhhhhhhhpqqqqqqqhhhhhhhhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhkkkkkkkkkhhhhhhhhhhhhhrssssssrhhhhhhhhhhhhhtuvvvvvvuthhhhhhhhhhhlhwwwwwwhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhiihiiihiihhhhhhhhhhhhhsikiikishhhhhhhhhhhhhtvxyxxyxvthhhhhhhhhhhhwzzzzzzwhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhjiiiiiiiiijhlhlhhhhhhhhAjijjijAhhhhhhhhhhhhhBCDxDDxDCBhhhhhhhhhhhhhEzEEzEhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhFGFGGGFGFhhhhlhlhlhlhhhHHHHHHhhhhhhhhhhhhhhhhIIIIIIhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhooooooooooolhhhhhhhhlhooooooooJJhhhhhhhhhhhhKKKKKKKKKKhhhhhhhhhhhhhooooooohhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlhhhhhhhhhhhhhlhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlhhhhhhhhhhhhhhhhhlhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlhhhhhhhhhhhhhhhhhhhhhhlhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhlhlhlhlhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiijiiijiihhhhhhhhhhhhhhhhhhhhhhhhhhhLLLLLLLLLhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhkiikiiikiikhKKhKKhKKhKKhKKhKKhKKhKKhMLMMMLMMMLMhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhijijjjijihhhhhhhhhhhhhhhhhhhhhhhhhhhLNLNNNLNLhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhOOOOOOOOOhhhhhhhhhhhhhhhhhhhhhhhhhhhPPPPPPPPPhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhooooooooohhhhhhhhhhhhhhhhhhhhhhhhhhhQoooooooohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+### legend
+a fg #131a26 bg #131a26 x45
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x51
+d fg #5c6679 bg #131a26 x36
+e fg #9aa4b2 bg #131a26 x89
+f fg #7ee787 bg #131a26 x8
+g fg #f85149 bg #131a26 x9
+h fg #0b0f17 bg #0b0f17 x2487
+i fg #9b563f bg #9b563f x58
+j fg #9b563f bg #0b0f17 x20
+k fg #0b0f17 bg #9b563f x19
+l fg #3c4352 bg #0b0f17 x69
+m fg #1a2d4f bg #0b0f17 x9
+n fg #b48cff bg #0b0f17 x1
+o fg #9aa4b2 bg #0b0f17 x50
+p fg #3c4352 bg #1d151c x1
+q fg #0b0f17 bg #2e1a21 x7
+r fg #0b0f17 bg #9d6f08 x2
+s fg #9d6f08 bg #9b563f x8
+t fg #2e1a21 bg #2e1a21 x4
+u fg #2e1a21 bg #733136 x2
+v fg #733136 bg #2a2e36 x8
+w fg #0b0f17 bg #5c6679 x8
+x fg #2a2e36 bg #2a2e36 x6
+y fg #f85149 bg #2a2e36 x2
+z fg #5c6679 bg #5c6679 x8
+A fg #9d6f08 bg #0b0f17 x2
+B fg #2e1a21 bg #0b0f17 x2
+C fg #733136 bg #0b0f17 x2
+D fg #2a2e36 bg #0b0f17 x4
+E fg #5c6679 bg #0b0f17 x4
+F fg #9b563f bg #1a2d4f x4
+G fg #0b0f17 bg #1a2d4f x5
+H fg #444320 bg #0b0f17 x6
+I fg #343943 bg #0b0f17 x6
+J fg #e69f00 bg #0b0f17 x2
+K fg #f85149 bg #0b0f17 x26
+L fg #504646 bg #504646 x16
+M fg #0b0f17 bg #504646 x8
+N fg #504646 bg #0b0f17 x5
+O fg #1a3e2e bg #0b0f17 x9
+P fg #1e282b bg #0b0f17 x9
+Q fg #8b98a9 bg #0b0f17 x1
+## bottom 120x17 pairs 27 sha 86054322ba7d0f17
+### glyphs
+ ● architect · system-architect · claude-opus-5-5                                                     ◌ waiting · 6m39s 
+ tokens in 7.0k  out 1.6k  cache r 42k w 42k  = 93k                                                              ≈$0.28 
+ context ░░░░░░░░░░ 5%  cache hit 46%                                                                                   
+ speed ≈ – ▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁  tokens ▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▆                                                                    
+ tools r 1  e 0  b 0  s 0  w 0  a 0  o 0   errors 0                                                                     
+ files 1  src/auth/session.ts                                                                                msgs ↓2 ↑4 
+ ◌ lead        ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅ 
+ ◌ architect   ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅ 
+ ◌ coder-1      ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅ 
+ ✓ coder-2      ▅▅▅▅▅▅                                                                                                  
+ ◌ tester         ▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅ 
+ ✕ reviewer       ▅▅▅▅✕                                                                                                 
+              └0s─────────────────────────────────────────────────────────────────────────────────────────────────6m40s 
+  6m # task t2 → done                                                                                                   
+  6m › architect → ?ghost: are you there                                                                                
+  6m › lead → tester: rerun with a fixed seed                                                                           
+  6m › architect → coder-1: use ed25519 keys                                                                            
+### colours
+abbcccccccccdddeeeeeeeeeeeeeeeedddbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeedddeeeeea
+aeeeeeeeccccccceecccccccceeeeeeeeccccccccccceeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacccccca
+aeeeeeeeeddddddddddeeeeeeeeeeeeeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeeeceddddddddddddddbbeeeeeeeeeddddddddddddddbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeffcccggeeehheeeiieeejjeeekkeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeceeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaeeeeeeeeeea
+lmmmmmmllllllllnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnol
+lmmmmmmmmmmmlllnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnol
+lmmmmmmmmmllllllppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppql
+lrrmmmmmmmllllllssssstllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+lmmmmmmmmllllllllluuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuvl
+lwwmmmmmmmmlllllllxxxwwlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+llllllllllllllymmyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyymmmmml
+mmmmzzzzzzzzzzzzzzzzzlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAlllllllllyyyllllllyyAAAAAAAAAAAAAllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAllllyyyllllllyyAAAAAAAAAAAAAAAAAAAAAAAlllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+mmmmAAAlllllllllyyylllllllyyAAAAAAAAAAAAAAAAllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
+### legend
+a fg #131a26 bg #131a26 x424
+b fg #4d8dff bg #131a26 x21
+c fg #e6edf3 bg #131a26 x52
+d fg #5c6679 bg #131a26 x47
+e fg #9aa4b2 bg #131a26 x164
+f fg #4fd8e8 bg #131a26 x2
+g fg #ffc861 bg #131a26 x2
+h fg #c49bff bg #131a26 x2
+i fg #a6e35a bg #131a26 x2
+j fg #6f95ff bg #131a26 x2
+k fg #ff86c2 bg #131a26 x2
+l fg #e6edf3 bg #0b0f17 x630
+m fg #9aa4b2 bg #0b0f17 x72
+n fg #254378 bg #0b0f17 x206
+o fg #3766b8 bg #0b0f17 x2
+p fg #25603e bg #0b0f17 x102
+q fg #379658 bg #0b0f17 x1
+r fg #8b98a9 bg #0b0f17 x2
+s fg #31453f bg #0b0f17 x5
+t fg #4a695a bg #0b0f17 x1
+u fg #6c6826 bg #0b0f17 x100
+v fg #ada430 bg #0b0f17 x1
+w fg #f85149 bg #0b0f17 x4
+x fg #993735 bg #0b0f17 x3
+y fg #5c6679 bg #0b0f17 x113
+z fg #ffb86b bg #0b0f17 x17
+A fg #9ecbff bg #0b0f17 x61
+## chips
+● #3f73d1 lead (lead)
+● #3f73d1 architect (a-arch)
+● #31854e coder-1 (a-cod1)
+● #31854e coder-2 (a-cod2)
+● #7e7823 tester (a-test)
+● #707681 reviewer (a-rev)

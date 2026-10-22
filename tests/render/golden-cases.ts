@@ -6,7 +6,8 @@ import { render } from '../../src/render/frame.ts'
 import type { Frame, Size } from '../../src/render/types.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../fixtures/swarm-five.ts'
 
-export type GoldenCase = { name: string; size: Size; at: number; topology: Topology }
+/** `style`: robot cases draw the same frame with robots (pane.md section 12); without it, globes. */
+export type GoldenCase = { name: string; size: Size; at: number; topology: Topology; style?: 'robot' }
 
 const FULL = { columns: 120, rows: 44 }
 
@@ -19,9 +20,16 @@ export const GOLDEN_CASES: readonly GoldenCase[] = [
   { name: 'compact-mid', size: { columns: 80, rows: 21 }, at: FIVE_AT.mid, topology: 'hierarchical' },
   { name: 'tree-mid', size: { columns: 60, rows: 13 }, at: FIVE_AT.mid, topology: 'hierarchical' },
   { name: 'summary-mid', size: { columns: 40, rows: 5 }, at: FIVE_AT.mid, topology: 'hierarchical' },
+  { name: 'robot-full-mid', size: FULL, at: FIVE_AT.mid, topology: 'hierarchical', style: 'robot' },
+  { name: 'robot-full-idle', size: FULL, at: FIVE_AT.idle, topology: 'hierarchical', style: 'robot' },
+  { name: 'robot-mesh-mid', size: FULL, at: FIVE_AT.mid, topology: 'mesh', style: 'robot' },
+  { name: 'robot-star-mid', size: FULL, at: FIVE_AT.mid, topology: 'star', style: 'robot' },
+  { name: 'robot-no-timeline-mid', size: { columns: 100, rows: 29 }, at: FIVE_AT.mid, topology: 'hierarchical', style: 'robot' },
+  { name: 'robot-compact-mid', size: { columns: 80, rows: 21 }, at: FIVE_AT.mid, topology: 'hierarchical', style: 'robot' },
 ]
 
 export function goldenFrame(c: GoldenCase): Frame {
   const events = fiveAgentEvents(c.topology)
-  return render(foldAll(FIVE_SWARM, events), { pinned: null, spotlight: null, pulses: pulsesFrom(events), lagMs: 0, tween: null }, c.at, c.size)
+  const view = { pinned: null, spotlight: null, pulses: pulsesFrom(events), lagMs: 0, tween: null, ...(c.style !== undefined && { style: c.style }) }
+  return render(foldAll(FIVE_SWARM, events), view, c.at, c.size)
 }

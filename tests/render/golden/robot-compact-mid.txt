@@ -1,0 +1,82 @@
+# robot-compact-mid: hierarchical at +30000 ms in 80x21; step compactSpotlight, fps 20, spotlight a-cod1
+## top 80x14 pairs 15 sha fd8c279fa1457429
+### glyphs
+ ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok    
+ tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash          
+ ▶ lead  32k tok · ≈$0.17                                                       
+   ▶ architect  93k tok · ≈$0.28                                                
+     ▶ coder-1  65k tok · ≈$0.08                                                
+     ✓ coder-2  62k tok · ≈$0.05                                                
+   ▶ tester  6.1k tok · ≈$0.001                                                 
+   ✕ reviewer  1.3k tok · –                                                     
+   ? ghost  – tok · –                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+### colours
+abbcccccccccccccdddeeeeeeeeeeeedddccccccccfffdddcccccccdddeeeeeeedddeeeeeeeeaaaa
+aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaaaaaaaa
+hiijjjjkkkkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkiijjjjjjjjjkkkkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkkkiilllllllkkkkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkkkmmlllllllkkkkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkiinnnnnnkkkkkkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkooooooooookkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hkkiikkkkkkkkkkkkkkkkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+### legend
+a fg #131a26 bg #131a26 x16
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x51
+d fg #5c6679 bg #131a26 x30
+e fg #9aa4b2 bg #131a26 x41
+f fg #7ee787 bg #131a26 x11
+g fg #f85149 bg #131a26 x9
+h fg #e6edf3 bg #0b0f17 x767
+i fg #7ee787 bg #0b0f17 x10
+j fg #4d8dff bg #0b0f17 x13
+k fg #9aa4b2 bg #0b0f17 x138
+l fg #4cd07a bg #0b0f17 x14
+m fg #8b98a9 bg #0b0f17 x2
+n fg #f0e442 bg #0b0f17 x6
+o fg #f85149 bg #0b0f17 x10
+## bottom 80x6 pairs 11 sha 3125a8d9282784cd
+### glyphs
+ ● coder-1 ▶ running · 25s · 65k tok · ≈$0.08 · ctx 3%                          
+  0s # task t2 → done                                                           
+  0s › architect → ?ghost: are you there                                        
+  0s › lead → tester: rerun with a fixed seed                                   
+  0s › architect → coder-1: use ed25519 keys                                    
+  4s › tester → lead: tests are flaky on CI                                     
+### colours
+abbcccccccdeeeeeeeeefffdddfffdddddddfffccccccfffffffddaaaaaaaaaaaaaaaaaaaaaaaaaa
+gggghhhhhhhhhhhhhhhhhiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiiiiikkkiiiiiikkjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiikkkiiiiiikkjjjjjjjjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiiiiikkkiiiiiiikkjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ggggjjjiiiiiikkkiiiikkjjjjjjjjjjjjjjjjjjjjjiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+### legend
+a fg #131a26 bg #131a26 x27
+b fg #4cd07a bg #131a26 x2
+c fg #e6edf3 bg #131a26 x13
+d fg #9aa4b2 bg #131a26 x13
+e fg #7ee787 bg #131a26 x9
+f fg #5c6679 bg #131a26 x16
+g fg #9aa4b2 bg #0b0f17 x20
+h fg #ffb86b bg #0b0f17 x17
+i fg #e6edf3 bg #0b0f17 x258
+j fg #9ecbff bg #0b0f17 x85
+k fg #5c6679 bg #0b0f17 x20
+## chips
+● #3f73d1 lead (lead)
+● #3f73d1 architect (a-arch)
+● #31854e coder-1 (a-cod1)
+● #31854e coder-2 (a-cod2)
+● #7e7823 tester (a-test)
+● #707681 reviewer (a-rev)

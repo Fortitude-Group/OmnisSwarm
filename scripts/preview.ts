@@ -11,6 +11,7 @@ import { DEFAULT } from '../src/render/color.ts'
 import type { Grid } from '../src/render/grid.ts'
 import { CELL_H, CELL_W, blockShape, gridToSvg } from '../src/render/svg.ts'
 import { GOLDEN_CASES, goldenFrame } from '../tests/render/golden-cases.ts'
+import { robotSheet } from '../tests/render/robot-sheet.ts'
 
 const DOTS: ReadonlyArray<readonly [number, number]> = [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2], [0, 3], [1, 3]]
 
@@ -85,3 +86,8 @@ for (const c of GOLDEN_CASES) {
   })
   console.log(`${c.name}: ${picture.width}x${picture.height} -> ${join(out, `${c.name}.png`)}`)
 }
+
+// The robot size x state sheet (tests/render/robot-sheet.ts), for the robot goldens.
+const sheet = paint([robotSheet()])
+writeFileSync(join(out, 'robot-sheet.png'), png(sheet.width, sheet.height, sheet.rgb))
+console.log(`robot-sheet: ${sheet.width}x${sheet.height} -> ${join(out, 'robot-sheet.png')}`)

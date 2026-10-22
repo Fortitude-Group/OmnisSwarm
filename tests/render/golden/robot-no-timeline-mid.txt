@@ -1,0 +1,170 @@
+# robot-no-timeline-mid: hierarchical at +30000 ms in 100x29; step noTimeline, fps 20, spotlight a-cod1
+## top 100x18 pairs 80 sha 4e05dcef07db0316
+### glyphs
+ ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0.11/min           
+ tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash   move sessions to signed t… 
+                                              ▀▀▀▀▀▀▀▀                                              
+                                            ▀▀ ▀▀▀▀▀▀ ▀▀                                            
+                                                ▀  ▀                                                
+                                            ⢀⡀▀      ▀ ⣀                                            
+                                      ⢀⡀⠠⠄⠐⠁   ▀▀▀▀▀▀    ⠑ ⠤ ⣀                                      
+                   ▀▀▀▀▀▀▀▀▀▀   ⢀⡀⠠⠄⠐⠁▀▀▀▀▀▀▀ ◆ lead ▶ ▀▀▀▀▀▀▀▀⠑ ⠤ ⣀                                
+                    ▀▀▀▀▀▀▀▀ ⠄⠐⠁     ▀▀▀▀▀▀▀▀          ▀▀▀▀▀▀▀▀      ⠑ ⠄ ▀▀▀▀▀▀                     
+                    ▀ ▀  ▀ ▀ ⠤⣀      ▀ ▀  ▀ ▀          ▀ ▀  ▀ ▀      ⢀⡠⠄▀      ▀                    
+                  ▀▀▀▀ ▀▀ ▀▀▀⠉⠈⠛⠐⠦⢄⣄▀▀▀ ▀▀ ▀▀▀        ▀▀▀ ▀▀ ▀▀▀⢀⣀⠤⠒⠉⠁   ▀ ▀▀ ▀                     
+                     ▀▀▀▀▀▀  ⣄⡀▀▀▀▀▀⠉▀▀▀▀▀▀▀ ⣀          ▀▀▀▀▀▀ ⠁⠁                                   
+                  ▶ architect▀⠁ ▀▀▀▀▀▀ ▀▶! ⠈⠉⠉⠉⠉⠑⠒⠒⠶⠉⢍⠉⣉⠉ ✕              ? ghost                    
+                                 ▀  ▀                    ⠉ ⠒                                        
+                               ▀      ▀ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ▀      ▀                               
+                                ▀▀▀▀▀▀                        ▀▀▀▀▀▀                                
+                               ▶ coder-1                    ✓ coder-2                               
+                                                                                                    
+### colours
+abbcccccccccccccdddeeeeeeeeeeeedddccccccccfffdddcccccccdddeeeeeeedddeeeeeeeedddeeeeeeeeeeaaaaaaaaaaa
+aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaeeeeeeeeeeeeeeeeeeeeeeeeeea
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhiiiiiiiihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhijkllllllkjihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhmknopooponkmhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhqrsooooooskqhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhtttttthhhuvuuvuhhhhthththhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhijjjjjjjjihhhtttttwxxxxxxxhyzzzzzAAhBBBBBBBBthththhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhmklCCCCCClkqtthhhhDEFFFFFFEDhhhhhhhhGHIIIIIIHGhhhhhththJJJJJJhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhmkCoKooKoCkLMhhhhhDNoKooKoNDhhhhhhhhGIOPOOPOIGhhhhhMMMJQQQQQQJhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhRSTpoppopTSUMMMMMMVWpoppopWVhhhhhhhhXYZOZZOZYXMMMMMMhhh0Q00Q0hhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhh111111hh234444454677777hthhhhhhhhhh888888hMMhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhAzzzzzzzzzz49!$$$$$$!%&*hMMMMMMMMMMMMMMh+hhhhhhhhhhhhhhAzzzzzzhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhh-!/opoopo/!-hhhhhhhhhhhhhhhhththh::::::hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhh-!;oooooo;!<+h++h++h++h++h++h++h=::::::=hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh>?>>?>hhhhhhhhhhhhhhhhhhhhhhhh@^@@^@hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhAzzzzzzzzhhhhhhhhhhhhhhhhhhhh_~~~~~~~~hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+### legend
+a fg #131a26 bg #131a26 x17
+b fg #b48cff bg #131a26 x2
+c fg #e6edf3 bg #131a26 x51
+d fg #5c6679 bg #131a26 x33
+e fg #9aa4b2 bg #131a26 x77
+f fg #7ee787 bg #131a26 x11
+g fg #f85149 bg #131a26 x9
+h fg #0b0f17 bg #0b0f17 x1204
+i fg #0b0f17 bg #1a2b4a x12
+j fg #1a2b4a bg #2a477d x10
+k fg #2a477d bg #2a477d x9
+l fg #2a477d bg #3964b0 x8
+m fg #1a2b4a bg #1a2b4a x4
+n fg #3964b0 bg #3964b0 x2
+o fg #d77757 bg #d77757 x32
+p fg #d77757 bg #0b0f17 x12
+q fg #3c4352 bg #1a2b4a x3
+r fg #3c4352 bg #2a477d x1
+s fg #d77757 bg #3964b0 x2
+t fg #3c4352 bg #0b0f17 x24
+u fg #0b0f17 bg #223b68 x4
+v fg #d77757 bg #223b68 x2
+w fg #3c4352 bg #1d201c x1
+x fg #0b0f17 bg #2f3121 x7
+y fg #b48cff bg #0b0f17 x1
+z fg #e6edf3 bg #0b0f17 x29
+A fg #7ee787 bg #0b0f17 x5
+B fg #0b0f17 bg #2e1a21 x8
+C fg #3964b0 bg #d77757 x8
+D fg #2f3121 bg #2f3121 x4
+E fg #2f3121 bg #c19112 x2
+F fg #c19112 bg #d77757 x6
+G fg #2e1a21 bg #2e1a21 x4
+H fg #2e1a21 bg #733136 x2
+I fg #733136 bg #2a2e36 x8
+J fg #0b0f17 bg #2e3441 x8
+K fg #0b0f17 bg #d77757 x4
+L fg #f5fbff bg #364f77 x1
+M fg #9ecbff bg #0b0f17 x32
+N fg #c19112 bg #4fd8e8 x2
+O fg #2a2e36 bg #2a2e36 x6
+P fg #f85149 bg #2a2e36 x2
+Q fg #2e3441 bg #2e3441 x8
+R fg #1a2b4a bg #0b0f17 x1
+S fg #2a477d bg #0b0f17 x2
+T fg #3964b0 bg #0b0f17 x2
+U fg #3c4352 bg #131d31 x1
+V fg #2f3121 bg #0b0f17 x2
+W fg #c19112 bg #0b0f17 x2
+X fg #2e1a21 bg #0b0f17 x2
+Y fg #733136 bg #0b0f17 x2
+Z fg #2a2e36 bg #0b0f17 x4
+0 fg #2e3441 bg #0b0f17 x4
+1 fg #223b68 bg #0b0f17 x6
+2 fg #f5fbff bg #273344 x1
+3 fg #f5fbff bg #0b0f17 x1
+4 fg #0b0f17 bg #1a392f x7
+5 fg #9ecbff bg #132423 x1
+6 fg #5b5a26 bg #1a392f x1
+7 fg #5b5a26 bg #0b0f17 x5
+8 fg #343943 bg #0b0f17 x6
+9 fg #799cc5 bg #224e3c x1
+! fg #296248 bg #296248 x6
+$ fg #296248 bg #398c60 x6
+% fg #1a392f bg #296248 x1
+& fg #7ee787 bg #1a392f x1
+* fg #e69f00 bg #0b0f17 x1
++ fg #f85149 bg #0b0f17 x14
+- fg #1a392f bg #1a392f x3
+/ fg #398c60 bg #398c60 x2
+: fg #504646 bg #504646 x12
+; fg #d77757 bg #398c60 x2
+< fg #f85149 bg #1a392f x1
+= fg #504646 bg #0b0f17 x2
+> fg #0b0f17 bg #22533a x4
+? fg #d77757 bg #22533a x2
+@ fg #0b0f17 bg #1e282b x4
+^ fg #504646 bg #1e282b x2
+_ fg #8b98a9 bg #0b0f17 x1
+~ fg #9aa4b2 bg #0b0f17 x8
+## bottom 100x10 pairs 18 sha cdb994a20ae72050
+### glyphs
+ ● coder-1 · coder · claude-sonnet-5-5                                              ▶ running · 25s 
+ tokens in 5.0k  out 3.7k  cache r 48k w 8.0k  = 65k                                         ≈$0.08 
+ context ░░░░░░░░░░ 3%  cache hit 79%                                                               
+ speed ≈ 1480 tok/s ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█  tokens ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅█                                       
+ tools r 0  e 2  b 0  s 0  w 0  a 0  o 0   errors 0                                                 
+ files 2  src/auth/token.ts, src/auth/issuer.ts               msgs ↓2 ↑1  ! clash src/auth/token.ts 
+  0s # task t2 → done                                                                               
+  0s › architect → ?ghost: are you there                                                            
+  0s › lead → tester: rerun with a fixed seed                                                       
+  0s › architect → coder-1: use ed25519 keys                                                        
+### colours
+abbcccccccdddeeeeedddbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafffffffffdddeeea
+aeeeeeeeccccccceecccccccceeeeeeeecccccccccccceeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacccccca
+aeeeeeeeeddddddddddeeeeeeeeeeeeeeecccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeeecccccccccceddddddddddddddbbeeeeeeeeeddddddddddddddbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeggeeehhccciieeejjeeekkeeelleeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aeeeeeeceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaeeeeeeeeeeeemmmmmmmmmmmmmmmmmmmmmmmmma
+nnnnoooooooooooooooooppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+nnnnqqqppppppppprrrpppppprrqqqqqqqqqqqqqpppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+nnnnqqqpppprrrpppppprrqqqqqqqqqqqqqqqqqqqqqqqppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+nnnnqqqppppppppprrrppppppprrqqqqqqqqqqqqqqqqpppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+### legend
+a fg #131a26 bg #131a26 x262
+b fg #4cd07a bg #131a26 x23
+c fg #e6edf3 bg #131a26 x60
+d fg #5c6679 bg #131a26 x47
+e fg #9aa4b2 bg #131a26 x162
+f fg #7ee787 bg #131a26 x9
+g fg #4fd8e8 bg #131a26 x2
+h fg #ffc861 bg #131a26 x2
+i fg #c49bff bg #131a26 x2
+j fg #a6e35a bg #131a26 x2
+k fg #6f95ff bg #131a26 x2
+l fg #ff86c2 bg #131a26 x2
+m fg #f85149 bg #131a26 x25
+n fg #9aa4b2 bg #0b0f17 x16
+o fg #ffb86b bg #0b0f17 x17
+p fg #e6edf3 bg #0b0f17 x291
+q fg #9ecbff bg #0b0f17 x61
+r fg #5c6679 bg #0b0f17 x15
+## chips
+● #3f73d1 lead (lead)
+● #3f73d1 architect (a-arch)
+● #31854e coder-1 (a-cod1)
+● #31854e coder-2 (a-cod2)
+● #7e7823 tester (a-test)
+● #707681 reviewer (a-rev)

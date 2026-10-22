@@ -15,12 +15,14 @@ import { tmpRoot } from '../helpers.ts'
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const SWARM = `session-${sessionKey(SID).slice(0, 8)}`
 const TS = '2026-10-21T10:00:01.234Z'
+// The recorder checks ts against its clock, so every recorder here runs on the same fixed clock as TS.
+const NOW = () => new Date('2026-10-21T10:00:05.000Z')
 const TOOL = { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false }
 
 const setup = () => {
   const root = tmpRoot()
   const session = new Session(root)
-  const [record] = createRecordTools({ root, session })
+  const [record] = createRecordTools({ root, session, now: NOW })
   const tools = createTools({ root, session, now: () => new Date('2026-10-21T10:00:05.000Z') })
   const call = (args: Record<string, unknown>) => record!.handler(args)
   const tool = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
@@ -128,7 +130,7 @@ test('after a restart the recorder keeps writing to its own swarm, which the ses
   const { root, call } = setup()
   call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL })
   const session = new Session(root)
-  const [record] = createRecordTools({ root, session })
+  const [record] = createRecordTools({ root, session, now: NOW })
   record!.handler({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...TOOL, phase: 'end' } })
   assert.equal(readCurrent(root), SWARM)
   assert.equal(session.owned, true)
@@ -180,7 +182,7 @@ test('two sessions each record and remember in their own swarm', () => {
   const root = tmpRoot()
   const make = () => {
     const session = new Session(root)
-    const [record] = createRecordTools({ root, session })
+    const [record] = createRecordTools({ root, session, now: NOW })
     const tools = createTools({ root, session, now: () => new Date('2026-10-21T10:00:05.000Z') })
     return { session, record: record!, tool: (n: string, a: Record<string, unknown> = {}) => tools.find(t => t.name === n)!.handler(a) }
   }
@@ -241,7 +243,7 @@ test('a restarted session finds its renamed swarm by owner, newest first', () =>
   const root = tmpRoot()
   ping(root, new Session(root), SID_B)
   const a = new Session(root)
-  const [recA] = createRecordTools({ root, session: a })
+  const [recA] = createRecordTools({ root, session: a, now: NOW })
   recA!.handler({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: TOOL })
   // Move A's swarm to a name the implicit lookup cannot guess.
   const old = swarmLogPath(root, SWARM)
