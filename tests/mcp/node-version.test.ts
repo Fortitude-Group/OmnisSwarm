@@ -22,6 +22,7 @@ test('start.mjs is plain JavaScript that any Node can parse, and loads the serve
   const source = readFileSync(START, 'utf8')
   assert.doesNotMatch(source, /^\s*import\s[^(]*['"]\.\/server\.ts['"]/m, 'a static import of server.ts would fail before the check runs')
   assert.match(source, /await import\('\.\/server\.ts'\)/)
+  assert.match(source, /catch \(err\)[\s\S]*failed to start: /, 'a failed server import must end in one stderr line, not an unhandled rejection')
   const check = spawnSync(process.execPath, ['--check', START], { encoding: 'utf8' })
   assert.equal(check.status, 0, check.stderr)
 })

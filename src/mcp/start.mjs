@@ -7,4 +7,9 @@ if (problem !== null) {
   process.stderr.write(`${problem}\n`)
   process.exit(1)
 }
-await import('./server.ts')
+try {
+  await import('./server.ts')
+} catch (err) {
+  process.stderr.write(`omnis-swarm failed to start: ${err instanceof Error ? err.message : String(err)}\n`)
+  process.exit(1)
+}
