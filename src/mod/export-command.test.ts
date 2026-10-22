@@ -73,12 +73,72 @@ test('/omnis export gif toasts a clear failure when the server never answers', L
   expect(toasts).toEqual(['GIF export failed: the server did not answer in 5 minutes.'])
 })
 
-test('/omnis export gif passes the pane style on', LOADED, async ($, on) => {
+test('/omnis export gif passes the saved pane style on, even before the pane has rendered', LOADED, async ($, on) => {
   const seen = engine(on)
   toasting(on)
+  on('state.get', (_, e) => ({ value: { value: String(e.key) === 'paneStyle' ? 'robot' : undefined, version: 0 } }))
   await start($)
-  await $.command.run({ command: 'omnis', args: 'pane style robot', ...RUN })
   await $.command.run({ command: 'omnis', args: 'export gif alpha', ...RUN })
   await settle()
   expect(seen.calls.find(c => c.tool === 'omnis_export')!.args).toEqual({ swarm: 'alpha', style: 'robot' })
+})
+
+test('a finished export cancels its timer: no second toast after the ceiling', LOADED, async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-22T14:05:00.000Z') })
+  const seen = engine(on)
+  seen.onTool = tool => (tool === 'omnis_export' ? 'Saved C:/p/alpha.gif' : null)
+  const toasts = toasting(on)
+  await start($)
+  await $.command.run({ command: 'omnis', args: 'export gif alpha', ...RUN })
+  await settle()
+  await clock.advance(EXPORT_TIMEOUT_MS + 1000)
+  await settle()
+  expect(toasts).toEqual(['Saved C:/p/alpha.gif'])
+})
+
+test('an empty success toasts GIF saved', LOADED, async ($, on) => {
+  const seen = engine(on)
+  seen.onTool = tool => (tool === 'omnis_export' ? '' : null)
+  const toasts = toasting(on)
+  await start($)
+  await $.command.run({ command: 'omnis', args: 'export gif alpha', ...RUN })
+  await settle()
+  expect(toasts).toEqual(['GIF saved.'])
+})
+
+test('an error reply toasts its text as a failure', LOADED, async ($, on) => {
+  const seen = engine(on)
+  seen.onTool = tool => (tool === 'omnis_export' ? 'no such swarm' : null)
+  seen.errorTool = 'omnis_export'
+  const toasts = toasting(on)
+  await start($)
+  await $.command.run({ command: 'omnis', args: 'export gif alpha', ...RUN })
+  await settle()
+  expect(toasts).toEqual(['GIF export failed: no such swarm'])
+})
+
+test('a call that rejects toasts that the server did not answer', LOADED, async ($, on) => {
+  const seen = engine(on)
+  seen.onTool = tool => {
+    if (tool === 'omnis_export') throw new Error('Connection closed')
+    return null
+  }
+  const toasts = toasting(on)
+  await start($)
+  await $.command.run({ command: 'omnis', args: 'export gif alpha', ...RUN })
+  await settle()
+  expect(toasts).toEqual(['GIF export failed: the server did not answer.'])
+})
+
+test('the default-swarm lookup gives up after 15 seconds', LOADED, async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-22T14:05:00.000Z') })
+  const seen = engine(on)
+  seen.onTool = tool => (tool === 'omnis_replay' ? never() : null)
+  await start($)
+  const run = $.command.run({ command: 'omnis', args: 'export gif', ...RUN })
+  await settle()
+  await clock.advance(15_000)
+  await settle()
+  expect((await run).text).toBe('The swarm server did not answer in time; try again in a moment.')
+  expect(seen.calls.some(c => c.tool === 'omnis_export')).toBe(false)
 })

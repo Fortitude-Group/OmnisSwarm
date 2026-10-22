@@ -53,6 +53,8 @@ export type Seen = {
   news: number[]
   seq: number
   /** Answers a tool other than omnis_feed with this text when it returns one (a replay test's omnis_replay pages); a promise may never settle. */
+  /** The tool whose onTool answer is returned flagged isError. */
+  errorTool: string | null
   onTool: ((tool: string, args: Record<string, unknown>) => string | null | Promise<string | null>) | null
 }
 /** Faults beneath session.start: ui.panes or command.register that never answer. */
@@ -62,7 +64,7 @@ export const never = <T>(): Promise<T> => new Promise<T>(() => {})
 /** Stands in for the engine and the MCP server, which answers the five-agent swarm's folded state. `openAs` makes ui.open fail or hang. */
 export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: Faults = {}): Seen {
   const seen: Seen = { calls: [], opens: 0, blits: 0, invalidates: 0, panes: 0, connects: 0, shown: true, feed: 'ok', connectOk: true,
-    topBlit: null, repeats: 0, refuse: 0, blitLog: [], redrawnAt: 0, newsAt: 0, news: [], seq: 0, late: () => Promise.resolve(), onTool: null }
+    topBlit: null, repeats: 0, refuse: 0, blitLog: [], redrawnAt: 0, newsAt: 0, news: [], seq: 0, late: () => Promise.resolve(), errorTool: null, onTool: null }
   const lastCells = new Map<string, string>()
   const state = foldAll(FIVE_SWARM, fiveAgentEvents())
   let open = false
@@ -110,7 +112,7 @@ export function engine(on: On, openAs: 'ok' | 'throw' | 'hang' = 'ok', faults: F
   on('mcp.call', async (_, e) => {
     seen.calls.push({ tool: e.tool, args: e.args })
     const own = e.tool === 'omnis_feed' ? null : ((await seen.onTool?.(e.tool, e.args)) ?? null)
-    if (own !== null) return { value: { content: [{ type: 'text', text: own }], isError: false } }
+    if (own !== null) return { value: { content: [{ type: 'text', text: own }], isError: e.tool === seen.errorTool } }
     if (e.tool !== 'omnis_feed') return { value: { content: [{ type: 'text', text: '{}' }], isError: false } }
     if (seen.feed === 'late') await seen.late()
     if (seen.feed === 'throw') throw new Error('Connection closed')

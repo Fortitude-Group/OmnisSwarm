@@ -5,13 +5,14 @@ import { EXPORT_TOOL, REPLAY_TOOL } from '../core/recording.ts'
 import { parseReplayReply } from '../core/replay-reply.ts'
 import type { Sub } from './commands.ts'
 import type { Host } from './pane-runtime.ts'
-import { hostOf, rt } from './pane-runtime.ts'
+import { hostOf, readStyle, rt } from './pane-runtime.ts'
 import type { CallResult } from './pane-pull.ts'
 
 const USAGE = 'Usage: /omnis export gif [swarm].'
 const TOAST_MS = 12_000
 /** A real export can take tens of seconds; past five minutes the server is taken to be stuck. */
 export const EXPORT_TIMEOUT_MS = 5 * 60_000
+const TIMEOUT_TEXT = `GIF export failed: the server did not answer in ${EXPORT_TIMEOUT_MS / 60_000} minutes.`
 /** The probe for the most recent swarm id is a plain read of the log. */
 const PROBE_TIMEOUT_MS = 15_000
 
@@ -54,15 +55,14 @@ export async function exportCommand($: EngineInterface, words: readonly string[]
     if (reply.kind === 'none') return 'No recorded swarm here yet.'
     swarm = reply.swarm
   }
-  // The pane's own style, kept current by session.start and /omnis pane style (the mod checker only lets pane-runtime.ts read the atom).
-  const style = rt.style
+  const style = await readStyle($)
   const name = swarm
   // Not awaited: the render takes seconds, and the answer comes as a toast.
   void callWithin(host, EXPORT_TIMEOUT_MS, server, EXPORT_TOOL, { swarm: name, style })
     .then(result => {
-      if (result === 'timeout') return $.ui.toast('GIF export failed: the server did not answer in 5 minutes.', { timeoutMs: TOAST_MS })
+      if (result === 'timeout') return $.ui.toast(TIMEOUT_TEXT, { timeoutMs: TOAST_MS })
       if (result === 'failed') return $.ui.toast('GIF export failed: the server did not answer.', { timeoutMs: TOAST_MS })
-      return $.ui.toast(result.isError ? `GIF export failed: ${textOf(result)}` : textOf(result), { timeoutMs: TOAST_MS })
+      return $.ui.toast(result.isError ? `GIF export failed: ${textOf(result)}` : textOf(result) || 'GIF saved.', { timeoutMs: TOAST_MS })
     })
     .catch(() => undefined)
   return `Rendering ${name} to a GIF; the path follows when it is done.`
