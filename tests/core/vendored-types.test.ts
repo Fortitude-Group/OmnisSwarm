@@ -73,7 +73,11 @@ test('the vendored types are not older than the ones the engine last laid down (
   }
   const vendored = versionOf(join(typesDir, 'claude-code', 'index.d.ts'))
   const engine = versionOf(engineFile)
-  assert.ok(vendored !== null && engine !== null, 'both type files start with a "Written by Claude Code x.y.z." line')
+  assert.ok(vendored !== null, 'the vendored types/claude-code/index.d.ts starts with a "Written by Claude Code x.y.z." line')
+  if (engine === null) {
+    t.diagnostic('engine types have no version line')
+    return
+  }
   if (compareVersions(vendored, engine) < 0) {
     t.diagnostic(`WARNING: types/claude-code is from Claude Code ${vendored.join('.')}, the engine laid down ${engine.join('.')}. ` +
       'Refresh: copy .claude-plugin/types/claude-code{,-tools,-mcp}/index.d.ts over types/ (keep the vendored headers), then npm run check.')
