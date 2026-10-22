@@ -91,7 +91,7 @@ is used for words or numbers and must reach 4.5:1. "Signal" means it marks somet
 | `KIND.search` | `#a6e35a` | Search (signal) | 12.56 |
 | `KIND.web` | `#6f95ff` | Web (signal) | 6.78 |
 | `KIND.agent` | `#ff86c2` | Agent spawn or message tool (signal) | 8.62 |
-| `KIND.other` | `#d6dbe1` | Any other tool (signal) | 13.77 |
+| `KIND.other` | `#9aa4b2` | Any other tool (signal). Was `#d6dbe1`: a near-white flash read as a glitch, and "other" was the commonest kind in a real run | 7.61 |
 | `LINK.idle` | `#2b3546` | A message link with no recent traffic. Deliberately faint: it is the quietest layer | 1.55 |
 | `LINK.active` | `#9ecbff` | A message link just after a message; comet trail colour | 11.36 |
 | `LINK.comet` | `#f5fbff` | The comet's head | 18.38 |
@@ -111,7 +111,7 @@ is used for words or numbers and must reach 4.5:1. "Signal" means it marks somet
 | `MOTION.trailMs` | 450 | How far behind the head the trail reaches, in time | — |
 | `MOTION.trailDots` | 6 | Trail dots behind the head | — |
 | `MOTION.linkFadeMs` | 3000 | A link's brightening after a message decays back to idle, linear | — |
-| `MOTION.pulseMs` | 350 | Tool-start rim flicker, linear decay | — |
+| `MOTION.pulseMs` | **450** | Tool-start rim flicker, linear decay in 3 steps (was 350 in 4) | — |
 | `MOTION.errorPulseMs` | 900 | Failed-tool red rim pulse, linear decay | — |
 | `MOTION.clashFlashMs` | 4000 | A clash's rims blink for this long after the latest clashing edit | — |
 | `MOTION.clashBlinkMs` | **400** | Half-period of the clash blink: 1.25 blinks a second (was 250) | — |
@@ -193,12 +193,21 @@ faint track, `mix(CANVAS, TEXT.faint, 0.35)` (`#272d39`), so a near-empty contex
 every node. Arc length carries the amount, so the threshold colour is never the only carrier;
 the spotlight prints the percentage.
 
-**Tool flicker** (`pulseMs`): the outer pixel band of the node (`r - 1 < d ≤ r`) blends toward `KIND[kind]` by
-`q4(flash)`. **Also light one pixel band outside the ring** (`r + ringPx < d ≤ r + ringPx + 1`) with
-`light(KIND[kind], 0.6 × q4(flash))`. The outer flare sits on the canvas, so an edit (amber) on a haiku (yellow)
-node still shows. This is a small addition to Task 11's `paintNode`.
+**Tool flicker** (`pulseMs`): **one ring only**, the pixel band just outside the context ring
+(`r + ringPx < d ≤ r + ringPx + 1`), set to `mix(under, KIND[kind], 0.85 × q3(flash))`. The disc itself is not
+recoloured, and the colour is mixed in, not added, so the hue stays true over a glowing halo. It sits on the canvas,
+so an edit (amber) on a haiku (yellow) node still shows.
 
-**Error pulse** (`errorPulseMs`): the same rim and flare in `STATUS.failed`. Of several live pulses on one node the
+**Coalescing.** Per agent, a tool start less than **600 ms** after the last one that flickered is skipped: no
+restart, no second flicker. A burst of parallel calls reads as one flicker, and one agent flickers at most about
+1.7 times a second.
+
+*Why (live check, 2026-10-22):* the first version recoloured the disc's edge **and** added a flare outside the ring.
+With the dark ring track between them, every flicker drew three concentric bands (a target), and adding pink over
+the blue halo turned it lavender. Replaying the recorded run (5 agents, 112 tool events) showed the rate was never
+the problem (median gap per agent about 7 s); the shape and colour were.
+
+**Error pulse** (`errorPulseMs`): the same single ring in `STATUS.failed`, never coalesced or skipped. Of several live pulses on one node the
 strongest wins; a clash blink beats both.
 
 ## 5. Glyphs
@@ -244,7 +253,7 @@ layer: the dot colour becomes the cell's foreground and the cell keeps its lower
 | `cometMs` 900 | A message is travelling | ease-in-out along the link's arc; the same time for any link length, so every message reads as one beat | head 1 + trail 4 |
 | `trailMs` 450 / `trailDots` 6 | Which way the message went | trail dot *i* has strength `1 - i/7`, colour `mix(CANVAS, LINK.active, q4(k))` | 4 |
 | `linkFadeMs` 3000 | Which links carried traffic recently | linear, `mix(LINK.idle, LINK.active, recency)` | 5 |
-| `pulseMs` 350 | A tool call started | linear decay | 4 |
+| `pulseMs` 450 | A tool call started | linear decay | 3 |
 | `errorPulseMs` 900 | A tool call failed | linear decay | 4 |
 | `clashFlashMs` 4000 / `clashBlinkMs` 400 | Two agents edited the same file | square wave, rims at 0.9 strength on, off on the other half-period | 2 |
 | `tweenMs` 400 | The layout changed (an agent arrived) | ease-out cubic from old to new positions | continuous |
@@ -560,6 +569,7 @@ To check on the goldens (Task 13):
 - [ ] Nothing moves in the `idle` golden except what section 6 allows (glow for a running agent, the tick).
 - [ ] A comet head is visible in the `mid` golden and no comet in `idle`.
 - [ ] Tool flicker on a same-hue node (edit on haiku) shows in the outer flare.
+- [ ] A tool flicker is one ring outside the context ring; the disc keeps its colour and shape during it.
 - [ ] Task 2 confirms `▶` and `⚠` draw as narrow text in Windows Terminal; otherwise swap to `▸` and `▲`.
 - [ ] Every node label has a clear cell either side: no braille dot or node pixel touches a label.
 - [ ] No two node discs or halos overlap; where they would, the graph area shows the tree (legibility guard).
