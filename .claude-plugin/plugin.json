@@ -14,8 +14,8 @@
       "options": ["command", "auto", "off"]
     },
     "budgetAgentMinutes": { "type": "number", "title": "Agent time-box (minutes)", "description": "An agent running this long is asked to wrap up; it is warned at two thirds of it. 1 to 1440.", "default": 30 },
-    "budgetAgentUsd": { "type": "number", "title": "Agent budget (USD, approximate)", "description": "An agent whose estimated spend reaches this is asked to wrap up; it is warned at three fifths. Up to 1000.", "default": 5 },
-    "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Up to 1000.", "default": 20 }
+    "budgetAgentUsd": { "type": "number", "title": "Agent budget (USD, approximate)", "description": "An agent whose estimated spend reaches this is asked to wrap up; it is warned at three fifths. Above 0, at most 1000.", "default": 5 },
+    "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Above 0, at most 1000.", "default": 20 }
   },
   "mcpServers": {
     "omnis-swarm": {

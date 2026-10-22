@@ -3,17 +3,19 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 // The kit loads the plugin's own register.ts (recorder and budget guard included); a test's userConfig goes in its options.
+// A test's own import of budget-guard.ts is a separate copy, so limits are raised here through omnis_swarm_init's
+// budget, a hook the loaded guard sees. Re-arming within one swarm is covered by tests/core/budget.test.ts.
 
 const LOADED = { timeoutMs: 60000 }
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const T0 = Date.parse('2026-10-22T10:00:00.000Z')
-type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean }
+type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; toasts: string[]; sends: Array<{ to: unknown; text: string }>; appends: string[]; deliver: boolean; output: number }
 
 function engine(on: On): Seen {
   // The kit stores a plugin's appends itself; mock.session is the test's one session.append hook.
   const session = mock.session(on)
   const seen: Seen = {
-    records: [], toasts: [], sends: [], deliver: true,
+    records: [], toasts: [], sends: [], deliver: true, output: 0,
     get appends() { return session.appended().map(row => JSON.stringify(row.message)) },
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -38,8 +40,50 @@ function engine(on: On): Seen {
   on('tool.check', () => ({ decision: 'allow' }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }))
+  on('tool.call', () => ({ result: { content: 'ok' } as never }))
+  // One model step whose usage is seen.output output tokens (claude-opus-5-5: $20 a million, so 150,000 is $3).
+  on('turn.step', async function* (_$, e) {
+    return {
+      turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const,
+      usage: { input_tokens: 0, output_tokens: seen.output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' },
+    }
+  })
   return seen
 }
+
+/** Runs a stream to its end and answers what it returns. */
+async function drain<R>(stream: AsyncGenerator<unknown, R>): Promise<R> {
+  let next = await stream.next()
+  while (next.done !== true) next = await stream.next()
+  return next.value
+}
+
+/** A model step of agent a1's that spends `output` tokens. */
+async function step($: Engine, output: number, seen: Seen): Promise<void> {
+  seen.output = output
+  await drain($.turn.step({ turnId: `t${output}`, index: 0, model: 'claude-opus-5-5', messageCount: 1, agentId: 'a1' }))
+}
+
+/** The session's running cost, as Claude Code reports it. */
+const measure = ($: Engine, usd: number) => $.session.measure({ context: { window: 1 }, cost: { usd }, changed: ['cost'] } as never)
+
+const leadSpawn = ($: Engine, id: string) => $.tool.check({ tool: 'Agent', input: {}, tool_use_id: id })
+
+/** A successful omnis_swarm_init call carrying a budget: the next swarm's limits. */
+const swarmInit = ($: Engine, budget: Record<string, number>) =>
+  $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_init', tool_use_id: 'toolu_init', topology: 'hierarchical', budget } as never)
+
+/**
+ * A time stage's data: the threshold exactly, the value at most one 15 s tick (0.25 min) past it. The recorder stamps
+ * events in real time and the guard maps them onto the mock clock at bind, so a slow kit call can push a stage one tick on.
+ */
+function expectTimeStage(data: Record<string, unknown> | undefined, threshold: number, rest: Record<string, unknown> = {}): void {
+  const { value, ...others } = data ?? {}
+  expect(others).toEqual({ limit: 'time', threshold, ...rest })
+  expect(typeof value === 'number' && value >= threshold && value < threshold + 0.26).toBe(true)
+}
+
+const dataOf = (seen: Seen, type: string, limit?: string) => seen.records.find(r => r.type === type && (limit === undefined || r.data.limit === limit))?.data
 
 async function boot($: Engine, on: On) {
   const clock = mock.clock(on, { now: T0 })
@@ -55,18 +99,21 @@ async function boot($: Engine, on: On) {
 }
 
 // session.send hooks see the recipient as SendMessage spells it, so { agentId: 'a1' } arrives as 'a1'.
-// The timer ticks every 15 s from the spawn, so the stages fire on the 20:00 and 30:00 ticks exactly.
+// The timer ticks every 15 s from the spawn, so the stages fire on the 20:00 and 30:00 ticks (one tick later on a slow kit).
 test('20 minutes in: guard.warned and a toast; 30 minutes: a nudge, a copy to main and guard.nudged', LOADED, async ($, on) => {
   const { clock, seen } = await boot($, on)
   await clock.advance(21 * 60_000)
   await clock.settle()
-  expect(seen.records.filter(r => r.type === 'guard.warned')).toEqual([{ type: 'guard.warned', agent: 'a1', data: { limit: 'time', value: 20, threshold: 20 } }])
+  const warned = seen.records.filter(r => r.type === 'guard.warned')
+  expect(warned.length).toBe(1)
+  expect(warned[0]!.agent).toBe('a1')
+  expectTimeStage(warned[0]!.data, 20)
   expect(seen.toasts).toContain('coder-b: 20 min, past its 20 min time-box')
   await clock.advance(10 * 60_000)
   await clock.settle()
   expect(seen.sends).toEqual([{ to: 'a1', text: "You're past your time-box (30 min / $5). Wrap up what you have, report to main, and stop." }])
   expect(seen.appends[0]).toContain('[OmnisSwarm budget guard] coder-b passed its 30 min time-box')
-  expect(seen.records.find(r => r.type === 'guard.nudged')!.data).toEqual({ limit: 'time', value: 30, threshold: 30, delivered: true })
+  expectTimeStage(dataOf(seen, 'guard.nudged'), 30, { delivered: true })
 })
 
 test('a nudge that is not delivered is recorded with its reason and not retried', LOADED, async ($, on) => {
@@ -77,26 +124,38 @@ test('a nudge that is not delivered is recorded with its reason and not retried'
   await clock.advance(5 * 60_000)
   await clock.settle()
   expect(seen.sends.length).toBe(1)
-  expect(seen.records.find(r => r.type === 'guard.nudged')!.data).toEqual({ limit: 'time', value: 30, threshold: 30, delivered: false, reason: 'No agent is reachable' })
+  expectTimeStage(dataOf(seen, 'guard.nudged'), 30, { delivered: false, reason: 'No agent is reachable' })
+  expect(seen.appends[0]).toContain('The message was not delivered: No agent is reachable.')
 })
 
 test('past the swarm budget the lead may not spawn; a subagent, other tools and a raised budget may', LOADED, async ($, on) => {
   const { clock, seen } = await boot($, on)
-  await $.session.measure({ context: { window: 1 }, cost: { usd: 21 }, changed: ['cost'] } as never)
+  await measure($, 21)
   await clock.settle()
-  expect(seen.records.some(r => r.type === 'guard.blocked')).toBe(true)
-  const lead = await $.tool.check({ tool: 'Agent', input: {}, tool_use_id: 't1' })
+  expect(dataOf(seen, 'guard.blocked')).toEqual({ value: 21, threshold: 20 })
+  const lead = await leadSpawn($, 't1')
   expect(lead.decision).toBe('deny')
   expect(lead.reason).toBe('Swarm budget $20 reached. Raise it with /omnis budget <usd> or finish with the agents you have.')
   expect((await $.tool.check({ tool: 'Agent', input: {}, tool_use_id: 't2', agentId: 'a1' })).decision).toBe('allow')
   expect((await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 't3' })).decision).toBe('allow')
+  // A $30 budget: the new swarm starts from the $21 already spent, so $20 more is past the default but allowed.
+  await swarmInit($, { swarmUsd: 30 })
+  await clock.settle()
+  await measure($, 41)
+  await clock.settle()
+  expect((await leadSpawn($, 't4')).decision).toBe('allow')
+  await measure($, 52)
+  await clock.settle()
+  const again = await leadSpawn($, 't5')
+  expect(again.decision).toBe('deny')
+  expect(again.reason).toBe('Swarm budget $30 reached. Raise it with /omnis budget <usd> or finish with the agents you have.')
 })
 
 test('a limit from userConfig is used', { ...LOADED, options: { budgetAgentMinutes: 9 } }, async ($, on) => {
   const { clock, seen } = await boot($, on)
   await clock.advance(7 * 60_000)
   await clock.settle()
-  expect(seen.records.find(r => r.type === 'guard.warned')!.data).toEqual({ limit: 'time', value: 6, threshold: 6 })
+  expectTimeStage(dataOf(seen, 'guard.warned'), 6)
 })
 
 test('no running agent, no timer', LOADED, async ($, on) => {
@@ -106,4 +165,69 @@ test('no running agent, no timer', LOADED, async ($, on) => {
   await clock.advance(60 * 60_000)
   await clock.settle()
   expect(seen.records.filter(r => r.type.startsWith('guard.'))).toEqual([])
+})
+
+test('the swarm warns at half its budget, and a raised budget moves the warn and the block', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 11)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.warned')).toEqual([{ type: 'guard.warned', data: { limit: 'swarmCost', value: 11, threshold: 10 } }])
+  expect(seen.toasts).toContain('Swarm ≈$11.00, past its $10 warning')
+  // $40 from the next swarm on: it warns at $20 and blocks at $40, counted from the $11 spent before it.
+  await swarmInit($, { swarmUsd: 40 })
+  await clock.settle()
+  await measure($, 36)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.warned').map(r => r.data)).toEqual([
+    { limit: 'swarmCost', value: 11, threshold: 10 }, { limit: 'swarmCost', value: 25, threshold: 20 },
+  ])
+  expect((await leadSpawn($, 't1')).decision).toBe('allow')
+  await measure($, 52)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked').map(r => r.data)).toEqual([{ value: 41, threshold: 40 }])
+  expect((await leadSpawn($, 't2')).decision).toBe('deny')
+})
+
+test('omnis_swarm_end lets the block go', LOADED, async ($, on) => {
+  const { clock } = await boot($, on)
+  await measure($, 21)
+  await clock.settle()
+  expect((await leadSpawn($, 't1')).decision).toBe('deny')
+  await $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_end', tool_use_id: 'toolu_end' } as never)
+  await clock.settle()
+  expect((await leadSpawn($, 't2')).decision).toBe('allow')
+})
+
+test("an omnis_swarm_init budget is the next swarm's limit", LOADED, async ($, on) => {
+  const clock = mock.clock(on, { now: T0 })
+  const seen = engine(on)
+  await $.session.start({ cwd: '/p', surface: null, isInteractive: false })
+  await clock.settle()
+  await swarmInit($, { agentMinutes: 60 })
+  await clock.settle()
+  await $.agent.spawn({
+    tool_use_id: 'toolu_1', name: 'coder-b', subagentType: 'coder', description: 'x', prompt: 'p',
+    provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
+  })
+  await clock.settle()
+  await clock.advance(21 * 60_000)
+  await clock.settle()
+  expect(dataOf(seen, 'guard.warned')).toBeUndefined()
+  await clock.advance(20 * 60_000)
+  await clock.settle()
+  expectTimeStage(dataOf(seen, 'guard.warned'), 40)
+})
+
+test("an agent's estimated spend warns at $3 and nudges at $5", LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await step($, 150_000, seen)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.warned')).toEqual([{ type: 'guard.warned', agent: 'a1', data: { limit: 'agentCost', value: 3, threshold: 3 } }])
+  expect(seen.toasts).toContain('coder-b: ≈$3.00, past its $3 warning')
+  expect(seen.sends).toEqual([])
+  await step($, 100_000, seen)
+  await clock.settle()
+  expect(seen.sends.length).toBe(1)
+  expect(dataOf(seen, 'guard.nudged')).toEqual({ limit: 'agentCost', value: 5, threshold: 5, delivered: true })
+  expect(seen.appends[0]).toContain('[OmnisSwarm budget guard] coder-b passed its $5 budget')
 })

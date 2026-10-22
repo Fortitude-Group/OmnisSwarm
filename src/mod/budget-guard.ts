@@ -82,10 +82,10 @@ function apply(body: RecordBody, ts: string): void {
   fold(g.state, makeEvent({ type: body.type, swarm: g.state.swarm.id, src: 'recorder', data: body.data, ...(body.agent !== undefined && { agent: body.agent }), now: new Date(ts) }) as SwarmEvent)
 }
 
-/** A different swarm: start over, carrying a pending init budget into it. */
-function enter(swarm: string): void {
+/** A different swarm: start over from `baseUsd` (the session cost seen before its first event), carrying a pending init budget into it. */
+function enter(swarm: string, baseUsd: number | null): void {
   g.state = emptyState(swarm)
-  g.baseUsd = g.sessionUsd
+  g.baseUsd = baseUsd
   if (g.nextBudget !== null) {
     apply({ type: 'budget.set', data: g.nextBudget }, new Date(Date.now()).toISOString())
     g.nextBudget = null
@@ -126,8 +126,10 @@ async function nudge(host: GuardHost, a: Extract<GuardAction, { kind: 'nudge' }>
   } catch (err) {
     reason = err instanceof Error ? err.message.slice(0, 80) : 'the send failed'
   }
-  void host.record({ type: 'guard.nudged', agent: a.agent, data: { limit: a.limit, value: a.value, threshold: a.threshold, delivered, ...(reason !== undefined && reason !== '' && { reason: reason.replace(/[\p{Cc}\p{Cf}]/gu, ' ') }) } }).catch(() => undefined)
-  void host.tellMain(mainText(nameOf(a.agent), a, lim, delivered, reason)).catch(() => undefined)
+  // The engine's reason is untrusted text: no control characters reach the log or the main conversation.
+  const clean = reason === undefined || reason === '' ? undefined : reason.replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+  void host.record({ type: 'guard.nudged', agent: a.agent, data: { limit: a.limit, value: a.value, threshold: a.threshold, delivered, ...(clean !== undefined && { reason: clean }) } }).catch(() => undefined)
+  void host.tellMain(mainText(nameOf(a.agent), a, lim, delivered, clean)).catch(() => undefined)
 }
 
 /** The body each stage records. A nudge's own event waits for the send's answer, so it is folded as undelivered meanwhile. */
@@ -189,12 +191,13 @@ export function guardStarted($: EngineInterface): void {
 }
 
 export const guardObserver: RecordObserver = {
-  started: () => undefined,
   recorded: (body, ts, swarm) => {
     // The guard's own events were folded when it sent them.
     if (body.type === 'guard.warned' || body.type === 'guard.nudged' || body.type === 'guard.blocked' || body.type === 'budget.set') return
+    // A new swarm's base is the cost seen before this event, so a measure that opens the swarm still counts.
+    const before = g.sessionUsd
     if (body.type === 'session.measure' && typeof body.data.costUsd === 'number') g.sessionUsd = body.data.costUsd
-    if (g.state === null || g.state.swarm.id !== swarm) enter(swarm)
+    if (g.state === null || g.state.swarm.id !== swarm) enter(swarm, before)
     apply(body, ts)
     if (body.type === 'agent.usage' || body.type === 'session.measure' || body.type === 'agent.started' || body.type === 'agent.finished') void check()
   },
@@ -221,6 +224,7 @@ export function setSwarmBudget(usd: number): boolean {
 const failed = (result: { isError?: boolean; deny?: unknown }): boolean => result.isError === true || result.deny !== undefined
 
 export function registerBudgetGuard(on: On, options: PluginOptions): void {
+  g.timer?.cancel()
   g = freshGuard(limitsFrom(options))
 
   // Matched: guard.ts holds the one unmatched tool.check. Only the lead's real Agent calls are refused.

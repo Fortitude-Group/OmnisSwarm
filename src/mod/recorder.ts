@@ -15,9 +15,11 @@ import {
   agentFinished, agentStarted, agentUsage, messageSent, protocolMessage, sessionMeasure, toolEvent, whoOf, type Fields,
 } from './record-events.ts'
 
+/**
+ * Told about each event the server accepted. The budget guard is the only observer; it binds its host through
+ * guardStarted, called directly, because the validator lets $ reach only functions declared or imported here.
+ */
 export type RecordObserver = {
-  /** The recorder's session.start ran: bind what needs $. */
-  started: ($: EngineInterface) => void
   /** omnis_record accepted `body` (stamped `ts`) into `swarm`. */
   recorded: (body: RecordBody, ts: string, swarm: string) => void
 }
@@ -182,7 +184,7 @@ export function registerRecorder(on: On, given?: RecordObserver): void {
     // finishes find no session or server and are skipped. A failure leaves recording off; the session is untouched.
     void start($).catch(() => {})
     if (observer !== null) {
-      // A top-level function, not observer.started: the validator lets $ reach only functions declared or imported here.
+      // The guard is the only observer (see RecordObserver), so an observer means the guard binds here.
       safely($, () => guardStarted($))
     }
     return result
