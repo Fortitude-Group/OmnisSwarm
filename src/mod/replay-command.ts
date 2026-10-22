@@ -10,7 +10,10 @@ import { loadReplay, startReplay, stopReplay } from './replay.ts'
 const USAGE = 'Usage: /omnis replay [swarm] [speed 1-60], or /omnis replay stop.'
 const DEFAULT_SPEED = 10
 
-/** [swarm] [speed] in either order is not allowed: a lone number is the speed, a lone id the swarm. */
+/**
+ * [swarm] [speed], in that order: a lone number is the speed, a lone id the swarm. Any all-digit word is a speed
+ * (out of range, or not last, is the usage), never a swarm id.
+ */
 export function parseReplay(words: readonly string[]): { swarm: string | null; speed: number } | 'stop' | null {
   const rest = words.slice(1)
   if (rest.length === 1 && rest[0] === 'stop') return 'stop'
@@ -18,7 +21,8 @@ export function parseReplay(words: readonly string[]): { swarm: string | null; s
   let swarm: string | null = null
   let speed = DEFAULT_SPEED
   for (const [i, w] of rest.entries()) {
-    if (/^\d{1,2}$/.test(w)) {
+    if (/^\d+$/.test(w)) {
+      if (i !== rest.length - 1) return null
       speed = Number(w)
       if (speed < MIN_SPEED || speed > MAX_SPEED) return null
     } else if (i === 0 && isValidSwarmId(w) && w !== 'stop') swarm = w

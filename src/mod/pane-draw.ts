@@ -181,7 +181,10 @@ export function show(host: Host, now: number): void {
   wakeFor(host, frame)
 }
 
+/** Stops every timer the pane runs, a replay's included: no replay is left ticking on an older host. */
 export function stopAll(): void {
+  rt.replay?.timer?.cancel()
+  rt.replay = null
   rt.pullTimer?.cancel()
   rt.pullTimer = null
   rt.pullMs = 0
@@ -193,9 +196,6 @@ export function stopAll(): void {
 }
 
 export function closed(byPerson: boolean): void {
-  // Closing the pane ends a replay: it opens live next time.
-  rt.replay?.timer?.cancel()
-  rt.replay = null
   rt.open = false
   rt.shown = false
   rt.closedByPerson = rt.closedByPerson || byPerson

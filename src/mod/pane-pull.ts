@@ -16,7 +16,7 @@ export const PANE_ID = 'omnis-swarm'
 export const HIDDEN_PULL_MS = 1_000
 /** After this many replies in a row with no news, a shown pane pulls every IDLE_PULL_MS until news or a wake. */
 const IDLE_AFTER = 8
-const IDLE_PULL_MS = 1_500
+export const IDLE_PULL_MS = 1_500
 /** While replies are unreadable the period doubles from PULL_MS up to this; a readable reply resets it. */
 const UNREADABLE_MAX_MS = 5_000
 /** After a failed connect, the wait before the next try: from the first, doubling to the last; reset by a success. */
