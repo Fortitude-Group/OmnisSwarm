@@ -8,7 +8,7 @@ import { SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
 import { FPS } from '../render/tokens.ts'
 import type { Frame, View } from '../render/types.ts'
 import { viewBudget } from './budget-guard.ts'
-import { prunePulses } from './pane-model.ts'
+import { markDegraded, prunePulses } from './pane-model.ts'
 import { PANE_ID, periodFailed, startPulling, type PaneHooks } from './pane-pull.ts'
 import { hostOf, rt, type Host } from './pane-runtime.ts'
 import { replayClockMs, replayTotalMs } from './replay.ts'
@@ -25,10 +25,14 @@ export const viewOf = (pinned: string | null): View => ({
   pinned, spotlight: rt.spot, pulses: shownModel().pulses, lagMs: shownModel().lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
   budget: rt.replay === null ? viewBudget(rt.model.swarm) : null,
 })
+/** What the pane says when a render threw: not a read problem, so not "Waiting for the swarm". */
+export const RENDER_FAILED_TEXT = "⚠ Couldn't draw the swarm. Trying again…"
 export const waitingText = (): string =>
-  rt.model.degraded !== null
-    ? '⚠ Waiting for the swarm…'
-    : rt.model.swarm === null ? 'No swarm yet. One starts with the first agent, or with omnis_swarm_init.' : 'Reading the swarm…'
+  rt.model.degraded === 'render-failed'
+    ? RENDER_FAILED_TEXT
+    : rt.model.degraded !== null
+      ? '⚠ Waiting for the swarm…'
+      : rt.model.swarm === null ? 'No swarm yet. One starts with the first agent, or with omnis_swarm_init.' : 'Reading the swarm…'
 
 /** The frame at `now` under the budget cap, after choosing the spotlight. Starts a glide when the nodes changed. Null until there is a state and a size. */
 export function frameAt(now: number): Frame | null {
@@ -43,9 +47,21 @@ export function frameAt(now: number): Frame | null {
   rt.spot = chooseSpotlight(rt.spot, pinned, state, pruned.pulses, now)
   const { degraded, degradedAgents, hiddenFinished } = pruned
   const replay = run === null ? null : { speed: run.speed, clockMs: replayClockMs(now), totalMs: replayTotalMs(), ended: run.ended }
-  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished, replay }, budgetFps(rt.renderAvgMs))
+  const frame = render(state, viewOf(pinned), now, rt.size, { degraded: degraded === 'render-failed' ? null : degraded, degradedAgents, hiddenFinished, replay }, budgetFps(rt.renderAvgMs))
   if (rt.last !== null && frame.nodesKey !== rt.last.nodesKey) rt.tween = { from: rt.last.positions, at: now }
   return frame
+}
+
+/** frameAt for the paths with no catch of their own: a throw marks the pane render-failed and gives null, so the caller draws the note. */
+export function safeFrameAt(now: number): Frame | null {
+  try {
+    const frame = frameAt(now)
+    if (frame !== null && rt.model.degraded === 'render-failed') rt.model = { ...rt.model, degraded: null }
+    return frame
+  } catch {
+    rt.model = markDegraded(rt.model, 'render-failed').model
+    return null
+  }
 }
 
 /** A frame's time to draw and hand over: it spaces the next frame, and moves the average the motion cap follows. */
@@ -159,7 +175,7 @@ export function tick(host: Host): void {
     animate(host, frame.fps)
     wakeFor(host, frame)
   } catch {
-    periodFailed(rt, host, stopFrames)
+    periodFailed(rt, host, stopFrames, 'render-failed')
   }
 }
 
@@ -171,7 +187,7 @@ export function show(host: Host, now: number): void {
     return
   }
   const started = Date.now()
-  const frame = frameAt(now)
+  const frame = safeFrameAt(now)
   if (frame === null || rt.last === null || rt.surface !== 'terminal' || frame.treeKey !== rt.last.treeKey) {
     host.invalidate()
     return

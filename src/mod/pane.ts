@@ -9,7 +9,7 @@ import type { Grid } from '../render/grid.ts'
 import { CELL_W } from '../render/svg.ts'
 import { COMMAND_DESCRIPTION, COMMAND_HINT, runOmnis } from './commands.ts'
 import { COMMAND_FAILED, chipRow, maybeAutoOpen, resetAutoOpen } from './pane-commands.ts'
-import { animate, closed, frameAt, hooks, mounted, spent, startLive, stopAll, stopFrames, svgSource, waitingText, wakeFor } from './pane-draw.ts'
+import { animate, closed, hooks, mounted, spent, startLive, stopAll, safeFrameAt, stopFrames, svgSource, waitingText, wakeFor } from './pane-draw.ts'
 import { PANE_ID, resume, wake } from './pane-pull.ts'
 import { hostOf, loadSaved, panelOf, resetRuntime, rt } from './pane-runtime.ts'
 
@@ -61,7 +61,7 @@ export function registerPane(on: On, options: PluginOptions): void {
       wake(hooks, rt.host)
     }
     const started = Date.now()
-    const frame = frameAt(started)
+    const frame = safeFrameAt(started)
     rt.last = frame
     if (e.surface === 'terminal') {
       const { Box, Text, Button, Raster } = $.ui.resolve(e)

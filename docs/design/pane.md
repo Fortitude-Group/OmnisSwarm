@@ -466,7 +466,9 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
   number. The same holds for the summary line.
 - Row 1: `tasks` `TEXT.dim`; the counts in `TEXT.primary`, except active > 0 in `STATUS.running` and failed > 0 in
   `STATUS.failed`; `memory n` `TEXT.dim`; `! n clash(es)` in `STATUS.failed`. Right-aligned, in priority order:
-  1. the degraded note, `⚠ Swarm too large to draw (n agents)` or `⚠ Waiting for the swarm…`, in `STATUS.warn`;
+  1. the degraded note, `⚠ Swarm too large to draw (n agents)` or `⚠ Waiting for the swarm…`, in `STATUS.warn`.
+     A render that throws has no header to put a note in: the pane body is the line `⚠ Couldn't draw the swarm.
+     Trying again…` (dim text, as the other waiting lines), until a frame draws again;
   2. `+n finished` (finished agents left out of the graph) in `TEXT.dim`;
   3. the goal in `TEXT.dim`, only if all of it or at least 12 cells of it fit (clipped at its end with `…`), else
      left out.
