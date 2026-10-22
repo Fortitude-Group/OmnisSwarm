@@ -11,9 +11,13 @@ test('/omnis budget with no amount shows the limits', async ($) => {
 })
 
 test('/omnis budget refuses an amount it cannot read', async ($) => {
-  for (const bad of ['abc', '0', '5000', '1e3', '5 6']) expect(await budget($, `budget ${bad}`)).toBe(USAGE)
+  for (const bad of ['abc', '0', '0.00', '1000.01', '5000', '1e3', '5 6']) expect(await budget($, `budget ${bad}`)).toBe(USAGE)
 })
 
 test('/omnis budget 30 before the session has started says so', async ($) => {
   expect(await budget($, 'budget 30')).toBe('The budget guard is not running yet; try again once the session has started.')
+})
+
+test('the top of the range, 1000, is accepted', async ($) => {
+  expect(await budget($, 'budget 1000')).toBe('The budget guard is not running yet; try again once the session has started.')
 })

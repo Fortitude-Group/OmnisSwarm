@@ -13,15 +13,19 @@ export const budgetSub: Sub | null = {
   usage: USAGE,
 }
 
+const usdText = (n: number): string => `$${Number.isInteger(n) ? n : n.toFixed(2)}`
+
 /** `words` are the lower-cased words after /omnis, "budget" first. */
 export async function budgetCommand(_$: EngineInterface, words: readonly string[]): Promise<string | null> {
   if (words.length === 1) {
     const v = guardView()
-    return budgetText(v.limits, v.swarmUsd)
+    return budgetText(v.limits, v.swarmUsd) + (v.pendingUsd === null ? '' : ` Next swarm's budget: ${usdText(v.pendingUsd)}.`)
   }
   const usd = words.length === 2 ? parseUsd(words[1]!) : null
   if (usd === null) return USAGE
-  if (!setSwarmBudget(usd)) return 'The budget guard is not running yet; try again once the session has started.'
+  const set = await setSwarmBudget(usd)
+  if (set === null) return 'The budget guard is not running yet; try again once the session has started.'
+  if (set === 'next') return `No swarm is running. The swarm budget will be ${usdText(usd)} for the next swarm.`
   const v = guardView()
-  return `Swarm budget set to $${Number.isInteger(usd) ? usd : usd.toFixed(2)}. New agents: ${isBlocked(v.limits, v.swarmUsd) ? 'blocked' : 'allowed'}.`
+  return `Swarm budget set to ${usdText(usd)}. New agents: ${isBlocked(v.limits, v.swarmUsd) ? 'blocked' : 'allowed'}.`
 }

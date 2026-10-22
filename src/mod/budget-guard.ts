@@ -38,6 +38,8 @@ type Guard = {
   sessionUsd: number | null
   /** A budget from an omnis_swarm_init that may land in a swarm the guard has not seen yet. */
   nextBudget: BudgetPatch | null
+  /** The pending budget came from /omnis budget, so no omnis_swarm_init has recorded it: record it when its swarm begins. */
+  nextRecord: boolean
   timer: Timer | null
   /**
    * $.clock.now() minus Date.now(), read when the host is bound. The recorder stamps events with Date.now(), but the
@@ -51,7 +53,7 @@ type Guard = {
 }
 
 const freshGuard = (defaults: Limits): Guard => ({
-  defaults, host: null, state: null, baseUsd: null, sessionUsd: null, nextBudget: null, timer: null, offset: Promise.resolve(0), checking: false, again: false,
+  defaults, host: null, state: null, baseUsd: null, sessionUsd: null, nextBudget: null, nextRecord: false, timer: null, offset: Promise.resolve(0), checking: false, again: false,
 })
 /** Module state; a hot reload starts it over (and may warn once more about an agent it had already warned about). */
 let g: Guard = freshGuard(limitsFrom({}))
@@ -88,8 +90,11 @@ function enter(swarm: string, baseUsd: number | null): void {
   g.state = emptyState(swarm)
   g.baseUsd = baseUsd
   if (g.nextBudget !== null) {
-    apply({ type: 'budget.set', data: g.nextBudget }, new Date(Date.now()).toISOString())
+    const body: RecordBody = { type: 'budget.set', data: g.nextBudget }
+    apply(body, new Date(Date.now()).toISOString())
+    if (g.nextRecord) send(body)
     g.nextBudget = null
+    g.nextRecord = false
   }
 }
 
@@ -97,6 +102,7 @@ function enter(swarm: string, baseUsd: number | null): void {
 function leave(): void {
   g.state = null
   g.nextBudget = null
+  g.nextRecord = false
   syncTimer()
 }
 
@@ -204,30 +210,37 @@ export const guardObserver: RecordObserver = {
   },
 }
 
-export function guardView(): { limits: Limits; swarmUsd: number; swarm: string | null } {
-  return { limits: limits(), swarmUsd: cost(), swarm: g.state?.swarm.id ?? null }
+export function guardView(): { limits: Limits; swarmUsd: number; swarm: string | null; pendingUsd: number | null } {
+  return { limits: limits(), swarmUsd: cost(), swarm: g.state?.swarm.id ?? null, pendingUsd: g.state === null ? (g.nextBudget?.swarmUsd ?? null) : null }
 }
 
-/** The header's budget figures; null while the guard has no swarm. */
-export function viewBudget(): ViewBudget | null {
-  if (g.state === null) return null
+/** The header's budget figures; null unless the guard's swarm is the one the pane shows. */
+export function viewBudget(shownSwarm: string | null): ViewBudget | null {
+  if (g.state === null || g.state.swarm.id !== shownSwarm) return null
   const lim = limits()
   const swarmUsd = cost()
   return { swarmUsd, limit: lim.swarmUsd, warn: warnLevel(lim, 'swarmUsd'), blocked: isBlocked(lim, swarmUsd) }
 }
 
-/** /omnis budget <usd>: records budget.set and checks again (a raised limit lifts the block at once). */
-export function setSwarmBudget(usd: number): boolean {
-  if (g.host === null) return false
+/**
+ * /omnis budget <usd>: 'now' records budget.set and checks again (a raised limit lifts the block at once); 'next' keeps it
+ * for the next swarm when none is running; null before the guard is bound. Stamped on the guard's clock, as the checks are.
+ */
+export async function setSwarmBudget(usd: number): Promise<'now' | 'next' | null> {
+  const host = g.host
+  if (host === null) return null
+  const ts = new Date((await host.now()) - (await g.offset)).toISOString()
+  if (g.host !== host) return null
   if (g.state === null) {
     g.nextBudget = { ...g.nextBudget, swarmUsd: usd }
-  } else {
-    const body: RecordBody = { type: 'budget.set', data: { swarmUsd: usd } }
-    apply(body, new Date(Date.now()).toISOString())
-    send(body)
-    void check()
+    g.nextRecord = true
+    return 'next'
   }
-  return true
+  const body: RecordBody = { type: 'budget.set', data: { swarmUsd: usd } }
+  apply(body, ts)
+  send(body)
+  void check()
+  return 'now'
 }
 
 const failed = (result: { isError?: boolean; deny?: unknown }): boolean => result.isError === true || result.deny !== undefined

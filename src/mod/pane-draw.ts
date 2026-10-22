@@ -23,7 +23,7 @@ export const pinOf = (state: SwarmState): string | null => (rt.pinned !== null &
 const shownModel = () => rt.replay?.model ?? rt.model
 export const viewOf = (pinned: string | null): View => ({
   pinned, spotlight: rt.spot, pulses: shownModel().pulses, lagMs: shownModel().lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
-  budget: rt.replay === null ? viewBudget() : null,
+  budget: rt.replay === null ? viewBudget(rt.model.swarm) : null,
 })
 export const waitingText = (): string =>
   rt.model.degraded !== null
