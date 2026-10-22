@@ -7,7 +7,7 @@ import { clipText } from './format.ts'
 import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
-import { type Box, type PaneStyle, fitBoxes, paintRobot, robotLook, robotPulses } from './robot.ts'
+import { type Box, type PaneStyle, boxReach, clearBoxDots, fitBoxes, paintRobot, robotLook, robotPulses } from './robot.ts'
 import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
 import type { Point, Rect, View } from './types.ts'
 
@@ -312,7 +312,11 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
   const segment = (from: string, to: string, gap = 1): [Point, Point] | null => {
     const a = nodes.get(from)
     const b = nodes.get(to)
-    return a === undefined || b === undefined ? null : trimmed(a.p, b.p, a.r + gap, b.r + gap)
+    if (a === undefined || b === undefined) return null
+    // A robot's links stop at its box grown by 1 px; a globe's at its radius.
+    const ra = a.box !== undefined ? boxReach(a.box, a.p, b.p) : a.r + gap
+    const rb = b.box !== undefined ? boxReach(b.box, b.p, a.p) : b.r + gap
+    return trimmed(a.p, b.p, ra, rb)
   }
   const obstacles = [...nodes.values()].map(n => ({ id: n.id, p: n.p, reach: n.r + GRAPH.ringPx + 1 }))
   const bends = new Map<string, number>()
@@ -419,6 +423,8 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     px.light(p.x, p.y, LINK.active, 0.35)
   }
 
+  // Nothing fine-lined is drawn over a robot: its box keeps only its own pixels.
+  if (robots) for (const n of nodes.values()) clearBoxDots(dots, n.box!)
   compose(grid, area, px, dots)
   labels(grid, area, [...nodes.values()])
 }

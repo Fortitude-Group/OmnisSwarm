@@ -1,5 +1,5 @@
 # robot-sheet: rows S M L; columns running hop-top wave-up wave-down error-red error-off waiting blink done failed stuck clash placeholder degraded still
-## sheet 270x30 pairs 88 sha 31790f91a5b6eb9c
+## sheet 270x30 pairs 90 sha 26156873a43756ca
 ### glyphs
                                                                                                                                                                                                                                                                               
                                                                                                                                                                                                                                                                               
@@ -143,4 +143,4 @@ $ fg #2b664a bg #2b664a x8
 ^ fg #2e1a21 bg #0b0f17 x4
 _ fg #733136 bg #0b0f17 x4
 ~ fg #2a2e36 bg #0b0f17 x12
-. 8 more pairs
+. 10 more pairs

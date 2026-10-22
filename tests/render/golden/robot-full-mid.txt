@@ -1,29 +1,29 @@
 # robot-full-mid: hierarchical at +30000 ms in 120x44; step full, fps 20, spotlight a-cod1
-## top 120x26 pairs 95 sha 60b80613f02880a0
+## top 120x26 pairs 72 sha 6bf65dffb55d0b63
 ### glyphs
  ◆ auth refactor · hierarchical · 6 agents 4▶ · ≈$0.57+ · ctx 34% · 259k tok · ≈$0.11/min · cc $1.20                    
  tasks 0 pending · 1 active · 1 done · 0 failed · memory 1 · ! 1 clash                   move sessions to signed tokens 
                                                                                                                         
                                                        ▀▀▀▀▀▀▀▀▀▀▀                                                      
                                                                                                                         
-                                                       ▀⡀      ⢀ ▀                                                      
-                                                    ⢀ ⠔⠈▀⣠▀   ⡄ ⠁⠢ ⡀                                                    
-                                                ⢀ ⠔ ⠁  ⡠⡪⠁▀▀▀▀▀⢄▀  ⠈ ⠢ ⡀                                                
-                                              ⠔ ⠁    ⢀⠞ ◆ lead ▶       ⠈ ⠤                                              
-                                          ⠤ ⠉       ⢰⢃⠄          ⠠⡀        ⠉ ⠤                                          
-                                      ⠤ ⠉          ⢠⢣              ⡄           ⠉ ⠤                                      
-                     ▀ ▀▀▀▀▀▀▀▀▀ ▀⠤ ⠉        ▀▀▀▀▀▀⡮▀              ▀⢄▀▀▀▀▀▀        ⠉ ⠤                                  
-                         ▀   ▀  ⠉            ▀▀▀▀▀▀⠁▀              ▀▀▀▀▀▀▀▀            ⠑ ⢄▀▀▀▀▀                         
-                      ▀  ▀   ▀ ⠠⠤⣀⡀          ▀ ▀  ▀ ▀              ▀ ▀  ▀ ▀            ⣀⡠⠤     ▀                        
-                     ▀▀ ▀ ▀▀▀ ▀⠈⠂⠠⠌⢉⡒⠢⠤⢄⣀⡀  ▀▀▀ ▀▀ ▀▀▀            ▀▀▀ ▀▀ ▀▀▀    ⣀⣀⠤⠤⠒⠊⠉  ▀ ▀▀ ▀                         
-                       ▀▀▀▀▀▀▀⠱⡀     ⠈⠂⠠⠄⢈⡉⠑⠒⠒⠤⠤⢄⣀⣀⣀⡀               ▀⣀⣀⣀⣀⠤⠤⠔⠒⠒⠉⠉                                        
-                      ▶ architect           ▶ tester ! ⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉ ✕ reviewer             ? ghost                        
-                                ⠑⣌⠂              ⠈⠂⠠⠄⢀⡀                                                                 
-                                 ⠈⠢⡑                   ⠈⠂⠠⠄⢀⡀                                                           
-                                   ⠈⠢⣕▀▀▀▀▀▀▀▀▀▀             ⠈⠂⠠⠄⢀⡀                                                     
-                                     ▀⠙⠂▀▀▀▀▀▀▀▀                   ⠈⠂⠠⠄⢀⡀                                               
-                                                                         ⠈⠂                                             
-                                     ▀        ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁⠈⠉ ⠈⠉ ⠈⠉ ⠈⠉ ⠈⠉ ▀▀▀ ▀▀▀ ▀                                    
+                                                       ▀         ▀                                                      
+                                                     ⠠⠄ ▀ ▀   ▀ ▀  ⣀                                                    
+                                                 ⢀⠄⠈⠁   ▀▀▀▀▀▀▀▀▀    ⠒ ⡀                                                
+                                             ⢀⠄⠐⠁     ⡠ ◆ lead ▶       ⠈ ⠢ ⡀                                            
+                                         ⢀⠄⠐⠁       ⢀⠎⠙          ⠃         ⠈ ⠢ ⡀                                        
+                                     ⢀⡀⠐⠁           ⡜⠊            ⠑            ⠈ ⠤                                      
+                     ▀ ▀▀▀▀▀▀▀▀▀ ▀⡀⠐⠂        ▀▀▀▀▀▀⠨⠃              ⠘▀▀▀▀▀▀▀        ⠉ ⠤                                  
+                         ▀   ▀               ▀▀▀▀▀▀▀▀              ▀▀▀▀▀▀▀▀            ⠁ ▀▀▀▀▀▀                         
+                      ▀  ▀   ▀  ▀ ⠤⢀⡀        ▀ ▀  ▀ ▀              ▀ ▀  ▀ ▀         ⢀⢀⠤⠄▀      ▀                        
+                     ▀▀ ▀ ▀▀▀ ▀ ▀▀⠤ ⡈⠉⠒⠢⠤⣀⡀ ▀▀▀ ▀▀ ▀▀▀            ▀▀▀ ▀▀ ▀▀▀   ⣀⡠⠤⠒⠊⠉    ▀ ▀▀ ▀                         
+                       ▀▀▀▀▀▀▀▀▀    ⠈ ⠒ ⠤ ⡈⠉⠑ ▀▀▀▀▀▀                ▀▀▀▀▀▀ ⠒⠒⠉⠉                                         
+                      ▶ architect         ⠈ ▶ tester ! ⠉⠉⠑⠒⠒⠒⠒⠒⠊⠈ ✕ reviewer             ? ghost                        
+                                 ⠱⣄             ⠈ ⠒ ⠤ ⡀                                                                 
+                                  ⠉⢆⡄                 ⠈ ⠒ ⠤ ⡀                                                           
+                                    ⠉⠣▀▀▀▀▀▀▀▀▀▀            ⠈ ⠒ ⠤ ⡀                                                     
+                                     ▀▀▀▀▀▀▀▀▀▀▀                  ⠈ ⠒ ⠤ ⡀                                               
+                                                                                                                        
+                                     ▀         ▀ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ⠉⠁ ▀ ▀▀▀ ▀▀▀ ▀                                    
                                       ▀ ▀   ▀ ▀                            ▀ ▀▀▀ ▀                                      
                                       ▀▀▀▀▀▀▀▀▀                           ▀▀▀▀▀▀▀▀▀                                     
                                       ▶ coder-1                           ✓ coder-2                                     
@@ -33,27 +33,27 @@ aeeeeeecccccccccdddffffffffdddccccccdddccccccccdddeeeeeeeedddgggggggggaaaaaaaaaa
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhijjjjjjjjjihhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhkllhlllhllkhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhmnllllllnlmhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohoopqphhhrhrohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohohohhstuvvvvvwvhhohohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohohhhhxyzABBBBBCCohhhhhhohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohohhhhhhhxxohhhhhhhhhhoohhhhhhhhohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohohhhhhhhhhhxxhhhhhhhhhhhhhhohhhhhhhhhhhohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhDEFFFFFFFFFEDohohhhhhhhhGGGGGGHGhhhhhhhhhhhhhhIJIIIIIIhhhhhhhhohohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhEKllplllpllLEhhhhhhhhhhMNOOOOOPNMhhhhhhhhhhhhQRSSSSSSRQhhhhhhhhhhhohTUUUUUhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhEVllWlllWlXYZshhhhhhhhhM0lWllWl0MhhhhhhhhhhhhQS121121SQhhhhhhhhhhhs3455555Uhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhh67lplppplpn89sssssssshh!$plpplp$!hhhhhhhhhhhh%&*1**1*&%hhhhssssssshh+5++5+hhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhh-------/uhhhhhoooosssss::::::shhhhhhhhhhhhhhh;<<<<<sssssshhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhCBBBBBBBBBBhhhhhhhhhhoCBBBBBBB==ssssssssssss>>>>>>>>>>hhhhhhhhhhhhhCBBBBBBhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh?xohhhhhhhhhhhhhhoooooohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh?xxhhhhhhhhhhhhhhhhhhhoooooohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhsx@^^^^^^^^^^hhhhhhhhhhhhhoooooohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh_~.........~_hhhhhhhhhhhhhhhhhhoooooohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh_.llhlllhll._hhhhhhhhhhhhhhhhhhhhhhhho.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh_.llllllll.._>>h>>h>>h>>>>h>>h>>h>>h>...........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhphphhhphphhhhhhhhhhhhhhhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhCBBBBBBBBhhhhhhhhhhhhhhhhhhhhhhhhhhh.........hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhmlllllllllmhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhnnhohohhhohohhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhnnnnhhhppppppppphhhhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhnnnnhhhhhqrstttttuunhhhhhhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhnnnnhhhhhhhvvwhhhhhhhhhhnhhhhhhhhhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhnnnnhhhhhhhhhhhvnhhhhhhhhhhhhnhhhhhhhhhhhhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhxyzzzzzzzzzyxnnnhhhhhhhhAAAAAABBhhhhhhhhhhhhhhCDDDDDDDhhhhhhhhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhyEllolllollEyhhhhhhhhhhFGHHHHHHGFhhhhhhhhhhhhIJKKKKKKJIhhhhhhhhhhhnhLLLLLLhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhyMllNlllNllMywqqhhhhhhhFOlNllNlOFhhhhhhhhhhhhIKPQPPQPKIhhhhhhhhqqqqLRRRRRRLhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhSTlolooololTSnhqqqqqqqhUVolooloVUhhhhhhhhhhhhWXYPYYPYXWhhhqqqqqqhhhhZRZZRZhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhh000000000hhhhnhnhnhqqqh111111hhhhhhhhhhhhhhhh222222hqqqqhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhuttttttttttvhhhhhhhhnhuttttttt33qqqqqqqqqqqq4444444444hhhhhhhhhhhhhutttttthhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh5vhhhhhhhhhhhhhnhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhrqvhhhhhhhhhhhhhhhhhnhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhw67777777777hhhhhhhhhhhhnhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh89!!!!!!!!!98hhhhhhhhhhhhhhhhhnhnhnhnhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh8$llhlllhll$8hhhhhhhhhhhhhhhhhhhhhhhhh%%%%%%%%%hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh8&lllllllll&844h44h44h44h44h44h44h44h*%***%***%*hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhohohhhohohhhhhhhhhhhhhhhhhhhhhhhhhhh%+%+++%+%hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh---------hhhhhhhhhhhhhhhhhhhhhhhhhhh/////////hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhutttttttthhhhhhhhhhhhhhhhhhhhhhhhhhh:;;;;;;;;hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 ### legend
 a fg #131a26 bg #131a26 x42
 b fg #b48cff bg #131a26 x2
@@ -62,80 +62,71 @@ d fg #5c6679 bg #131a26 x36
 e fg #9aa4b2 bg #131a26 x89
 f fg #7ee787 bg #131a26 x11
 g fg #f85149 bg #131a26 x9
-h fg #0b0f17 bg #0b0f17 x2366
+h fg #0b0f17 bg #0b0f17 x2376
 i fg #0b0f17 bg #2a477d x2
 j fg #2a477d bg #d77757 x9
 k fg #2a477d bg #2a477d x2
-l fg #d77757 bg #d77757 x51
+l fg #d77757 bg #d77757 x56
 m fg #d77757 bg #2a477d x2
-n fg #3c4352 bg #d77757 x3
-o fg #3c4352 bg #0b0f17 x64
-p fg #d77757 bg #0b0f17 x17
-q fg #3c4e64 bg #0b0f17 x1
-r fg #3c4352 bg #714337 x2
-s fg #9ecbff bg #0b0f17 x43
-t fg #6d8cb2 bg #172540 x1
-u fg #799cc5 bg #172540 x2
-v fg #223b68 bg #0b0f17 x6
-w fg #3c4352 bg #172540 x1
-x fg #799cc5 bg #0b0f17 x9
-y fg #f5fbff bg #273344 x1
-z fg #f5fbff bg #0b0f17 x1
-A fg #b48cff bg #0b0f17 x1
-B fg #e6edf3 bg #0b0f17 x36
-C fg #7ee787 bg #0b0f17 x6
-D fg #0b0f17 bg #1a2b4a x2
-E fg #1a2b4a bg #1a2b4a x5
-F fg #1a2b4a bg #3964b0 x9
-G fg #0b0f17 bg #2f3121 x7
-H fg #799cc5 bg #1d201c x1
-I fg #0b0f17 bg #2e1a21 x7
-J fg #3c4352 bg #1d151c x1
-K fg #3964b0 bg #3964b0 x1
-L fg #3c4352 bg #3964b0 x1
-M fg #2f3121 bg #2f3121 x4
-N fg #2f3121 bg #c19112 x2
-O fg #c19112 bg #d77757 x5
-P fg #799cc5 bg #cc8435 x1
-Q fg #2e1a21 bg #2e1a21 x4
-R fg #2e1a21 bg #733136 x2
-S fg #733136 bg #2a2e36 x8
-T fg #3c4352 bg #1d222c x1
-U fg #0b0f17 bg #2e3441 x6
-V fg #3964b0 bg #d77757 x1
-W fg #0b0f17 bg #d77757 x4
-X fg #9ecbff bg #d77757 x1
-Y fg #f5fbff bg #9c91b0 x1
-Z fg #9ecbff bg #1a2b4a x1
-0 fg #c19112 bg #4fd8e8 x2
-1 fg #2a2e36 bg #2a2e36 x6
-2 fg #f85149 bg #2a2e36 x2
-3 fg #9ecbff bg #1d222c x1
-4 fg #9ecbff bg #2e3441 x1
-5 fg #2e3441 bg #2e3441 x7
-6 fg #1a2b4a bg #0b0f17 x1
-7 fg #3964b0 bg #0b0f17 x1
-8 fg #3c4352 bg #223a64 x1
-9 fg #3c4352 bg #131d31 x1
-! fg #2f3121 bg #0b0f17 x2
-$ fg #c19112 bg #0b0f17 x2
-% fg #2e1a21 bg #0b0f17 x2
-& fg #733136 bg #0b0f17 x2
-* fg #2a2e36 bg #0b0f17 x4
-+ fg #2e3441 bg #0b0f17 x4
-- fg #0b0f17 bg #223b68 x7
-/ fg #0b0f17 bg #172540 x1
-: fg #9ecbff bg #33351f x6
-; fg #343943 bg #0b0f17 x1
-< fg #9ecbff bg #20242d x5
-= fg #e69f00 bg #0b0f17 x2
-> fg #f85149 bg #0b0f17 x27
-? fg #6d8cb2 bg #0b0f17 x2
-@ fg #f5fbff bg #2e4850 x1
-^ fg #0b0f17 bg #1a392f x10
-_ fg #1a392f bg #1a392f x6
-~ fg #1a392f bg #398c60 x2
-. 15 more pairs
+n fg #3c4352 bg #0b0f17 x60
+o fg #d77757 bg #0b0f17 x19
+p fg #223b68 bg #0b0f17 x9
+q fg #9ecbff bg #0b0f17 x40
+r fg #6d8cb2 bg #0b0f17 x2
+s fg #b48cff bg #0b0f17 x1
+t fg #e6edf3 bg #0b0f17 x36
+u fg #7ee787 bg #0b0f17 x6
+v fg #799cc5 bg #0b0f17 x6
+w fg #f5fbff bg #273344 x3
+x fg #0b0f17 bg #1a2b4a x2
+y fg #1a2b4a bg #1a2b4a x6
+z fg #1a2b4a bg #3964b0 x9
+A fg #0b0f17 bg #2f3121 x6
+B fg #799cc5 bg #1d201c x2
+C fg #3c4352 bg #1d151c x1
+D fg #0b0f17 bg #2e1a21 x7
+E fg #3964b0 bg #3964b0 x2
+F fg #2f3121 bg #2f3121 x4
+G fg #2f3121 bg #c19112 x2
+H fg #c19112 bg #d77757 x6
+I fg #2e1a21 bg #2e1a21 x4
+J fg #2e1a21 bg #733136 x2
+K fg #733136 bg #2a2e36 x8
+L fg #0b0f17 bg #2e3441 x8
+M fg #3964b0 bg #d77757 x2
+N fg #0b0f17 bg #d77757 x4
+O fg #c19112 bg #4fd8e8 x2
+P fg #2a2e36 bg #2a2e36 x6
+Q fg #f85149 bg #2a2e36 x2
+R fg #2e3441 bg #2e3441 x8
+S fg #1a2b4a bg #0b0f17 x2
+T fg #3964b0 bg #0b0f17 x2
+U fg #2f3121 bg #0b0f17 x2
+V fg #c19112 bg #0b0f17 x2
+W fg #2e1a21 bg #0b0f17 x2
+X fg #733136 bg #0b0f17 x2
+Y fg #2a2e36 bg #0b0f17 x4
+Z fg #2e3441 bg #0b0f17 x4
+0 fg #0b0f17 bg #223b68 x9
+1 fg #5b5a26 bg #0b0f17 x6
+2 fg #343943 bg #0b0f17 x6
+3 fg #e69f00 bg #0b0f17 x2
+4 fg #f85149 bg #0b0f17 x26
+5 fg #3c4e64 bg #0b0f17 x1
+6 fg #f5fbff bg #132423 x1
+7 fg #0b0f17 bg #1a392f x10
+8 fg #1a392f bg #1a392f x6
+9 fg #1a392f bg #398c60 x2
+! fg #398c60 bg #d77757 x9
+$ fg #398c60 bg #398c60 x2
+% fg #504646 bg #504646 x16
+& fg #d77757 bg #398c60 x2
+* fg #0b0f17 bg #504646 x8
++ fg #504646 bg #0b0f17 x5
+- fg #22533a bg #0b0f17 x9
+/ fg #1e282b bg #0b0f17 x9
+: fg #8b98a9 bg #0b0f17 x1
+; fg #9aa4b2 bg #0b0f17 x8
 ## bottom 120x17 pairs 30 sha 530d252d7a69365a
 ### glyphs
  ● coder-1 · coder · claude-sonnet-5-5                                                                  ▶ running · 25s 

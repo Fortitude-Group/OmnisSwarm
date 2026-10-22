@@ -4,12 +4,14 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { foldAll } from '../../src/core/fold.ts'
+import { agentStats } from '../../src/core/stats.ts'
+import { desaturate, mix } from '../../src/render/color.ts'
 import { pulsesFrom } from '../../src/mod/pane-model.ts'
-import { Pixels } from '../../src/render/canvas.ts'
+import { Dots, Pixels } from '../../src/render/canvas.ts'
 import { render } from '../../src/render/frame.ts'
 import { FULL_MOTION, motionFor } from '../../src/render/fx.ts'
 import { pairCount } from '../../src/render/grid.ts'
-import { anyOverlap, blinkClosed, boxAt, fitBoxes, nextBlinkAt, paintRobot, robotCrowded, robotPulses } from '../../src/render/robot.ts'
+import { anyOverlap, blinkClosed, boxAt, boxReach, clearBoxDots, fitBoxes, nextBlinkAt, paintRobot, robotCrowded, robotPulses } from '../../src/render/robot.ts'
 import { ROBOT, activeSkin } from '../../src/render/sprites.ts'
 import { CANVAS, KIND, LINK, MODEL, STATUS } from '../../src/render/tokens.ts'
 import { emptyView } from '../../src/render/types.ts'
@@ -115,12 +117,16 @@ test('a waiting robot blinks for 200 ms in every 6 s, and the loop is told when 
   assert.ok(next > now && next <= now + 6000)
   assert.notEqual(blinkClosed('w', next - 1), blinkClosed('w', next + 1))
   assert.equal(nextBlinkAt({ w: { ...s, status: 'running' } }, now), null)
-  // In a frame: robots ask for the blink frames, globes never do.
-  const view = { ...emptyView(), style: 'robot' as const }
-  const waiting = { ...swarm, agents: { ...swarm.agents, 'a-arch': { ...swarm.agents['a-arch']!, finishedAt: null } } }
-  assert.equal(render(waiting, { ...emptyView() }, FIVE_AT.idle, { columns: 120, rows: 44 }).wakeAt, undefined)
-  const f = render(waiting, view, FIVE_AT.idle, { columns: 120, rows: 44 })
-  assert.ok(f.wakeAt === undefined || (f.wakeAt > FIVE_AT.idle && f.wakeAt <= FIVE_AT.idle + 6000))
+  // In a frame at the idle time (lead, architect, coder-1 and tester are waiting): robots ask for the next blink edge,
+  // globes and still frames never do.
+  const t = FIVE_AT.idle
+  const stats = Object.fromEntries(Object.keys(swarm.agents).map(id => [id, agentStats(swarm, id, t)!]))
+  assert.equal(stats['a-arch']!.status, 'waiting')
+  const want = nextBlinkAt(stats, t)
+  assert.ok(want !== null && want > t && want <= t + 6000)
+  assert.equal(render(swarm, { ...emptyView(), style: 'robot' }, t, { columns: 120, rows: 44 }).wakeAt, want)
+  assert.equal(render(swarm, emptyView(), t, { columns: 120, rows: 44 }).wakeAt, undefined)
+  assert.equal(render(swarm, { ...emptyView(), style: 'robot', still: true }, t, { columns: 120, rows: 44 }).wakeAt, undefined)
 })
 
 test('sizes step down graph-wide until no two boxes overlap, then at the canvas edges', () => {
@@ -138,7 +144,7 @@ test('sizes step down graph-wide until no two boxes overlap, then at the canvas 
   assert.equal(robotCrowded({ a: { x: 10, y: 10 }, b: { x: 19, y: 10 } }), true)
 })
 
-test('in robot style a crowded graph shows the tree, and labels sit one row under the box whatever the hop', () => {
+test('labels sit one row under the box whatever the hop', () => {
   const swarm = foldAll(FIVE_SWARM, fiveAgentEvents())
   const view = { ...emptyView(), style: 'robot' as const, pulses: pulsesFrom(fiveAgentEvents()) }
   const rows = (now: number) => {
@@ -163,4 +169,48 @@ test('no rule outside ROBOT_SKINS names a pixel of a particular skin', () => {
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'render', 'robot.ts'), 'utf8')
   assert.equal(/clawd|ROBOT_SKINS/.test(src), false, 'robot.ts reaches skins only through activeSkin()')
   assert.equal(/\.(eyes|arms)\.(open|closed|cross|up|down)\[/.test(src), false, 'robot.ts never indexes a bitmap row directly')
+})
+
+test('tones and bar colours: waiting dims the body, done ghosts it and its bar, the bar turns amber and red from 70% and 90%', () => {
+  const ghost = (c: number): number => mix(c, mix(desaturate(c, 0.7), CANVAS, 0.55), 1)
+  assert.equal(lookOf(sheetCell('waiting', 'M')).body, 0x9b563f)
+  const done = lookOf(sheetCell('done', 'L'))
+  assert.equal(done.body, 0x504646)
+  assert.deepEqual([done.bar?.tone, done.bar?.hot], [ghost(MODEL.sonnet), ghost(STATUS.failed)], 'a done bar ghosts its threshold colour too')
+  assert.equal(lookOf(sheetCell('running', 'M')).bar?.hot, STATUS.warn)
+  assert.equal(lookOf(sheetCell('running', 'L')).bar?.hot, STATUS.failed)
+  // Painted: an M bar at 75% starts amber and ends in the track.
+  const px = new Pixels(40, 30, CANVAS)
+  const box = boxAt({ x: 20, y: 15 }, 'M')
+  paintRobot(px, box, lookOf(sheetCell('running', 'M')))
+  const [x0, , x1] = activeSkin().sprites.M.body
+  const bar = Array.from({ length: x1 - x0 + 1 }, (_, i) => px.get(box.left + x0 + i, box.top + box.h - 1))
+  assert.equal(bar[0], STATUS.warn)
+  assert.equal(bar.at(-1), mix(CANVAS, MODEL.sonnet, 0.35))
+})
+
+test('the halo follows the trunk: lit right above it, never in the gaps between the legs', () => {
+  const look = { ...lookOf(sheetCell('running', 'M')), lift: 0 }
+  const px = new Pixels(40, 30, CANVAS)
+  const box = boxAt({ x: 20, y: 15 }, 'M')
+  paintRobot(px, box, look)
+  const s = activeSkin().sprites.M
+  const top = box.top + ROBOT.size.M.headroom
+  assert.notEqual(px.get(box.left + s.body[0], top - 1), CANVAS, 'd = 1 above the trunk is lit')
+  const legs = s.eyes.open[s.h - 1]!
+  for (let x = 0; x < s.w; x++) if (legs[x] === '.') assert.equal(px.get(box.left + x, top + s.h - 1), CANVAS, `leg-row gap ${x} stays clear`)
+})
+
+test('links stop at a robot box grown by 1 px, and no braille dot is left inside a box', () => {
+  const box = boxAt({ x: 20, y: 20 }, 'M')
+  assert.equal(20 + boxReach(box, { x: 20, y: 20 }, { x: 60, y: 20 }), box.left + box.w + 1)
+  assert.equal(20 + boxReach(box, { x: 20, y: 20 }, { x: 20, y: 60 }), box.top + box.h + 1)
+  const dots = new Dots(40, 20)
+  dots.line({ x: 0, y: 40 }, { x: 79, y: 40 }, 0xffffff)
+  clearBoxDots(dots, box)
+  const row = Math.floor(40 / 4)
+  for (let y = Math.floor(box.top / 2); y <= Math.floor((box.top + box.h - 1) / 2); y++) {
+    for (let x = box.left; x < box.left + box.w; x++) assert.equal(dots.bits[y * dots.columns + x], 0, `cell ${x},${y}`)
+  }
+  assert.notEqual(dots.bits[row * dots.columns], 0, 'dots outside the box stay')
 })

@@ -411,9 +411,10 @@ export function registerPane(on: On, options: PluginOptions): void {
   })
 
   on('command.run', { command: 'omnis' }, async ($, e) => {
-    const [sub = '', arg = '', value = ''] = e.args.trim().toLowerCase().split(/\s+/)
+    const words = e.args.trim().toLowerCase().split(/\s+/)
+    const [sub = '', arg = '', value = ''] = words
     if (sub !== 'pane') return { text: USAGE }
-    if (arg === 'style') return { text: await styleCommand($, value) }
+    if (arg === 'style') return { text: words.length > 3 ? USAGE : await styleCommand($, value) }
     return { text: await paneCommand($, arg) }
   }).catch(() => COMMAND_FAILED)
 

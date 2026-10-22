@@ -5,7 +5,7 @@
 import type { AgentState } from '../core/fold.ts'
 import type { ToolKind } from '../core/events.ts'
 import type { AgentStats } from '../core/stats.ts'
-import type { Pixels } from './canvas.ts'
+import type { Dots, Pixels } from './canvas.ts'
 import { add, clamp01, desaturate, mix, quantise, scale } from './color.ts'
 import { FULL_MOTION, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { ROBOT, ROBOT_SIZES, activeSkin, composite, type Arms, type Eyes, type RobotSize, type Skin } from './sprites.ts'
@@ -37,6 +37,29 @@ export function boxAt(p: Point, size: RobotSize, skin: Skin = activeSkin()): Box
   const s = skin.sprites[size]
   const h = ROBOT.size[size].headroom + s.h + 1
   return { size, left: Math.round(p.x - s.w / 2), top: Math.round(p.y - h / 2), w: s.w, h }
+}
+
+/**
+ * How far from `from` toward `to` the line stays inside `box` grown by 1 px (pixel edges left - 1 to left + w + 1), so
+ * links stop at the robot's box rather than its globe radius.
+ */
+export function boxReach(box: Box, from: Point, to: Point): number {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy)
+  if (!(len > 0)) return 0
+  const exit = (d: number, p: number, lo: number, hi: number): number => (d > 0 ? (hi - p) / d : d < 0 ? (lo - p) / d : Number.POSITIVE_INFINITY)
+  const t = Math.min(exit(dx, from.x, box.left - 1, box.left + box.w + 1), exit(dy, from.y, box.top - 1, box.top + box.h + 1))
+  return Math.max(0, t) * len
+}
+
+/** Clears the braille dots in every cell the box touches. */
+export function clearBoxDots(dots: Dots, box: Box): void {
+  const y0 = Math.max(0, Math.floor(box.top / 2))
+  const y1 = Math.min(dots.rows - 1, Math.floor((box.top + box.h - 1) / 2))
+  const x0 = Math.max(0, box.left)
+  const x1 = Math.min(dots.columns - 1, box.left + box.w - 1)
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) dots.bits[y * dots.columns + x] = 0
 }
 
 /** Whether any two boxes, each grown by 1 px on every side, overlap. A sweep along x, so sparse graphs are near linear. */
@@ -99,6 +122,7 @@ export function robotPulses(view: View, tEff: number, motion: Readonly<Motion>):
     const ms = p.isError ? MOTION.errorPulseMs : MOTION.pulseMs
     const steps = p.isError ? 4 : 3
     const age = tEff - p.at
+    // pane.md 12.5 names steps N..1 over the window (`q3(flash)` 3, 2, 1), so a step is ceil(flash x N), not quantise().
     const step = motion.pulseFade ? Math.ceil(flash(p.at, tEff, ms) * steps) : age >= 0 && age < Math.max(ms, motion.pulseHoldMs) ? steps : 0
     if (step <= 0) continue
     const cur = out.get(p.agent) ?? { wave: 0, kind: 'other' as ToolKind, error: 0, waveAt: -Infinity, errorAt: -Infinity }
@@ -119,7 +143,8 @@ export type Look = {
   glow: { color: number; k: number } | null
   wH: number
   outline: { color: number; k: number } | null
-  bar: { fill: number | null; tone: number } | null
+  /** `hot`: the amber or red of a filled bar from 70%, ghosted with a done robot. */
+  bar: { fill: number | null; tone: number; hot: number } | null
 }
 
 /** Whether a waiting agent's eyes are shut for its blink at `now`. */
@@ -157,6 +182,10 @@ export function robotLook(i: LookInput): Look {
   const wH = 1 + Math.round(2 * clamp01((i.r - range.rLo) / (range.rHi - range.rLo)))
   const hasCross = skin.sprites[size].eyes.cross !== undefined
   const model = modelColor(s.model)
+  const hotOf = (fill: number | null): number => {
+    const c = contextColor(fill ?? 0)
+    return s.status === 'done' ? stateTone(c, s, a, now, motion, c) : c
+  }
   if (s.placeholder) {
     const body = mix(CANVAS, TEXT.faint, motion.fadeIn ? quantise(fadeIn(a.startedAt, now), 8) : now >= a.startedAt ? 1 : 0)
     return { body, eye: CANVAS, eyes: 'closed', arms: 'down', armColor: null, lift: 0, glow: null, wH, outline: null, bar: null }
@@ -197,7 +226,7 @@ export function robotLook(i: LookInput): Look {
     glow: glowOf,
     wH,
     outline,
-    bar: { fill: s.contextFill, tone: stateTone(model, s, a, now, motion, model) },
+    bar: { fill: s.contextFill, tone: stateTone(model, s, a, now, motion, model), hot: hotOf(s.contextFill) },
   }
 }
 
@@ -243,7 +272,7 @@ export function paintRobot(px: Pixels, box: Box, look: Look): void {
     const y = box.top + box.h - 1
     for (let i = 0; i < n; i++) {
       const on = fill !== null && (i + 0.5) / n <= fill
-      px.set(sx + x0 + i, y, !on ? track : fill! >= 0.7 ? contextColor(fill!) : look.bar.tone)
+      px.set(sx + x0 + i, y, !on ? track : fill! >= 0.7 ? look.bar.hot : look.bar.tone)
     }
   }
 }
