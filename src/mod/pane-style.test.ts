@@ -1,10 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { PANE, RUN, engine, opened, rasterText } from './test-engine.ts'
+import { PANE, RUN, engine, opened, rasterText, KIT } from './test-engine.ts'
 import { FIVE_AT } from '../../tests/fixtures/swarm-five.ts'
 
 // pane.md 12.1: /omnis pane style robot|globe, one pane-wide setting kept in $.state as the pin is.
 
-test('/omnis pane style robot draws robots at once, is kept in state, and globe brings the globes back', async ($, on) => {
+test('/omnis pane style robot draws robots at once, is kept in state, and globe brings the globes back', KIT, async ($, on) => {
   const { seen, ui } = await opened($, on)
   const graphOf = async (): Promise<string> => rasterText(await ui.find({ type: 'Raster', key: 'top' })).slice(2).join('\n')
   const globes = await graphOf()
@@ -24,7 +24,7 @@ test('/omnis pane style robot draws robots at once, is kept in state, and globe 
   await globeUi.unmount()
 })
 
-test('/omnis pane style with no style or an unknown one gets the usage', async ($, on) => {
+test('/omnis pane style with no style or an unknown one gets the usage', KIT, async ($, on) => {
   engine(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   for (const args of ['pane style', 'pane style robots', 'pane style tv', 'pane style robot now']) {

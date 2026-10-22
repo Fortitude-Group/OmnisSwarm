@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { registerGuard } from './guard.ts'
+import { KIT } from './test-engine.ts'
 
 const RECORD = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record'
 const FEED = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed'
@@ -15,7 +16,7 @@ function engine(on: On): void {
   on('tool.describe', (_$, e) => ({ description: e.description }))
 }
 
-test('the model is refused every internal tool', async ($, on) => {
+test('the model is refused every internal tool', KIT, async ($, on) => {
   engine(on)
   for (const tool of [RECORD, FEED, REPLAY, EXPORT, BARE_RECORD]) {
     const verdict = await $.tool.check({ tool, input: {} })
@@ -24,13 +25,14 @@ test('the model is refused every internal tool', async ($, on) => {
   }
 })
 
-test('every other tool, our public ones included, is left to the engine', async ($, on) => {
+test('every other tool, our public ones included, is left to the engine', KIT, async ($, on) => {
   engine(on)
   expect((await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })).decision).toBe('allow')
   expect((await $.tool.check({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_status', input: {} })).decision).toBe('allow')
 })
 
 test('another plugin is refused too', {
+  ...KIT,
   plugins: [{
     name: 'intruder',
     register(on) {
@@ -53,7 +55,7 @@ test('another plugin is refused too', {
   expect(statuses).toContain('verdict deny')
 })
 
-test('internal tools wait behind ToolSearch, described as internal; others keep their description', async ($, on) => {
+test('internal tools wait behind ToolSearch, described as internal; others keep their description', KIT, async ($, on) => {
   engine(on)
   for (const tool of [RECORD, FEED, BARE_RECORD]) {
     const internal = await $.tool.describe({ tool, description: 'raw', provider: { plugin: 'mcp:omnis-swarm', tier: 'user' } })
@@ -79,7 +81,7 @@ function capture(): { check: Hook; checkCatch: Hook } {
 const allowNext = (plugin: string) => Object.assign(async () => ({ decision: 'allow' }), { origin: { plugin, tier: 'user' } })
 const self$ = { plugin: { name: 'omnis-swarm' } }
 
-test('the plugin own call is passed on, the engine call is denied', async () => {
+test('the plugin own call is passed on, the engine call is denied', KIT, async () => {
   const { check } = capture()
   for (const tool of [RECORD, FEED, BARE_RECORD]) {
     expect((await check(self$, { tool, input: {} }, allowNext('omnis-swarm'))).decision).toBe('allow')
@@ -87,7 +89,7 @@ test('the plugin own call is passed on, the engine call is denied', async () => 
   }
 })
 
-test('a throwing check fails closed for internal tools and open for the rest', async () => {
+test('a throwing check fails closed for internal tools and open for the rest', KIT, async () => {
   const { check, checkCatch } = capture()
   const broken = { get plugin(): never { throw new Error('boom') } }
   for (const tool of [RECORD, FEED, BARE_RECORD]) {

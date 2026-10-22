@@ -115,6 +115,11 @@ export async function loadSaved($: EngineInterface): Promise<void> {
   rt.style = styleOf(await read($, styleAtom))
 }
 
+/** The saved node style, read afresh: /omnis export asks before the pane has ever rendered (loadSaved runs at ui.render). */
+export async function readStyle($: EngineInterface): Promise<Style> {
+  return styleOf(await read($, styleAtom).catch(() => null))
+}
+
 /** Saves the node style; rejects when it could not be saved. */
 export async function saveStyle($: EngineInterface, style: Style): Promise<void> {
   await update($, styleAtom, () => style)

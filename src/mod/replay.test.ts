@@ -3,7 +3,7 @@
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { parseReplay } from './replay-command.ts'
-import { PANE, RUN, engine, feedCalls, never, rasterText, settle } from './test-engine.ts'
+import { PANE, RUN, engine, feedCalls, never, rasterText, settle, KIT } from './test-engine.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../../tests/fixtures/swarm-five.ts'
 
 const LOADED = { timeoutMs: 60000 }
@@ -170,7 +170,7 @@ test('speed outside 1-60 and an unknown swarm are refused', LOADED, async ($, on
   expect(seen.opens).toBe(0)
 })
 
-test('parseReplay reads the swarm, the speed and stop', async () => {
+test('parseReplay reads the swarm, the speed and stop', KIT, async () => {
   expect(parseReplay(['replay'])).toEqual({ swarm: null, speed: 10 })
   expect(parseReplay(['replay', 'alpha', '20'])).toEqual({ swarm: 'alpha', speed: 20 })
   expect(parseReplay(['replay', '5'])).toEqual({ swarm: null, speed: 5 })
