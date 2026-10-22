@@ -75,7 +75,7 @@ test('colours: warn below the limit, failed at it, the badge on its own backgrou
 test('the partial-cost marker stays on the warn figure', () => {
   const s = foldAll('s1', [...warnedTime, ev('agent.usage', { model: 'mystery-model', input: 1, output: 1, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 1210 })])
   const t = gridText(render(s, { ...emptyView(), budget: { swarmUsd: 11.2, limit: 20, warn: 10, blocked: false } }, at(21 * 60), { columns: 120, rows: 44 }).top)[0]!
-  assert.match(t, /≈\$11\.20(\+)?\/\$20/)
+  assert.match(t, /≈\$11\.20\+\/\$20/)
 })
 
 test('a cost-only nudge never reads time-box', () => {
