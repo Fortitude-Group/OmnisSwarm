@@ -3,7 +3,7 @@
  * path. Internal (the mod's guard refuses the model). Async: it yields every few frames so the recorder and the pane
  * keep being answered while it renders.
  */
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isValidSwarmId, type SwarmEvent } from '../../core/events.ts'
 import { emptyState, fold, foldAll } from '../../core/fold.ts'
@@ -41,17 +41,22 @@ type Caps = { maxFrames: number; maxBytes: number }
 const FAILED = 'Could not export the swarm (see the server log).'
 const nextTick = (): Promise<void> => new Promise(r => setImmediate(r))
 
-/** Every event in the swarm's log, page by page (readEvents reads at most 1 MB a call). */
-function allEvents(file: string): SwarmEvent[] {
+/** Every event in the swarm's log, page by page (readEvents reads at most 1 MB a call); past `max`, an InputError. */
+export function readAllEvents(file: string, max = MAX_EVENTS): SwarmEvent[] {
   const out: SwarmEvent[] = []
   let offset = 0
   for (;;) {
     const read = readEvents(file, offset)
     out.push(...read.events)
-    if (read.offset === offset || out.length > MAX_EVENTS) return out
+    if (out.length > max) throw new InputError(`That swarm is too long to export (over ${max} events).`)
+    if (read.offset === offset) return out
     offset = read.offset
   }
 }
+
+/** Second and later exports in the same minute get -2, -3, … after the stamp. */
+const MAX_SAME_MINUTE = 99
+const taken = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false }) !== undefined
 
 async function encodeAt(events: readonly SwarmEvent[], swarm: string, style: Style, speed: number, caps: Caps, pause: () => Promise<void>): Promise<{ gif: Uint8Array; frames: number } | 'over'> {
   const size = { columns: GIF_COLUMNS, rows: GIF_ROWS }
@@ -143,18 +148,26 @@ export function createExportTools(ctx: ToolContext): AsyncToolDef[] {
       const file = swarmLogPath(root, swarm)
       if (!existsSync(file) || isLink(file)) throw new InputError(`No swarm ${swarm} here.`)
       try {
-        const { gif, speed } = await renderGif(allEvents(file), swarm, style)
+        const { gif, speed } = await renderGif(readAllEvents(file), swarm, style)
         const dir = join(logPaths(root).dir, 'exports')
         if (isLink(dir)) throw new Error('refusing a link for the exports folder')
         mkdirSync(dir, { recursive: true })
-        // The name is built only from the validated id and a timestamp, inside the exports folder.
-        const name = `${swarm}-${stamp(clock())}.gif`
+        // The name is built only from the validated id, a timestamp and a counter, inside the exports folder. No await
+        // between choosing it and the rename, so two exports in this server cannot pick the same name.
+        const base = `${swarm}-${stamp(clock())}`
+        let n = 1
+        while (n <= MAX_SAME_MINUTE && taken(join(dir, n === 1 ? `${base}.gif` : `${base}-${n}.gif`))) n++
+        if (n > MAX_SAME_MINUTE) throw new Error('too many exports this minute')
+        const name = n === 1 ? `${base}.gif` : `${base}-${n}.gif`
         const target = join(dir, name)
-        if (isLink(target)) throw new Error('refusing a link for the export')
         const temp = `${target}.${process.pid}.tmp`
-        rmSync(temp, { force: true })
-        writeFileSync(temp, gif, { flag: 'wx' })
-        renameSync(temp, target)
+        try {
+          rmSync(temp, { force: true })
+          writeFileSync(temp, gif, { flag: 'wx' })
+          renameSync(temp, target)
+        } finally {
+          rmSync(temp, { force: true })
+        }
         return { text: `GIF written to .omnis-swarm/exports/${name} (${Math.round(gif.length / 1024)} KB, ${speed}× speed).` }
       } catch (err) {
         if (err instanceof InputError) throw err

@@ -137,11 +137,9 @@ export function drawCard(top: Grid, graph: Rect, state: SwarmState, totals: Swar
       const under = top.bg(gx, gy)
       const base = under === DEFAULT ? CANVAS : under
       const bg = mix(base, card.bg(x, y), t)
-      // A blank card cell lets the graph's glyph fade out beneath it until the card is whole; card glyphs fade in.
-      if (card.glyph(x, y) === 0x20 && t < 1) {
-        const fgUnder = top.fg(gx, gy)
-        top.set(gx, gy, top.glyph(gx, gy), mix(fgUnder === DEFAULT ? base : fgUnder, card.bg(x, y), t), bg)
-      } else top.set(gx, gy, card.glyph(x, y), mix(base, card.fg(x, y), t), bg)
+      // Only the card's glyph is drawn inside the card, from the first fade frame (a space where it has none); the
+      // fade is in the colours alone, so no graph label or braille shows through.
+      top.set(gx, gy, card.glyph(x, y), mix(base, card.fg(x, y), t), bg)
     }
   }
 }

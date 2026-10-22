@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { appendEvent } from '../../src/core/log.ts'
-import { createExportTools, renderGif, MAX_FRAMES } from '../../src/mcp/tools/export.ts'
+import { appendEvent, swarmLogPath } from '../../src/core/log.ts'
+import { createExportTools, readAllEvents, renderGif, MAX_FRAMES } from '../../src/mcp/tools/export.ts'
 import { Session } from '../../src/mcp/session.ts'
-import { fiveAgentEvents, FIVE_SWARM } from '../fixtures/swarm-five.ts'
+import { fiveAgentEvents, FIVE_SWARM, quietEvents } from '../fixtures/swarm-five.ts'
 import { decodeGif } from '../gif/decode.ts'
 import { tmpRoot } from '../helpers.ts'
 
@@ -44,4 +44,22 @@ test('a bad swarm or style is refused; an unknown swarm writes nothing', async (
   await assert.rejects(async () => tool.handler({ swarm: 'ok', style: 'neon' }), { name: 'InputError' })
   await assert.rejects(async () => tool.handler({ swarm: 'absent', style: 'globe' }), { name: 'InputError' })
   assert.equal(existsSync(join(root, '.omnis-swarm', 'exports')), false)
+})
+
+test('a second export in the same minute gets -2 and leaves the first in place; no .tmp is left', async () => {
+  const root = tmpRoot()
+  for (const e of quietEvents()) appendEvent(root, e)
+  const tool = createExportTools({ root, session: new Session(root), now: () => NOW })[0]!
+  const first = await tool.handler({ swarm: FIVE_SWARM, style: 'globe' })
+  const second = await tool.handler({ swarm: FIVE_SWARM, style: 'robot' })
+  assert.match(first.text, new RegExp(`${FIVE_SWARM}-20261022-1405\.gif`))
+  assert.match(second.text, new RegExp(`${FIVE_SWARM}-20261022-1405-2\.gif`))
+  assert.deepEqual(readdirSync(join(root, '.omnis-swarm', 'exports')).sort(), [`${FIVE_SWARM}-20261022-1405-2.gif`, `${FIVE_SWARM}-20261022-1405.gif`])
+})
+
+test('a log past the event cap is refused as too long, not cut off', () => {
+  const root = tmpRoot()
+  for (const e of quietEvents()) appendEvent(root, e)
+  assert.throws(() => readAllEvents(swarmLogPath(root, FIVE_SWARM), 3), { name: 'InputError', message: /too long to export/ })
+  assert.equal(readAllEvents(swarmLogPath(root, FIVE_SWARM), 7).length, 7)
 })

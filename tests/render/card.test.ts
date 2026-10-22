@@ -108,3 +108,21 @@ test('the agent count matches the header, and "ended" is local time', () => {
   const local = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   assert.match(text[card.y + 5]!, new RegExp(`ended ${local}`))
 })
+
+test('on a fade frame the card rect holds only the card glyphs, never the graph ones', () => {
+  const plain = render(state, emptyView(), END, size).top
+  const whole = render(state, emptyView(), END, size).top
+  const info = { durationMs: swarmDurationMs(state), clipMs: 24_000, endedAt: null }
+  drawCard(whole, graphOf(), state, swarmTotals(state, END), info, 1)
+  const card = cardRect(graphOf())
+  let graphGlyphs = 0
+  for (let y = card.y; y < card.y + card.h; y++) for (let x = card.x; x < card.x + card.w; x++) if (plain.glyph(x, y) !== whole.glyph(x, y)) graphGlyphs++
+  assert.ok(graphGlyphs > 0, 'the fixture has graph glyphs under the card')
+  for (const k of [1 / 3, 2 / 3]) {
+    const faded = render(state, emptyView(), END, size).top
+    drawCard(faded, graphOf(), state, swarmTotals(state, END), info, k)
+    for (let y = card.y; y < card.y + card.h; y++) {
+      for (let x = card.x; x < card.x + card.w; x++) assert.equal(faded.glyph(x, y), whole.glyph(x, y), `k=${k.toFixed(2)} cell ${x},${y}`)
+    }
+  }
+})
