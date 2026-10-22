@@ -9,7 +9,7 @@ import type { EngineInterface, Timer } from 'claude-code'
 import { parseFeedReply } from '../core/feed-reply.ts'
 import { FEED_TOOL } from '../core/recording.ts'
 import { PULL_MS } from '../render/tokens.ts'
-import { applyReply, feedArgs, markDegraded, type PaneModel } from './pane-model.ts'
+import { applyReply, feedArgs, markDegraded, type Degraded, type PaneModel } from './pane-model.ts'
 
 export const PANE_ID = 'omnis-swarm'
 /** While the pane is hidden it only looks at $.ui.panes(), this often. */
@@ -102,10 +102,10 @@ export const shownPullMs = (s: PullState): number => (s.unreadableMs > 0 ? s.unr
  * A timer period threw: stop that timer with `stop` so whatever starts it can start it again, keep the last good state
  * flagged, and ask for a redraw, which restarts the loops (ui.render calls startPulling and animate).
  */
-export function periodFailed(s: PullState, host: PullHost, stop: () => void): void {
+export function periodFailed(s: PullState, host: PullHost, stop: () => void, why: Degraded = 'unreadable'): void {
   try {
     stop()
-    s.model = markDegraded(s.model, 'unreadable').model
+    s.model = markDegraded(s.model, why).model
     host.invalidate()
   } catch {
     // Nothing more to do: the next ui.render starts over.

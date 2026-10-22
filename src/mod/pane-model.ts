@@ -8,7 +8,7 @@ import { LEAD, fold, type SwarmState } from '../core/fold.ts'
 import type { Pulse } from '../render/types.ts'
 
 /** Why the last read failed, for the renderer to show; null when the last read was good. */
-export type Degraded = 'too-large' | 'unreadable'
+export type Degraded = 'too-large' | 'unreadable' | 'render-failed'
 /** `hiddenFinished`: finished agents the server left out of a trimmed state, for a "+N finished" note. `degradedAgents`: the agent count a too-large reply reported (0 otherwise). */
 export type PaneModel = { swarm: string | null; offset: number; state: SwarmState | null; pulses: Pulse[]; lastFlicker: Readonly<Record<string, number>>; lagMs: number; degraded: Degraded | null; degradedAgents: number; hiddenFinished: number }
 
