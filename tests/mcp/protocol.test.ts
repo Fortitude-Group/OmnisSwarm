@@ -117,11 +117,10 @@ test('fix 3: handlers get a null-prototype args object without dangerous keys', 
   assert.deepEqual(Object.keys(seen ?? {}), ['keep'])
 })
 
-test('fix 4: async handlers, missing text and odd throws are tool errors', () => {
+test('fix 4: missing text and odd throws are tool errors', () => {
   const call = (h: () => unknown) =>
     handleMessage(req(1, 'tools/call', { name: 't' }), [{ name: 't', description: 'd', inputSchema: {}, handler: h as ToolDef['handler'] }], info)?.result
   const err = (text: string) => ({ content: [{ type: 'text', text }], isError: true })
-  assert.deepEqual(call(() => Promise.resolve({ text: 'x' })), err('Tool handlers must be synchronous'))
   assert.deepEqual(call(() => ({})), err('Tool returned no text'))
   assert.deepEqual(call(() => { throw { toString() { throw new Error('x') } } }), err('Tool failed'))
   assert.deepEqual(call(() => { throw 'plain' }), err('plain'))
@@ -154,7 +153,10 @@ test('round 2 A: a rejecting async handler does not crash; the next request is a
   const out = await serve([`${JSON.stringify(req(1, 'tools/call', { name: 'rej' }))}\n`, `${JSON.stringify(req(2, 'ping'))}\n`], [rejecting])
   await new Promise(r => setTimeout(r, 20))
   assert.equal(out.length, 2)
-  assert.deepEqual(out[1], { jsonrpc: '2.0', id: 2, result: {} })
+  // The rejection is answered when it settles, so the ping may overtake it: match the replies by id.
+  const byId = new Map(out.map(r => [(r as { id: number }).id, r]))
+  assert.deepEqual(byId.get(2), { jsonrpc: '2.0', id: 2, result: {} })
+  assert.equal((byId.get(1) as { result: { isError: boolean } }).result.isError, true)
 })
 
 test('round 2 B: nested arguments are cleaned and depth is capped', () => {

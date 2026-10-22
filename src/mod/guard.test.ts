@@ -5,6 +5,7 @@ import { registerGuard } from './guard.ts'
 const RECORD = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record'
 const FEED = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed'
 const REPLAY = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_replay'
+const EXPORT = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_export'
 const BARE_RECORD = 'mcp__omnis-swarm__omnis_record'
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine.
@@ -14,9 +15,9 @@ function engine(on: On): void {
   on('tool.describe', (_$, e) => ({ description: e.description }))
 }
 
-test('the model is refused both internal tools', async ($, on) => {
+test('the model is refused every internal tool', async ($, on) => {
   engine(on)
-  for (const tool of [RECORD, FEED, REPLAY, BARE_RECORD]) {
+  for (const tool of [RECORD, FEED, REPLAY, EXPORT, BARE_RECORD]) {
     const verdict = await $.tool.check({ tool, input: {} })
     expect(verdict.decision).toBe('deny')
     expect(verdict.reason).toContain('internal to the omnis-swarm plugin')

@@ -1,0 +1,46 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { appendEvent } from '../../src/core/log.ts'
+import { createExportTools, renderGif, MAX_FRAMES } from '../../src/mcp/tools/export.ts'
+import { Session } from '../../src/mcp/session.ts'
+import { fiveAgentEvents, FIVE_SWARM } from '../fixtures/swarm-five.ts'
+import { decodeGif } from '../gif/decode.ts'
+import { tmpRoot } from '../helpers.ts'
+
+const NOW = new Date('2026-10-22T14:05:00.000Z')
+
+test('omnis_export writes .omnis-swarm/exports/<swarm>-<yyyymmdd-hhmm>.gif and answers its path', async () => {
+  const root = tmpRoot()
+  for (const e of fiveAgentEvents()) appendEvent(root, e)
+  const tool = createExportTools({ root, session: new Session(root), now: () => NOW })[0]!
+  const out = await tool.handler({ swarm: FIVE_SWARM, style: 'robot' })
+  const rel = `.omnis-swarm/exports/${FIVE_SWARM}-20261022-1405.gif`
+  assert.match(out.text, new RegExp(rel.replace(/\./g, '\.')))
+  const gif = decodeGif(new Uint8Array(readFileSync(join(root, rel))))
+  assert.equal(gif.width, 960)
+  assert.equal(gif.height, 704)
+  const total = gif.frames.reduce((n, f) => n + f.delayCs, 0)
+  assert.ok(total >= 300 && total <= 3_000, `clip lasts ${total} cs`)
+  assert.ok(gif.frames.at(-1)!.delayCs >= 270, 'ends on the held card (3 fade frames, then 2.7 s)')
+})
+
+test('the frame cap raises the speed instead of growing the file', async () => {
+  const out = await renderGif(fiveAgentEvents(), FIVE_SWARM, 'globe', { maxFrames: 40, maxBytes: 15 * 1024 * 1024 })
+  assert.ok(out.frames <= 40)
+  assert.ok(MAX_FRAMES === 600)
+})
+
+test('the size cap that cannot be met is an error, not a file', async () => {
+  await assert.rejects(renderGif(fiveAgentEvents(), FIVE_SWARM, 'globe', { maxFrames: 600, maxBytes: 1_000 }), /too large/)
+})
+
+test('a bad swarm or style is refused; an unknown swarm writes nothing', async () => {
+  const root = tmpRoot()
+  const tool = createExportTools({ root, session: new Session(root), now: () => NOW })[0]!
+  await assert.rejects(async () => tool.handler({ swarm: '../x', style: 'globe' }), { name: 'InputError' })
+  await assert.rejects(async () => tool.handler({ swarm: 'ok', style: 'neon' }), { name: 'InputError' })
+  await assert.rejects(async () => tool.handler({ swarm: 'absent', style: 'globe' }), { name: 'InputError' })
+  assert.equal(existsSync(join(root, '.omnis-swarm', 'exports')), false)
+})
