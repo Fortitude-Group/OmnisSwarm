@@ -1,10 +1,12 @@
 /**
  * The software rasteriser shared by the preview script and the GIF export: a Grid (or stack of grids) to RGB pixels,
- * one 8x16 cell at a time. Blocks and braille are drawn exactly; any other glyph is a soft bar. Pure.
+ * one 8x16 cell at a time. Blocks and braille are drawn exactly, other glyphs from the bitmap font (a soft bar when the
+ * font lacks one). Pure.
  */
 import { DEFAULT } from './color.ts'
 import type { Grid } from './grid.ts'
-import { CELL_H, CELL_W, blockShape } from './svg.ts'
+import { FONT_H, FONT_W, glyphRows } from './font/index.ts'
+import { CELL_H, CELL_W, blockRects } from './svg.ts'
 import { CANVAS } from './tokens.ts'
 
 export type Cells = { columns: number; rows: number; glyph: Uint32Array; fg: Uint32Array; bg: Uint32Array }
@@ -47,13 +49,22 @@ export function paintCell(rgb: Uint8Array, width: number, x0: number, y0: number
   }
   const colour = fg === DEFAULT ? 0xc9d1d9 : fg
   if (bg !== DEFAULT) fill(x0, y0, CELL_W, CELL_H, bg)
-  const shape = blockShape(glyph)
-  if (shape !== null) fill(x0 + shape[0] * CELL_W, y0 + shape[1] * CELL_H, shape[2] * CELL_W, shape[3] * CELL_H, colour, shape[4])
-  else if (glyph > 0x2800 && glyph <= 0x28ff) {
+  const block = blockRects(glyph)
+  if (block !== null) {
+    for (const [rx, ry, rw, rh] of block.rects) fill(x0 + rx * CELL_W, y0 + ry * CELL_H, rw * CELL_W, rh * CELL_H, colour, block.opacity)
+  } else if (glyph > 0x2800 && glyph <= 0x28ff) {
     DOTS.forEach(([col, row], bit) => {
       if (((glyph - 0x2800) >> bit) & 1) fill(x0 + col * 4 + 1, y0 + row * 4 + 1, 2, 2, colour)
     })
-  } else if (glyph !== 0x20) fill(x0 + 1, y0 + 4, CELL_W - 2, CELL_H - 8, colour, 0.6)
+  } else if (glyph !== 0x20) {
+    const rows = glyphRows(glyph)
+    if (rows === null) fill(x0 + 1, y0 + 4, CELL_W - 2, CELL_H - 8, colour, 0.6)
+    else {
+      for (let y = 0; y < FONT_H; y++) {
+        for (let x = 0; x < FONT_W; x++) if ((rows[y]! >> (7 - x)) & 1) fill(x0 + x, y0 + y, 1, 1, colour)
+      }
+    }
+  }
 }
 
 export function paintGrids(grids: readonly Grid[]): { width: number; height: number; rgb: Uint8Array } {
