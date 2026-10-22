@@ -36,7 +36,8 @@ test('malformed replies are refused', () => {
 })
 
 // --- reply size cap ---
-import { FEED_REPLY_MAX, fitEvents, freshReply, utf8Bytes } from '../../src/core/feed-reply.ts'
+import { FEED_REPLY_MAX, SPEND_BUCKET_MS, compactSpend, fitEvents, freshReply, utf8Bytes } from '../../src/core/feed-reply.ts'
+import { BURN_WINDOW_MS, swarmTotals } from '../../src/core/stats.ts'
 import { foldAll, type SwarmState } from '../../src/core/fold.ts'
 import { isSwarmState } from '../../src/core/state-check.ts'
 
@@ -208,4 +209,39 @@ test('the lead is never left out, even when finished and oldest', () => {
 
 test('a swarm of running agents too many to fit is refused without trimming', () => {
   assert.deepEqual(freshReply('big', 1, bigState(90, 0)), { v: 1, kind: 'too-large', agents: 90 })
+})
+
+const inWindow = (spend: { at: number; usd: number }[], latest: number) =>
+  spend.filter(s => s.at >= latest - BURN_WINDOW_MS).reduce((t, s) => t + s.usd, 0)
+
+test('compactSpend keeps only the burn window and merges it into 10 s buckets, losing at most one bucket of edge', () => {
+  const spend = Array.from({ length: 3000 }, (_, i) => ({ at: 1_000_000 + i * 200, usd: 0.001 }))
+  const latest = spend.at(-1)!.at
+  const out = compactSpend(spend)
+  assert.ok(out.length <= BURN_WINDOW_MS / SPEND_BUCKET_MS + 1, `${out.length} buckets`)
+  assert.ok(out.every(s => s.at >= latest - BURN_WINDOW_MS - SPEND_BUCKET_MS))
+  const before = inWindow(spend, latest)
+  const after = inWindow(out, latest)
+  assert.ok(after <= before + 1e-9 && before - after <= (SPEND_BUCKET_MS / 200) * 0.001 + 1e-9, `${before} vs ${after}`)
+  assert.deepEqual(compactSpend([]), [])
+})
+
+test('a busy 10-agent swarm with ten minutes of calls still gets a state, not too-large', () => {
+  const state = bigState(10, 0)
+  state.spend = Array.from({ length: 3000 }, (_, i) => ({ at: 1_000_000 + i * 200, usd: 0.001 }))
+  const r = freshReply('big', 1, state)
+  assert.equal(r.kind, 'state')
+  assert.ok(r.kind === 'state' && isSwarmState(r.state, 'big'))
+  assert.ok(Buffer.byteLength(JSON.stringify(r)) <= FEED_REPLY_MAX)
+})
+
+test('the pane burn stat reads the same (within one bucket of edge) from a trimmed reply as from the full state', () => {
+  const state = bigState(10, 0)
+  state.spend = Array.from({ length: 3000 }, (_, i) => ({ at: 1_000_000 + i * 200, usd: 0.001 }))
+  const now = 1_000_000 + 2999 * 200
+  const r = freshReply('big', 1, state)
+  assert.ok(r.kind === 'state')
+  const full = swarmTotals(state, now).burnPerMin
+  const got = swarmTotals(r.state, now).burnPerMin
+  assert.ok(got <= full + 1e-9 && full - got <= ((SPEND_BUCKET_MS / 200) * 0.001) / (BURN_WINDOW_MS / 60_000) + 1e-9, `${full} vs ${got}`)
 })
