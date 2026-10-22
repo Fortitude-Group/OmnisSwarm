@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Timer } from 'claude-code'
 import { emptyModel } from './pane-model.ts'
-import { pullTick, startPulling, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
+import { periodFailed, pullTick, startPulling, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
 import { feedCalls, never, opened, KIT } from './test-engine.ts'
 
 /** Pulls in the next `ms` of the mocked clock. */
@@ -98,4 +98,17 @@ test('a throw inside a pull period stops that timer and marks the pane degraded,
   startPulling(pane, host)
   expect(s.pullTimer).not.toBeNull()
   expect(s.pullTimer).not.toBe(first)
+})
+
+test('periodFailed marks the reason it is given, and unreadable when none is', KIT, async () => {
+  let stops = 0
+  let invalidates = 0
+  const host = { invalidate: () => { invalidates++ } } as unknown as PullHost
+  const s = { model: emptyModel() } as unknown as PullState
+  periodFailed(s, host, () => { stops++ }, 'render-failed')
+  expect(s.model.degraded).toBe('render-failed')
+  periodFailed(s, host, () => { stops++ })
+  expect(s.model.degraded).toBe('unreadable')
+  expect(stops).toBe(2)
+  expect(invalidates).toBe(2)
 })

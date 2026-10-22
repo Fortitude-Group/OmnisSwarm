@@ -159,7 +159,7 @@ export function animate(host: Host, fps: number): void {
 export function tick(host: Host): void {
   try {
     const started = Date.now()
-    const frame = rt.open && rt.shown ? frameAt(started) : null
+    const frame = rt.open && rt.shown ? safeFrameAt(started) : null
     if (frame === null || rt.last === null) {
       stopFrames()
       return
