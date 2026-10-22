@@ -1,23 +1,23 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { RUN } from './test-engine.ts'
+import { RUN, KIT } from './test-engine.ts'
 
 // The kit loads the plugin's own guard; /omnis budget is driven through the command, not by importing the guard.
 const USAGE = 'Usage: /omnis budget shows the limits; /omnis budget <usd> sets the swarm budget (above 0, at most 1000).'
 const budget = ($: Engine, args: string) => $.command.run({ command: 'omnis', args, ...RUN }).then(r => r.text)
 
-test('/omnis budget with no amount shows the limits', async ($) => {
+test('/omnis budget with no amount shows the limits', KIT, async ($) => {
   expect(await budget($, 'budget')).toBe('Budget: each agent 30 min / $5 (warns at 20 min / $3); swarm $20 (warns at $10). Swarm so far ≈$0.00. New agents: allowed.')
 })
 
-test('/omnis budget refuses an amount it cannot read', async ($) => {
+test('/omnis budget refuses an amount it cannot read', KIT, async ($) => {
   for (const bad of ['abc', '0', '0.00', '1000.01', '5000', '1e3', '5 6']) expect(await budget($, `budget ${bad}`)).toBe(USAGE)
 })
 
-test('/omnis budget 30 before the session has started says so', async ($) => {
+test('/omnis budget 30 before the session has started says so', KIT, async ($) => {
   expect(await budget($, 'budget 30')).toBe('The budget guard is not running yet; try again once the session has started.')
 })
 
-test('the top of the range, 1000, is accepted', async ($) => {
+test('the top of the range, 1000, is accepted', KIT, async ($) => {
   expect(await budget($, 'budget 1000')).toBe('The budget guard is not running yet; try again once the session has started.')
 })

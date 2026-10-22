@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Timer } from 'claude-code'
 import { emptyModel } from './pane-model.ts'
 import { pullTick, startPulling, type PaneHooks, type PullHost, type PullState } from './pane-pull.ts'
-import { feedCalls, never, opened } from './test-engine.ts'
+import { feedCalls, never, opened, KIT } from './test-engine.ts'
 
 /** Pulls in the next `ms` of the mocked clock. */
 async function pullsOver(seen: Parameters<typeof feedCalls>[0], clock: { advance: (ms: number) => Promise<void> }, ms: number): Promise<number> {
@@ -57,7 +57,7 @@ test('unreadable replies back the pulls off, doubling up to 5 s, and a good repl
 
 type FakeTimer = Timer & { ms: number; cancelled: boolean }
 
-test('a throw inside a pull period stops that timer and marks the pane degraded, and the pulls can start again', async () => {
+test('a throw inside a pull period stops that timer and marks the pane degraded, and the pulls can start again', KIT, async () => {
   const timers: FakeTimer[] = []
   const fake = (ms: number): FakeTimer => {
     const t: FakeTimer = { ms, cancelled: false, cancel: () => { t.cancelled = true } } as FakeTimer

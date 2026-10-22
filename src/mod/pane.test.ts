@@ -1,10 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
 import { Grid } from '../render/grid.ts'
 import { svgSource } from './pane.ts'
-import { INIT, PANE, RUN, engine, feedCalls, never, opened, rasterText, settle, until, untilBlit } from './test-engine.ts'
+import { INIT, PANE, RUN, engine, feedCalls, never, opened, rasterText, settle, until, untilBlit, KIT } from './test-engine.ts'
 import { FIVE_AT } from '../../tests/fixtures/swarm-five.ts'
 
-test('/omnis pane opens the pane, pulls omnis_feed and draws the swarm in two Rasters with pin chips', async ($, on) => {
+test('/omnis pane opens the pane, pulls omnis_feed and draws the swarm in two Rasters with pin chips', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -22,7 +22,7 @@ test('/omnis pane opens the pane, pulls omnis_feed and draws the swarm in two Ra
   await ui.unmount()
 })
 
-test('a pin chip changes only what is shown: it pins the spotlight, and pressing it again unpins', async ($, on) => {
+test('a pin chip changes only what is shown: it pins the spotlight, and pressing it again unpins', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -38,7 +38,7 @@ test('a pin chip changes only what is shown: it pins the spotlight, and pressing
   await ui.unmount()
 })
 
-test('a pin press whose state write never lands changes nothing and leaves no rejection behind', async ($, on) => {
+test('a pin press whose state write never lands changes nothing and leaves no rejection behind', KIT, async ($, on) => {
   engine(on)
   // Every write misses its version, as if another write always beat it.
   on('state.set', () => ({ value: { isSet: false, version: 1 } }))
@@ -53,7 +53,7 @@ test('a pin press whose state write never lands changes nothing and leaves no re
   await ui.unmount()
 })
 
-test('pulls run at most 4 a second and stop when the pane closes', async ($, on) => {
+test('pulls run at most 4 a second and stop when the pane closes', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -71,7 +71,7 @@ test('pulls run at most 4 a second and stop when the pane closes', async ($, on)
   expect(feedCalls(seen).length).toBe(atClose)
 })
 
-test('off the terminal the same picture is an Svg, and nothing is blitted', async ($, on) => {
+test('off the terminal the same picture is an Svg, and nothing is blitted', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
@@ -86,7 +86,7 @@ test('off the terminal the same picture is an Svg, and nothing is blitted', asyn
   await ui.unmount()
 })
 
-test('panel off refuses to open the pane', { options: { panel: 'off' } }, async ($, on) => {
+test('panel off refuses to open the pane', { ...KIT, options: { panel: 'off' } }, async ($, on) => {
   const seen = engine(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const ran = await $.command.run({ command: 'omnis', args: 'pane', ...RUN })
@@ -94,7 +94,7 @@ test('panel off refuses to open the pane', { options: { panel: 'off' } }, async 
   expect(seen.opens).toBe(0)
 })
 
-test('/omnis-swarm:watch opens it too, and an unknown subcommand gets the usage', async ($, on) => {
+test('/omnis-swarm:watch opens it too, and an unknown subcommand gets the usage', KIT, async ($, on) => {
   const seen = engine(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect((await $.command.run({ command: 'omnis-swarm:watch', args: '', ...RUN })).text).toBe('Swarm pane open.')
@@ -102,7 +102,7 @@ test('/omnis-swarm:watch opens it too, and an unknown subcommand gets the usage'
   expect((await $.command.run({ command: 'omnis', args: 'nonsense', ...RUN })).text).toMatch(/^Usage/)
 })
 
-test('auto opens the pane when a swarm starts, but not again after the person closed it', { options: { panel: 'auto' } }, async ($, on) => {
+test('auto opens the pane when a swarm starts, but not again after the person closed it', { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -114,7 +114,7 @@ test('auto opens the pane when a swarm starts, but not again after the person cl
   expect(seen.opens).toBe(1)
 })
 
-test('auto opens the pane for omnis_swarm_init under the .mcp.json server name too', { options: { panel: 'auto' } }, async ($, on) => {
+test('auto opens the pane for omnis_swarm_init under the .mcp.json server name too', { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -123,7 +123,7 @@ test('auto opens the pane for omnis_swarm_init under the .mcp.json server name t
   expect(seen.opens).toBe(1)
 })
 
-test('auto opens the pane when an agent is spawned through the Agent tool', { options: { panel: 'auto' } }, async ($, on) => {
+test('auto opens the pane when an agent is spawned through the Agent tool', { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -134,7 +134,7 @@ test('auto opens the pane when an agent is spawned through the Agent tool', { op
   expect(seen.opens).toBe(1)
 })
 
-test('auto does not open the pane for other tools', { options: { panel: 'auto' } }, async ($, on) => {
+test('auto does not open the pane for other tools', { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -144,7 +144,7 @@ test('auto does not open the pane for other tools', { options: { panel: 'auto' }
   expect(seen.opens).toBe(0)
 })
 
-test('with panel command an Agent tool call does not open the pane', async ($, on) => {
+test('with panel command an Agent tool call does not open the pane', KIT, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -153,7 +153,7 @@ test('with panel command an Agent tool call does not open the pane', async ($, o
   expect(seen.opens).toBe(0)
 })
 
-test("the recorder does not record the pane's omnis_feed pulls as agent tool calls", async ($, on) => {
+test("the recorder does not record the pane's omnis_feed pulls as agent tool calls", KIT, async ($, on) => {
   const seen = engine(on)
   on('tool.call', () => ({ result: {} }))
   const clock = mock.clock(on, { now: FIVE_AT.mid })
@@ -186,7 +186,7 @@ for (const openAs of ['throw', 'hang'] as const) {
 }
 
 
-test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the panes about once a second, and resumes when shown', async ($, on) => {
+test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the panes about once a second, and resumes when shown', KIT, async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
   await untilBlit(seen, clock)
   expect(seen.blits).toBeGreaterThan(0)
@@ -208,7 +208,7 @@ test('a hidden pane makes no omnis_feed calls and runs no frames, looks at the p
   await ui.unmount()
 })
 
-test('a Raster whose cells have not changed is not blitted again', async ($, on) => {
+test('a Raster whose cells have not changed is not blitted again', KIT, async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
   await untilBlit(seen, clock)
   await clock.advance(3000)
@@ -241,7 +241,7 @@ test('a refused blit is sent again by the next frame, even when its cells have n
   await ui.unmount()
 })
 
-test('off the terminal, news redraws the Svg no faster than the budget allows, and the latest news is drawn', async ($, on) => {
+test('off the terminal, news redraws the Svg no faster than the budget allows, and the latest news is drawn', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
@@ -268,7 +268,7 @@ test('off the terminal, news redraws the Svg no faster than the budget allows, a
   await ui.unmount()
 })
 
-test('nothing is blitted after the pane closes', async ($, on) => {
+test('nothing is blitted after the pane closes', KIT, async ($, on) => {
   const { seen, clock, ui } = await opened($, on)
   await clock.advance(500)
   await $.command.run({ command: 'omnis', args: 'pane close', ...RUN })
@@ -278,7 +278,7 @@ test('nothing is blitted after the pane closes', async ($, on) => {
   await ui.unmount()
 })
 
-test('two session.starts and then an open still pull at most 4 times a second', async ($, on) => {
+test('two session.starts and then an open still pull at most 4 times a second', KIT, async ($, on) => {
   const seen = engine(on)
   const clock = mock.clock(on, { now: FIVE_AT.mid })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -325,7 +325,7 @@ test('a lost server shows the degraded note, keeps the last frame, and reconnect
   await ui.unmount()
 })
 
-test('with no server at all the pane says it is waiting, and does not reconnect on every pull', async ($, on) => {
+test('with no server at all the pane says it is waiting, and does not reconnect on every pull', KIT, async ($, on) => {
   const seen = engine(on)
   seen.connectOk = false
   const clock = mock.clock(on, { now: FIVE_AT.mid })
@@ -391,7 +391,7 @@ for (const fault of ['panes', 'register'] as const) {
   })
 }
 
-test('auto opens the pane while a foreground Agent call is still running', { options: { panel: 'auto' } }, async ($, on) => {
+test('auto opens the pane while a foreground Agent call is still running', { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
   const seen = engine(on)
   // The Agent call runs until the test lets it finish. Left hanging, the kit rejects it once the test ends.
   let finish: (() => void) | null = null
@@ -423,7 +423,7 @@ for (const [what, pin] of [['a number', 42], ['an object', { toString: 1, valueO
   })
 }
 
-test('off the terminal a grid becomes Svg source, or the summary as text when the Svg is too big or the surface has none', () => {
+test('off the terminal a grid becomes Svg source, or the summary as text when the Svg is too big or the surface has none', KIT, () => {
   const grid = new Grid(40, 10, 0x0b0f17, 0xe6edf3)
   expect(svgSource(grid, 'auth refactor', true)).toContain('<svg')
   expect(svgSource(grid, 'auth refactor', true, 50)).toBeNull()

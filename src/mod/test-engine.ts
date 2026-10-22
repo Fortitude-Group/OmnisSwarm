@@ -8,6 +8,11 @@ import { foldAll } from '../core/fold.ts'
 import { decodeCells, gridText } from '../render/grid.ts'
 import { FIVE_AT, FIVE_SWARM, fiveAgentEvents } from '../../tests/fixtures/swarm-five.ts'
 
+/**
+ * The kit's per-test timeout. A test file's first test cold-loads the plugin, which takes 5-6.6 s on a loaded machine against the
+ * kit's 5000 ms default; 20 s absorbs that and a real hang still fails.
+ */
+export const KIT = { timeoutMs: 20_000 }
 export const SERVER = 'plugin:omnis-swarm:omnis-swarm'
 export const INIT = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_init'
 export const PANE = {
