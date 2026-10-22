@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { RUN } from './test-engine.ts'
 
 // The kit loads the plugin's own register.ts (recorder and budget guard included); a test's userConfig goes in its options.
 // A test's own import of budget-guard.ts is a separate copy, so limits are raised here through omnis_swarm_init's
@@ -230,4 +231,12 @@ test("an agent's estimated spend warns at $3 and nudges at $5", LOADED, async ($
   expect(seen.sends.length).toBe(1)
   expect(dataOf(seen, 'guard.nudged')).toEqual({ limit: 'agentCost', value: 5, threshold: 5, delivered: true })
   expect(seen.appends[0]).toContain('[OmnisSwarm budget guard] coder-b passed its $5 budget')
+})
+
+test('/omnis budget 30 lifts the block', LOADED, async ($, on) => {
+  const { clock } = await boot($, on)
+  await measure($, 21)
+  await clock.settle()
+  expect((await $.command.run({ command: 'omnis', args: 'budget 30', ...RUN })).text).toBe('Swarm budget set to $30. New agents: allowed.')
+  expect((await leadSpawn($, 't9')).decision).toBe('allow')
 })

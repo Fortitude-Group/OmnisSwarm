@@ -7,6 +7,7 @@ import { chooseSpotlight } from '../render/spotlight.ts'
 import { SVG_SOURCE_MAX, gridToSvg } from '../render/svg.ts'
 import { FPS } from '../render/tokens.ts'
 import type { Frame, View } from '../render/types.ts'
+import { viewBudget } from './budget-guard.ts'
 import { prunePulses } from './pane-model.ts'
 import { PANE_ID, periodFailed, startPulling, type PaneHooks } from './pane-pull.ts'
 import { hostOf, rt, type Host } from './pane-runtime.ts'
@@ -22,6 +23,7 @@ export const pinOf = (state: SwarmState): string | null => (rt.pinned !== null &
 const shownModel = () => rt.replay?.model ?? rt.model
 export const viewOf = (pinned: string | null): View => ({
   pinned, spotlight: rt.spot, pulses: shownModel().pulses, lagMs: shownModel().lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
+  budget: rt.replay === null ? viewBudget() : null,
 })
 export const waitingText = (): string =>
   rt.model.degraded !== null

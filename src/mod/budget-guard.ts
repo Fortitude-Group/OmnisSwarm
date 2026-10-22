@@ -5,12 +5,13 @@
  */
 import type { EngineInterface, On, PluginOptions, Timer } from 'claude-code'
 import {
-  blockReason, effective, evaluate, isBlocked, limitsFrom, mainText, nudgeText, parseBudget, swarmCost, toastText,
+  blockReason, effective, evaluate, isBlocked, limitsFrom, mainText, nudgeText, parseBudget, swarmCost, toastText, warnLevel,
   type BudgetPatch, type GuardAction, type Limits,
 } from '../core/budget.ts'
 import { makeEvent, type SwarmEvent } from '../core/events.ts'
 import { emptyState, fold, LEAD, type SwarmState } from '../core/fold.ts'
 import type { RecordBody } from '../core/recording.ts'
+import type { ViewBudget } from '../render/types.ts'
 import { record, type RecordObserver } from './recorder.ts'
 
 export const TICK_MS = 15_000
@@ -205,6 +206,14 @@ export const guardObserver: RecordObserver = {
 
 export function guardView(): { limits: Limits; swarmUsd: number; swarm: string | null } {
   return { limits: limits(), swarmUsd: cost(), swarm: g.state?.swarm.id ?? null }
+}
+
+/** The header's budget figures; null while the guard has no swarm. */
+export function viewBudget(): ViewBudget | null {
+  if (g.state === null) return null
+  const lim = limits()
+  const swarmUsd = cost()
+  return { swarmUsd, limit: lim.swarmUsd, warn: warnLevel(lim, 'swarmUsd'), blocked: isBlocked(lim, swarmUsd) }
 }
 
 /** /omnis budget <usd>: records budget.set and checks again (a raised limit lifts the block at once). */
