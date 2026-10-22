@@ -26,6 +26,10 @@ const AGENT_TOOL = 'Agent'
 const pinnedAtom = atom({ plugin: 'omnis-swarm', key: 'panePinned' } as const, null)
 /** $.state may hold anything (a corrupt or older file): only text is a pin, anything else is no pin. */
 const pinText = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+/** The node style, pane-wide (pane.md 12.1), kept as the pin is. Anything stored but `robot` is the default, globes. */
+const styleAtom = atom({ plugin: 'omnis-swarm', key: 'paneStyle' } as const, null)
+type Style = 'globe' | 'robot'
+const styleOf = (x: unknown): Style => (x === 'robot' ? 'robot' : 'globe')
 
 type Panel = 'command' | 'auto' | 'off'
 type Kit = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -71,6 +75,9 @@ type Runtime = PullState & {
    * frame), and the moving average of that (it sets the motion cap).
    */
   frameTimer: Timer | null; frameMs: number; renderMs: number; renderAvgMs: number
+  /** One frame scheduled outside the loop's rate (a robot's blink edge), and the time it is for. */
+  wakeTimer: Timer | null; wakeAt: number
+  style: Style
   /** Off the terminal: when the pane last asked for a redraw, and the redraw held back by the budget, if one is. */
   drawnAt: number; redrawWait: Timer | null
   spot: Spot | null
@@ -92,7 +99,7 @@ const panelOf = (x: unknown): Panel => (x === 'auto' || x === 'off' ? x : 'comma
 const fresh = (panel: Panel): Runtime => ({
   panel, host: null, open: false, shown: false, closedByPerson: false, server: null, model: emptyModel(), pulling: false, pullSeq: 0, stalledMs: 0, stallMarked: false,
   pullTimer: null, pullMs: 0, connectWait: null, connectBackoffMs: 0, quiet: 0, unreadableMs: 0,
-  frameTimer: null, frameMs: 0, renderMs: 0, renderAvgMs: 0, drawnAt: 0, redrawWait: null, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
+  frameTimer: null, frameMs: 0, renderMs: 0, renderAvgMs: 0, wakeTimer: null, wakeAt: 0, style: 'globe', drawnAt: 0, redrawWait: null, spot: null, tween: null, pinned: null, surface: null, size: null, last: null,
   onScreen: { top: null, bottom: null }, blitId: { top: 0, bottom: 0 }, refused: { top: false, bottom: false },
 })
 
@@ -105,7 +112,9 @@ export const svgSource = (grid: Grid, alt: string, canDraw: boolean, max = SVG_S
 const sizeKey = (g: Grid): string => `${g.columns}x${g.rows}`
 /** The pin counts only while its agent is in the state; a pin on an agent that has gone is no pin. */
 const pinOf = (state: SwarmState): string | null => (rt.pinned !== null && Object.hasOwn(state.agents, rt.pinned) ? rt.pinned : null)
-const viewOf = (pinned: string | null): View => ({ pinned, spotlight: rt.spot, pulses: rt.model.pulses, lagMs: rt.model.lagMs, tween: rt.tween })
+const viewOf = (pinned: string | null): View => ({
+  pinned, spotlight: rt.spot, pulses: rt.model.pulses, lagMs: rt.model.lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
+})
 const waitingText = (): string =>
   rt.model.degraded !== null
     ? '⚠ Waiting for the swarm…'
@@ -181,6 +190,25 @@ function stopFrames(): void {
   rt.frameTimer?.cancel()
   rt.frameTimer = null
   rt.frameMs = 0
+  rt.wakeTimer?.cancel()
+  rt.wakeTimer = null
+}
+
+/** Draws one frame at the frame's wakeAt, whatever the loop's rate: a blink is two frames, not a faster loop (pane.md 12.5). */
+function wakeFor(host: Host, frame: Frame): void {
+  const at = frame.wakeAt
+  if (at === undefined || !rt.open || !rt.shown || rt.surface !== 'terminal') {
+    rt.wakeTimer?.cancel()
+    rt.wakeTimer = null
+    return
+  }
+  if (rt.wakeTimer !== null && rt.wakeAt === at) return
+  rt.wakeTimer?.cancel()
+  rt.wakeAt = at
+  rt.wakeTimer = host.after(Math.max(1, Math.ceil(at - Date.now())), () => {
+    rt.wakeTimer = null
+    tick(host)
+  })
 }
 
 /** Runs the frame loop at `fps`, held to the render budget; stops it at 0, when closed, or off the terminal. */
@@ -214,6 +242,7 @@ function tick(host: Host): void {
     rt.last = frame
     spent(Date.now() - started)
     animate(host, frame.fps)
+    wakeFor(host, frame)
   } catch {
     periodFailed(rt, host, stopFrames)
   }
@@ -236,6 +265,7 @@ function show(host: Host, now: number): void {
   rt.last = frame
   spent(Date.now() - started)
   animate(host, frame.fps)
+  wakeFor(host, frame)
 }
 
 function stopAll(): void {
@@ -283,6 +313,22 @@ async function openPane($: EngineInterface): Promise<{ isPlaced: boolean; reason
     return { isPlaced: false, reason: err instanceof Error ? err.message.slice(0, 160) : 'the pane could not be opened' }
   }
 }
+
+/** /omnis pane style robot|globe: saved as the pin is, and drawn at once when the pane is open. */
+async function styleCommand($: EngineInterface, arg: string): Promise<string> {
+  if (arg !== 'robot' && arg !== 'globe') return USAGE
+  try {
+    await update($, styleAtom, () => arg)
+  } catch {
+    return 'The swarm pane style could not be saved.'
+  }
+  rt.style = arg
+  rt.last = null
+  if (rt.host !== null) rt.host.invalidate()
+  return `Swarm pane style: ${arg === 'robot' ? 'robots' : 'globes'}.`
+}
+
+const USAGE = 'Usage: /omnis pane, /omnis pane close, or /omnis pane style robot|globe.'
 
 async function paneCommand($: EngineInterface, arg: string): Promise<string> {
   if (arg === 'close') {
@@ -356,8 +402,8 @@ export function registerPane(on: On, options: PluginOptions): void {
     // Neither is awaited: the session starts whether or not they ever answer.
     void $.command.register({
       name: 'omnis',
-      description: 'OmnisSwarm: /omnis pane shows the live swarm pane, /omnis pane close hides it',
-      argumentHint: 'pane [close]',
+      description: 'OmnisSwarm: /omnis pane shows the live swarm pane, /omnis pane close hides it, /omnis pane style robot|globe picks the node style',
+      argumentHint: 'pane [close | style robot|globe]',
       immediate: true,
     }).catch(() => undefined)
     void resume(hooks, host).catch(() => undefined)
@@ -365,8 +411,9 @@ export function registerPane(on: On, options: PluginOptions): void {
   })
 
   on('command.run', { command: 'omnis' }, async ($, e) => {
-    const [sub = '', arg = ''] = e.args.trim().toLowerCase().split(/\s+/)
-    if (sub !== 'pane') return { text: 'Usage: /omnis pane, or /omnis pane close.' }
+    const [sub = '', arg = '', value = ''] = e.args.trim().toLowerCase().split(/\s+/)
+    if (sub !== 'pane') return { text: USAGE }
+    if (arg === 'style') return { text: await styleCommand($, value) }
     return { text: await paneCommand($, arg) }
   }).catch(() => COMMAND_FAILED)
 
@@ -374,6 +421,7 @@ export function registerPane(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     rt.pinned = pinText(await read($, pinnedAtom))
+    rt.style = styleOf(await read($, styleAtom))
     rt.surface = e.surface
     rt.open = true
     rt.shown = true
@@ -405,7 +453,10 @@ export function registerPane(on: On, options: PluginOptions): void {
         ],
       })
       spent(Date.now() - started)
-      if (rt.host !== null) animate(rt.host, frame.fps)
+      if (rt.host !== null) {
+        animate(rt.host, frame.fps)
+        wakeFor(rt.host, frame)
+      }
       return tree
     }
     const { Box, Text, Button, Svg } = $.ui.resolve(e)

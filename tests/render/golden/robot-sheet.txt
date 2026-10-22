@@ -1,0 +1,146 @@
+# robot-sheet: rows S M L; columns running hop-top wave-up wave-down error-red error-off waiting blink done failed stuck clash placeholder degraded still
+## sheet 270x30 pairs 88 sha 31790f91a5b6eb9c
+### glyphs
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                       ▀▀▀▀▀▀▀▀                                                                                                                                                                                                                ▀▀▀▀▀▀▀▀          ▀▀▀▀▀▀▀▀     
+    ▀ ▀▀▀▀▀▀ ▀         ▀▀▀▀▀▀▀▀         ▀ ▀▀▀▀▀▀ ▀        ▀ ▀▀▀▀▀▀ ▀        ▀ ▀▀▀▀▀▀ ▀        ▀ ▀▀▀▀▀▀ ▀                                                              ▀ ▀▀▀▀▀▀ ▀        ▀ ▀▀▀▀▀▀ ▀        ▀ ▀▀▀▀▀▀ ▀                           ▀▀▀▀▀▀▀▀          ▀▀▀▀▀▀▀▀     
+       ▀  ▀            ▀ ▀  ▀ ▀          ▀ ▀  ▀ ▀            ▀  ▀              ▀  ▀              ▀  ▀              ▀  ▀                                                  ▀  ▀              ▀  ▀              ▀  ▀                              ▀ ▀  ▀ ▀          ▀ ▀  ▀ ▀     
+     ▀      ▀         ▀▀▀ ▀▀ ▀▀▀                           ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀          ▀      ▀         ▀▀▀ ▀▀ ▀▀▀        ▀▀▀ ▀▀ ▀▀▀    
+      ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀            ▀▀▀▀▀▀             ▀  ▀             ▀▀▀▀▀▀            ▀▀▀▀▀▀      
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                     ▀ ▀▀▀▀▀▀▀▀▀ ▀                                                                                                                                                                                                            ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀   
+   ▀ ▀▀▀▀▀▀▀▀▀ ▀         ▀   ▀         ▀ ▀▀▀▀▀▀▀▀▀ ▀     ▀ ▀▀▀▀▀▀▀▀▀ ▀     ▀ ▀▀▀▀▀▀▀▀▀ ▀     ▀ ▀▀▀▀▀▀▀▀▀ ▀                                                           ▀ ▀▀▀▀▀▀▀▀▀ ▀     ▀ ▀▀▀▀▀▀▀▀▀ ▀     ▀ ▀▀▀▀▀▀▀▀▀ ▀                        ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀   
+       ▀   ▀          ▀  ▀   ▀  ▀          ▀   ▀             ▀   ▀            ▀     ▀           ▀     ▀            ▀   ▀                                                ▀     ▀            ▀   ▀             ▀   ▀                                                            
+    ▀  ▀   ▀  ▀      ▀▀ ▀ ▀▀▀ ▀ ▀▀         ▀   ▀          ▀  ▀   ▀  ▀       ▀ ▀▀   ▀▀ ▀       ▀ ▀▀   ▀▀ ▀       ▀  ▀   ▀  ▀       ▀ ▀▀▀ ▀▀▀ ▀       ▀ ▀▀▀ ▀▀▀ ▀       ▀ ▀▀   ▀▀ ▀       ▀  ▀   ▀  ▀       ▀  ▀   ▀  ▀        ▀      ▀         ▀         ▀       ▀         ▀   
+   ▀▀ ▀ ▀▀▀ ▀ ▀▀                       ▀▀ ▀ ▀▀▀ ▀ ▀▀     ▀▀ ▀ ▀▀▀ ▀ ▀▀     ▀▀ ▀ ▀▀▀ ▀ ▀▀     ▀▀ ▀ ▀▀▀ ▀ ▀▀        ▀ ▀▀▀ ▀           ▀ ▀▀▀ ▀           ▀ ▀▀▀ ▀        ▀▀ ▀ ▀▀▀ ▀ ▀▀     ▀▀ ▀ ▀▀▀ ▀ ▀▀     ▀▀ ▀ ▀▀▀ ▀ ▀▀         ▀  ▀            ▀ ▀   ▀ ▀         ▀ ▀   ▀ ▀    
+     ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀                           ▀▀▀▀▀▀▀▀▀         ▀▀▀▀▀▀▀▀▀    
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+                     ▀▀▀▀▀▀▀▀▀▀▀▀▀                                                                                                                                                                                                                                            
+   ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀                                                           ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀                      ▀ ▀▀▀▀▀▀▀▀▀▀▀ ▀   ▀ ▀▀▀▀▀▀▀▀▀▀▀ ▀ 
+   ▀▀▀▀▀▀▀▀▀▀▀▀▀                       ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀      ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀      ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀     ▀▀▀▀▀▀▀▀▀▀▀▀▀                          ▀     ▀           ▀     ▀     
+                                       ▀           ▀                         ▀▀▀   ▀▀▀         ▀▀▀   ▀▀▀                           ▀▀▀   ▀▀▀         ▀▀▀   ▀▀▀         ▀▀▀   ▀▀▀                                                             ▀  ▀     ▀  ▀     ▀  ▀     ▀  ▀  
+                    ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀                                          ▀ ▀   ▀ ▀         ▀ ▀   ▀ ▀                                                               ▀ ▀   ▀ ▀                                             ▀      ▀        ▀           ▀     ▀           ▀  
+  ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀                     ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀   ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀   ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀   ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀     ▀ ▀ ▀▀▀ ▀ ▀       ▀ ▀ ▀▀▀ ▀ ▀       ▀ ▀ ▀▀▀ ▀ ▀     ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀   ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀   ▀▀▀ ▀ ▀▀▀ ▀ ▀▀▀        ▀  ▀            ▀ ▀   ▀ ▀         ▀ ▀   ▀ ▀    
+    ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀                         ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀   
+                                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                              
+### colours
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccccccccaaaaaaaaaaccccccccaaaaa
+aaaadeffffffedaaaaaaaaghiiiiiihgaaaaaaaadeffffffedaaaaaaaadeffffffedaaaaaaaajkllllllkjaaaaaaaadeffffffedaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaamnoooooonmaaaaaaaadeppppppedaaaaaaaadeqqqqqqedaaaaaaaaaaaaaaaaaaaaaaaaaarsttttttsraaaaaaaarsttttttsraaaa
+aaaaeuvwvvwvueaaaaaaaagivxvvxvigaaaaaaaaeyvwvvwvyeaaaaaaaaeuvwvvwvueaaaaaaaakzvwvvwvzkaaaaaaaaeuvwvvwvueaaaaaaaaaaABAABAaaaaaaaaaaaaAAAAAAaaaaaaaaaaaaCCCCCCaaaaaaaaaanDEFEEFEDnaaaaaaaaeGvwvvwvGeaaaaaaaaeHvwvvwvHeaaaaaaaaaaIIIIIIaaaaaaaaaartvxvvxvtraaaaaaaartvxvvxvtraaaa
+aaaaeJvvvvvvJeaaaaaaaaKLwvwwvwLKaaaaaaaaeuvvvvvvueaaaaaaaaeMvvvvvvMeaaaaaaaakNvvvvvvNkaaaaaaaaeJvvvvvvJeaaaaaaaaaBAAAAAABaaaaaaaaaaBAAAAAABaaaaaaaaaaOCCCCCCOaaaaaaaaanPEEEEEEPnaaaaaaaaeQvvvvvvQeaaaaaaaaeRvvvvvvReaaaaaaaaaSIIIIIISaaaaaaaaaTUwvwwvwUTaaaaaaaaTUwvwwvwUTaaaa
+aaaaaaVWXXYXaaaaaaaaaaaaVVXXXXaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaZ01121aaaaaaaaaaaaZ01121aaaaaaaaaaaa345565aaaaaaaaaaaaV7XX8XaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaVWXXYXaaaaaaaaaaaaaSaaSaaaaaaaaaaaaaVVXXXXaaaaaaaaaaaaVVXXXXaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaabghhhhhhhhhgbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacccccccccccaaaaaaacccccccccccaaa
+aaadefffffffffedaaaaag9vvwvvvwvv9gaaaaadefffffffffedaaaaadefffffffffedaaaaajklllllllllkjaaaaadefffffffffedaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaamnooooooooonmaaaaadepppppppppedaaaaadeqqqqqqqqqedaaaaaaaaaaaaaaaaaaaaaaarstttttttttsraaaaarstttttttttsraa
+aaaeuvvwvvvwvvueaaaaagivvxvvvxvvigaaaaae!vvwvvvwvv!eaaaaaeuvvwvvvwvvueaaaaakzvwvvvvvwvzkaaaaaeuvwvvvvvwvueaaaaaaaAABAAABAAaaaaaaaaaAAAAAAAAAaaaaaaaaaCCCCCCCCCaaaaaaanDEFEEEEEFEDnaaaaaeGvvwvvvwvvGeaaaaaeHvvwvvvwvvHeaaaaaaaaIIIIIIaaaaaaaaar$vvavvvavv$raaaaar$vvavvvavv$raa
+aaae%vvxvvvxvv%eaaaaaKLvwvwwwvwvLKaaaaaeuvvxvvvxvvueaaaaaeyvvxvvvxvvyeaaaaak&vwxvvvxwv&kaaaaae%vwxvvvxwv%eaaaaaa*AA*AAA*AA*aaaaaaa*A***A***A*aaaaaaa+C+++C+++C+aaaaaan-EF/EEE/FE-naaaaae:vvxvvvxvv:eaaaaae;vvxvvvxvv;eaaaaaaaSIIIIIISaaaaaaaar<vvvvvvvvv<raaaaar<vvvvvvvvv<raa
+aaa=>vwvwwwvwv>=aaaaaaaaaaaaaaaaaaaaaaa=>vwvwwwvwv>=aaaaa=>vwvwwwvwv>=aaaaa?@vwvwwwvwv@?aaaaa=>vwvwwwvwv>=aaaaaaaABABBBABAaaaaaaaaaABABBBABAaaaaaaaaaCOCOOOCOCaaaaaaa^_E~E~~~E~E_^aaaaa=.vwvwwwvwv.=aaaaa=.vwvwwwvwv.=aaaaaaaaaSaaSaaaaaaaaaaaawawaaawawaaaaaaaaawawaaawawaaaa
+aaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaa.........aaaaaaaaaaaaaaaaaaaaaaaaaaa.........aaaaaaaaa.........aaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaadddddddddddddaaaaghiiiiiiiiiiihgaaaadddddddddddddaaaaadddddddddddddaaaaajjjjjjjjjjjjjaaaaadddddddddddddaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaammmmmmmmmmmmmaaaaadddddddddddddaaaaadddddddddddddaaaaaaaaaaaaaaaaaaaaaacrsssssssssssrcaaacrsssssssssssrca
+aaef%%%%%%%%%%%feaaag9vvavvvvvavv9gaaae.%%%%%%%%%%%.eaaaef%%%%%%%%%%%feaaakl&&&&&&&&&&&lkaaaef%%%%%%%%%%%feaaaaa***********aaaaaaa***********aaaaaaa+++++++++++aaaaano-----------onaaaep:::::::::::peaaaeq;;;;;;;;;;;qeaaaaaaaaaaaaaaaaaaaaar$vvwvvvvvwvv$raaar$vvwvvvvvwvv$ra
+aaeuvvavvvvvavvueaaagvvvvvvvvvvvvvgaaaeMvvavvvvvavvMeaaaeuvvavvvvvavvueaaakzvxwxvvvxwxvzkaaaeuvxwxvvvxwxvueaaaaaAAaAAAAAaAAaaaaaaaABBBAAABBBAaaaaaaaCOOOCCCOOOCaaaaanDE/F/EEE/F/EDnaaaeGvvavvvvvavvGeaaaeHvvavvvvvavvHeaaaaaaaIIIIIIaaaaaaaartvvxvvvvvxvvtraaartvvxvvvvvxvvtra
+aaevvvvvvvvvvvvveaaaKLwvwvwwwvwvwLKaaaeuvvvvvvvvvvvueaaae!vvvvvvvvvvv!eaaakvvxvxvvvxvxvvkaaaevvxvxvvvxvxvveaaaaAAAAAAAAAAAAAaaaaaAAAAAAAAAAAAAaaaaaCCCCCCCCCCCCCaaaanEE/E/EEE/E/EEnaaaevvvvvvvvvvvvveaaaevvvvvvvvvvvvveaaaaaaSIIIIIISaaaaaaar<vvvvvvvvvvv<raaar<vvvvvvvvvvv<ra
+aa=>wvwvwwwvwvw>=aaaaaaaaaaaaaaaaaaaaa=>wvwvwwwvwvw>=aaa=>wvwvwwwvwvw>=aaa?@wvwvwwwvwvw@?aaa=>wvwvwwwvwvw>=aaaaaBABABBBABABaaaaaaaBABABBBABABaaaaaaaOCOCOOOCOCOaaaaa^_~E~E~~~E~E~_^aaa=.wvwvwwwvwvw.=aaa=.wvwvwwwvwvw.=aaaaaaaaSaaSaaaaaaaaaaaawawaaawawaaaaaaaaawawaaawawaaaa
+aaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaa...........aaaaaaaaaaaaaaaaaaaaaaaaa...........aaaaaaa...........aaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+### legend
+a fg #0b0f17 bg #0b0f17 x5724
+b fg #0b0f17 bg #1a392f x23
+c fg #0b0f17 bg #162c28 x42
+d fg #0b0f17 bg #162e29 x102
+e fg #162e29 bg #162e29 x108
+f fg #162e29 bg #2d6d4e x66
+g fg #1a392f bg #1a392f x16
+h fg #1a392f bg #398c60 x13
+i fg #398c60 bg #d77757 x21
+j fg #0b0f17 bg #3d1f26 x17
+k fg #3d1f26 bg #3d1f26 x18
+l fg #3d1f26 bg #ef4f48 x17
+m fg #0b0f17 bg #2e1a21 x17
+n fg #2e1a21 bg #2e1a21 x18
+o fg #2e1a21 bg #733136 x17
+p fg #162e29 bg #a88e1a x17
+q fg #162e29 bg #e4544a x17
+r fg #162c28 bg #162c28 x36
+s fg #162c28 bg #2b664a x30
+t fg #2b664a bg #d77757 x38
+u fg #2d6d4e bg #2d6d4e x24
+v fg #d77757 bg #d77757 x506
+w fg #d77757 bg #0b0f17 x166
+x fg #0b0f17 bg #d77757 x42
+y fg #2d6d4e bg #ffc861 x4
+z fg #ef4f48 bg #ef4f48 x6
+A fg #9b563f bg #9b563f x104
+B fg #9b563f bg #0b0f17 x38
+C fg #504646 bg #504646 x50
+D fg #733136 bg #733136 x6
+E fg #2a2e36 bg #2a2e36 x44
+F fg #2a2e36 bg #f85149 x8
+G fg #a88e1a bg #a88e1a x6
+H fg #e4544a bg #e4544a x6
+I fg #5c6679 bg #5c6679 x36
+J fg #d77757 bg #2d6d4e x4
+K fg #1a392f bg #0b0f17 x6
+L fg #398c60 bg #0b0f17 x6
+M fg #ffc861 bg #2d6d4e x4
+N fg #d77757 bg #ef4f48 x2
+O fg #504646 bg #0b0f17 x20
+P fg #2a2e36 bg #733136 x2
+Q fg #d77757 bg #a88e1a x2
+R fg #d77757 bg #e4544a x2
+S fg #5c6679 bg #0b0f17 x12
+T fg #162c28 bg #0b0f17 x4
+U fg #2b664a bg #0b0f17 x4
+V fg #0b0f17 bg #4cd07a x14
+W fg #d77757 bg #4cd07a x7
+X fg #0b0f17 bg #22533a x36
+Y fg #d77757 bg #22533a x7
+Z fg #0b0f17 bg #379658 x2
+0 fg #9b563f bg #379658 x2
+1 fg #0b0f17 bg #1a3e2e x6
+2 fg #9b563f bg #1a3e2e x2
+3 fg #0b0f17 bg #42574f x1
+4 fg #504646 bg #42574f x1
+5 fg #0b0f17 bg #1e282b x3
+6 fg #504646 bg #1e282b x1
+7 fg #2a2e36 bg #4cd07a x1
+8 fg #2a2e36 bg #22533a x1
+9 fg #398c60 bg #398c60 x4
+! fg #ffc861 bg #ffc861 x4
+$ fg #2b664a bg #2b664a x8
+% fg #2d6d4e bg #d77757 x48
+& fg #ef4f48 bg #d77757 x13
+* fg #0b0f17 bg #9b563f x34
++ fg #0b0f17 bg #504646 x19
+- fg #733136 bg #2a2e36 x13
+/ fg #f85149 bg #2a2e36 x10
+: fg #a88e1a bg #d77757 x13
+; fg #e4544a bg #d77757 x13
+< fg #d77757 bg #2b664a x8
+= fg #162e29 bg #0b0f17 x24
+> fg #2d6d4e bg #0b0f17 x16
+? fg #3d1f26 bg #0b0f17 x4
+@ fg #ef4f48 bg #0b0f17 x4
+^ fg #2e1a21 bg #0b0f17 x4
+_ fg #733136 bg #0b0f17 x4
+~ fg #2a2e36 bg #0b0f17 x12
+. 8 more pairs

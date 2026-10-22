@@ -9,6 +9,7 @@ import { type Grid, gridText, pairCount } from '../../src/render/grid.ts'
 import type { Frame } from '../../src/render/types.ts'
 import { FIVE_T0 } from '../fixtures/swarm-five.ts'
 import { GOLDEN_CASES, goldenFrame, type GoldenCase } from './golden-cases.ts'
+import { SHEET_SIZES, SHEET_STATES, robotSheet } from './robot-sheet.ts'
 
 // Golden snapshots: each frame's glyphs, a map of its colour pairs with a legend (for review against
 // docs/design/pane.md), and a hash of the exact cells. Regenerate with UPDATE_GOLDEN=1 after an intended change,
@@ -51,16 +52,27 @@ function snapshot(c: GoldenCase, f: Frame): string {
   ].join('\n')
 }
 
-for (const c of GOLDEN_CASES) {
-  test(`golden: ${c.name}`, () => {
-    const actual = snapshot(c, goldenFrame(c))
-    const file = join(GOLDEN, `${c.name}.txt`)
+function sheetSnapshot(): string {
+  const g = robotSheet()
+  const { map, legend } = colours(g)
+  const sha = createHash('sha256').update(g.encode()).digest('hex').slice(0, 16)
+  return [
+    `# robot-sheet: rows ${SHEET_SIZES.join(' ')}; columns ${SHEET_STATES.join(' ')}`,
+    `## sheet ${g.columns}x${g.rows} pairs ${pairCount(g)} sha ${sha}`, '### glyphs', ...gridText(g), '### colours', ...map, '### legend', ...legend, '',
+  ].join('\n')
+}
+
+const cases: [string, () => string][] = [...GOLDEN_CASES.map(c => [c.name, () => snapshot(c, goldenFrame(c))] as [string, () => string]), ['robot-sheet', sheetSnapshot]]
+for (const [name, take] of cases) {
+  test(`golden: ${name}`, () => {
+    const actual = take()
+    const file = join(GOLDEN, `${name}.txt`)
     if (process.env.UPDATE_GOLDEN === '1') {
       mkdirSync(GOLDEN, { recursive: true })
       writeFileSync(file, actual)
       return
     }
-    assert.ok(existsSync(file), `no golden for ${c.name}: run with UPDATE_GOLDEN=1, then have the designer review it`)
+    assert.ok(existsSync(file), `no golden for ${name}: run with UPDATE_GOLDEN=1, then have the designer review it`)
     assert.equal(actual, readFileSync(file, 'utf8').replace(/\r\n/g, '\n'))
   })
 }

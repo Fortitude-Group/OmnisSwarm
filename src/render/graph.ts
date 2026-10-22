@@ -7,6 +7,7 @@ import { clipText } from './format.ts'
 import { FULL_MOTION, arc, blink, comet, fadeIn, flash, ghost, glow, hashUnit, type Motion } from './fx.ts'
 import { type Grid, type Part, cp } from './grid.ts'
 import { type Edge, orderAgents, structuralEdges } from './layout.ts'
+import { type Box, type PaneStyle, fitBoxes, paintRobot, robotLook, robotPulses } from './robot.ts'
 import { ACCENT, CANVAS, GLYPH, GRAPH, KIND, LINK, MOTION, RASTER_MAX, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
 import type { Point, Rect, View } from './types.ts'
 
@@ -23,9 +24,14 @@ export type GraphInput = {
   edges?: readonly Edge[]
   /** The motions the frame budget allows; all of them when not given. */
   motion?: Readonly<Motion>
+  /** Globes (the default) or robots (pane.md section 12), for the whole graph. */
+  style?: PaneStyle
+  /** Draw robots as the still frame (pane.md 12.6): off the terminal, where nothing moves. */
+  still?: boolean
 }
 
-type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState }
+/** `box`: the robot's box, in robot style. */
+type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState; box?: Box }
 type Rim = { color: number; k: number; flare: boolean } | null
 
 /** Positions beyond this are treated as garbage; it keeps every loop below bounded. */
@@ -213,10 +219,11 @@ function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
   const solid = new Uint8Array(area.w * area.h)
   for (const n of nodes) {
     const reach = n.r + GRAPH.ringPx
-    const y0 = Math.max(0, Math.floor((n.p.y - reach) / 2))
-    const y1 = Math.min(area.h - 1, Math.floor((n.p.y + reach) / 2))
-    const x0 = Math.max(0, Math.floor(n.p.x - reach))
-    const x1 = Math.min(area.w - 1, Math.floor(n.p.x + reach))
+    const b = n.box
+    const y0 = Math.max(0, Math.floor((b !== undefined ? b.top : n.p.y - reach) / 2))
+    const y1 = Math.min(area.h - 1, Math.floor((b !== undefined ? b.top + b.h - 1 : n.p.y + reach) / 2))
+    const x0 = Math.max(0, Math.floor(b !== undefined ? b.left : n.p.x - reach))
+    const x1 = Math.min(area.w - 1, Math.floor(b !== undefined ? b.left + b.w - 1 : n.p.x + reach))
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) solid[y * area.w + x] = 1
   }
   return solid
@@ -226,7 +233,9 @@ function labels(grid: Grid, area: Rect, nodes: readonly Node[]): void {
   const used = new Uint8Array(area.w * area.h)
   const solid = solidCells(area, nodes)
   for (const n of nodes) {
-    const row = Math.max(0, Math.min(area.h - 1, Math.floor((n.p.y + n.r + GRAPH.ringPx) / 2) + 1))
+    // A robot's label sits one row under its box, so a hop never moves it.
+    const below = n.box !== undefined ? Math.floor((n.box.top + n.box.h - 1) / 2) : Math.floor((n.p.y + n.r + GRAPH.ringPx) / 2)
+    const row = Math.max(0, Math.min(area.h - 1, below + 1))
     const isLead = n.id === LEAD
     const status = statusGlyph(n.s.status, n.s.placeholder)
     const statusColor = STATUS[n.s.status]
@@ -294,6 +303,12 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     const r = s.placeholder ? GRAPH.minRadius : nodeRadius(s.tokens.total, Math.min(maxR, Math.max(GRAPH.minRadius, room)))
     nodes.set(a.id, { id: a.id, p, r, fill: nodeColor(s, a, now, motion), s, a })
   }
+  const robots = input.style === 'robot'
+  if (robots) {
+    const list = [...nodes.values()]
+    const boxes = fitBoxes(list.map(n => ({ id: n.id, p: n.p, r: n.r, placeholder: n.s.placeholder })), area.w, area.h * 2)
+    for (const n of list) n.box = boxes.get(n.id)!
+  }
   const segment = (from: string, to: string, gap = 1): [Point, Point] | null => {
     const a = nodes.get(from)
     const b = nodes.get(to)
@@ -329,13 +344,20 @@ export function drawGraph(grid: Grid, full: Rect, input: GraphInput): void {
     }
   }
 
-  // 2. Nodes, with glow, context ring and rim.
+  // 2. Nodes, with glow, context ring and rim; or robots, with halo, context bar and outline.
   const rims = pulseRims(view, tEff, motion)
   const flashing = new Set<string>()
+  const clashBlinks = motion.clashBlink && !(robots && input.still === true)
   for (const c of clashes) {
-    if (clashActive(state, c, now) && (!motion.clashBlink || blink(now, MOTION.clashBlinkMs))) for (const id of c.agents) flashing.add(id)
+    if (clashActive(state, c, now) && (!clashBlinks || blink(now, MOTION.clashBlinkMs))) for (const id of c.agents) flashing.add(id)
   }
-  for (const n of nodes.values()) {
+  const pulses = robots ? robotPulses(view, tEff, motion) : null
+  for (const n of robots ? nodes.values() : []) {
+    const box = n.box!
+    const look = robotLook({ id: n.id, r: n.r, size: box.size, s: n.s, a: n.a, now, motion, pulse: pulses!.get(n.id), clash: flashing.has(n.id), still: input.still === true })
+    paintRobot(px, box, look)
+  }
+  for (const n of robots ? [] : nodes.values()) {
     const seed = hashUnit(n.id)
     // Degraded, breathing stops: the halo holds at 0.7 and a stuck rim at 0.6.
     const stuckK = motion.breathe ? quantise(0.3 + 0.6 * glow(now, seed), 4) : 0.6

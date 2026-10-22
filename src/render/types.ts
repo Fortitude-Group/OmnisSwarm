@@ -23,6 +23,10 @@ export type View = {
   pulses: readonly Pulse[]
   lagMs: number
   tween: Tween | null
+  /** How nodes are drawn, pane-wide: globes unless robots were chosen (pane.md 12.1). */
+  style?: 'globe' | 'robot'
+  /** Nothing moves where this frame goes (the Svg): robots draw their still frame (pane.md 12.6). */
+  still?: boolean
 }
 
 export type Chip = { id: string; label: string; color: number; pinned: boolean }
@@ -43,6 +47,8 @@ export type Frame = {
   spotlight: string | null
   /** The one-line summary: the Svg's words for readers that cannot see it. */
   alt: string
+  /** When the loop must draw one frame whatever its rate: a robot's blink starts or ends (pane.md 12.5). */
+  wakeAt?: number
 }
 
 export const emptyView = (): View => ({ pinned: null, spotlight: null, pulses: [], lagMs: 0, tween: null })
