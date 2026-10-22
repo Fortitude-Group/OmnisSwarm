@@ -84,6 +84,16 @@ test('a dearer answer says costs … more vs requested, the figure in amber', ()
   colourOf(g, ' more vs requested', TEXT.dim)
 })
 
+test('a saving that rounds to $0.000 is left out, the badge stays', () => {
+  const tiny = foldAll('s1', [
+    ev('agent.started', { name: 'coder-1', role: 'coder', description: '', parent: LEAD }, { agent: 'a1', atSec: 0 }),
+    ev('agent.usage', { model: DOWN[0], requested: DOWN[1], input: 10, output: 10, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 1 }),
+  ])
+  const g = render(tiny, { ...emptyView(), pinned: 'a1' }, at(2), FULL).bottom!
+  assert.match(all(g), /sonnet → haiku/)
+  assert.doesNotMatch(all(g), /saves|costs/)
+})
+
 test('the graph label carries ↓ in dim for cheaper and ↑ in amber for dearer', () => {
   const down = frame(...DOWN).top
   assert.match(all(down), /▶ coder-1 ↓/)

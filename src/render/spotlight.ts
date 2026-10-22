@@ -81,7 +81,9 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   // Every other colour stays the answering model's. The badge and the saving are each drawn whole or not at all.
   const families = routedFamilies(s)
   const badge: Part[] = families === null ? [] : [[families.asked, TEXT.dim], [' → ', TEXT.faint], [families.answered, color]]
-  const delta = families === null ? 0 : (s.route?.deltaUsd ?? 0)
+  // A delta that rounds to $0.000 says nothing, so it shows no saving at all.
+  const raw = families === null ? 0 : (s.route?.deltaUsd ?? 0)
+  const delta = Math.abs(raw) < 0.0005 ? 0 : raw
   const saving: Part[] = delta > 0
     ? [[' · saves ', TEXT.dim], [fmtUsd(delta), STATUS.running], [' vs requested', TEXT.dim]]
     : delta < 0 ? [[' · costs ', TEXT.dim], [fmtUsd(-delta), STATUS.warn], [' more vs requested', TEXT.dim]] : []
