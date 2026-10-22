@@ -33,6 +33,10 @@ export class GifWriter {
   }
 
   add(cells: Cells, delayCs: number): void {
+    if (Math.ceil(this.width / CELL_W) < cells.columns || Math.ceil(this.height / CELL_H) < cells.rows) {
+      throw new RangeError(`GifWriter: ${cells.columns}x${cells.rows} cells do not fit a ${this.width}x${this.height} canvas`)
+    }
+    delayCs = Math.min(delayCs, MAX_DELAY_CS)
     const box = changedBox(this.#last, cells)
     const prev = this.#frames.at(-1)
     if (box === null && prev !== undefined && prev.delayCs + delayCs <= MAX_DELAY_CS) {

@@ -33,6 +33,11 @@ export function cellsOf(grids: readonly (Grid | null)[], columns: number, rows: 
   return cells
 }
 
+/** Cells that draw nothing: space, U+2800, controls, variation selectors and values past Unicode (as svg.ts). */
+function isBlank(code: number): boolean {
+  return code <= 0x20 || code === 0x2800 || (code >= 0x7f && code <= 0x9f) || code === 0xfe0e || code === 0xfe0f || code > 0x10ffff
+}
+
 /** Paints one cell into a packed RGB buffer `width` pixels wide, its top-left pixel at (x0, y0). */
 export function paintCell(rgb: Uint8Array, width: number, x0: number, y0: number, glyph: number, fg: number, bg: number): void {
   const height = Math.floor(rgb.length / 3 / width)
@@ -56,7 +61,7 @@ export function paintCell(rgb: Uint8Array, width: number, x0: number, y0: number
     DOTS.forEach(([col, row], bit) => {
       if (((glyph - 0x2800) >> bit) & 1) fill(x0 + col * 4 + 1, y0 + row * 4 + 1, 2, 2, colour)
     })
-  } else if (glyph !== 0x20) {
+  } else if (!isBlank(glyph)) {
     const rows = glyphRows(glyph)
     if (rows === null) fill(x0 + 1, y0 + 4, CELL_W - 2, CELL_H - 8, colour, 0.6)
     else {

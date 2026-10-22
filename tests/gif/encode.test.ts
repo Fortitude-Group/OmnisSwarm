@@ -45,3 +45,39 @@ test('the palette keeps index 0 free and maps colours past 255 to the nearest', 
   const near = p.indexOf(0xfefefe)
   assert.ok(near > 0 && near < 256)
 })
+
+test('unchanged pixels between two far-apart changed cells are transparent', () => {
+  const w = new GifWriter(6 * CELL_W, 1 * CELL_H)
+  w.add(cells(6, 1, 0x0d1117), 10)
+  const b = cells(6, 1, 0x0d1117)
+  b.bg[0] = 0xff0000
+  b.bg[5] = 0x00ff00
+  w.add(b, 10)
+  const f = decodeGif(w.finish()).frames[1]!
+  assert.deepEqual([f.x, f.w], [0, 6 * CELL_W])
+  for (let y = 0; y < CELL_H; y++) {
+    for (let x = CELL_W; x < 5 * CELL_W; x++) assert.equal(f.pixels[y * f.w + x], TRANSPARENT)
+  }
+})
+
+test('a canvas width that is not a multiple of 8 clips the last cell', () => {
+  const w = new GifWriter(12, 16)
+  w.add(cells(2, 1, 0x112233), 10)
+  const gif = decodeGif(w.finish())
+  assert.equal(gif.width, 12)
+  assert.equal(gif.frames[0]!.w, 12)
+  assert.equal(gif.frames[0]!.pixels.length, 12 * 16)
+})
+
+test('cells larger than the canvas are rejected with a clear error', () => {
+  assert.throws(() => new GifWriter(8, 16).add(cells(2, 1, 0), 10), /do not fit/)
+  assert.throws(() => new GifWriter(8, 16).add(cells(1, 2, 0), 10), /do not fit/)
+})
+
+test('a single delay is clamped and merged delays that would overflow start a new frame', () => {
+  const w = new GifWriter(8, 16)
+  w.add(cells(1, 1, 0x112233), 100_000)
+  w.add(cells(1, 1, 0x112233), 10)
+  const gif = decodeGif(w.finish())
+  assert.deepEqual(gif.frames.map(f => f.delayCs), [65_535, 10])
+})
