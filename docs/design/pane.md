@@ -877,3 +877,197 @@ no cross, by the dark body, red eyes and the label's `✕`).
       the glow and outline.
 - [ ] Each chip dot's hue matches its robot's glow and bar.
 - [ ] `pairCount` on robot goldens is at or below the matching globe goldens.
+
+## 13. Guard badge, replay, GIF card, model badge
+
+The look of the four features in `docs/superpowers/specs/2026-10-22-guard-replay-design.md`. Same rules as §12:
+tokens, exact values, nothing carried by colour alone, the frame budget of section 6.
+
+**What was checked and how.** Robot and globe previews were drawn on a `Pixels` canvas by a throwaway script
+following this section. Header, card and badge mock-ups were drawn as text cells in Consolas (10×20 px cells, so
+they are wider than a real 8×16 cell). Contrast and OKLab figures were computed as in section 3. **Not checked:** a
+real terminal, render time, pair counts in a golden, and the GIF encoder's palette.
+
+### 13.1 Tokens
+
+| Token | Value | Use | Check |
+|---|---|---|---|
+| `GUARD.drop` | `#e0f4ff` | The sweat drop on robots and globes | 16.95:1 on `CANVAS`; 2.78:1 on terracotta, 4.89:1 on waiting terracotta; OKLab ×100 from terracotta 32.5 / 36.1 / 29.5 / 34.1 (normal / protanopia / deuteranopia / tritanopia); from `KIND.read` 17.0 / 10.8 / 15.1 / 17.1 |
+| `GUARD.dripMix` | 0.7 | The drip pixel: `mix(body, GUARD.drop, 0.7)` | 2.08:1 on terracotta (motion carries it) |
+| `GUARD.flashMs` | 450 (= `pulseMs`) | Drop flash when a `guard.warned` or `guard.nudged` event arrives | — |
+| `REPLAY.raised` | `#202337` = `mix(CANVAS_RAISED, ACCENT, 0.08)` | Header background (both rows, the 1-row header and the summary line) during a replay and in a GIF | On it: `TEXT.primary` 13.10, `TEXT.dim` 6.14, `STATUS.failed` 4.62, `STATUS.warn` 6.87, `STATUS.running` 10.07, `ACCENT` 6.00. A 0.10 tint would put failed text at 4.47, under 4.5, so the tint stays at 0.08 and the badge does the work |
+| `REPLAY.badge` | text `CANVAS` on `ACCENT` | ` REPLAY 10× ` | 7.43:1 |
+| `GUARD.blockedBadge` | text `CANVAS` on `STATUS.failed` | ` BLOCKED ` | 5.72:1 |
+| `GLYPH.times` | `×` U+00D7 (width A) | The replay speed | add to section 5 |
+| `GLYPH.cheaper` / `dearer` | `↓` / `↑` (already in section 5) | Model badge mark after a label | — |
+
+### 13.2 Guard warning badge: the sweat drop
+
+**One mark for both styles.** Robots and globes both get a sweat drop. I've used it instead of the spec's
+"amber rim on globes" because the amber rim already means **stuck** (section 4: an amber rim breathing on the glow
+period); a second amber rim meaning "over budget" would make the two unreadable apart, both in colour and in shape.
+The drop is a new shape, so it reads in greyscale and under every colour-vision deficiency.
+
+**Warned vs nudged.** Warned: one drop at the top right. Nudged (the agent has been told to wrap up): **two drops**,
+the second mirrored at the top left. More sweat, same meaning, readable without colour.
+
+**Robots.** Each skin gives a `sweat` overlay per size: a list of sprite pixels drawn in `GUARD.drop` after the
+sprite and before the bar (contract addition to §12.4; the nudged copy is mirrored, `x → w - 1 - x`). The drop moves
+with the sprite, so it lives inside the box and hops with the robot; no new headroom. `clawd`:
+
+| Size | Warned pixels `(x, y)` | Where | Drip |
+|---|---|---|---|
+| S | `(7, 0)`, `(7, 1)` | the clear column right of the head, beside it (on the body it sat against the eye and read as a white eye) | none (too small) |
+| M | `(9, 0)`, `(8, 1)`, `(9, 1)` | the head's top-right corner: a tip and a two-pixel bead | yes |
+| L | `(11, 0)`, `(10, 1)`, `(11, 1)`, `(10, 2)`, `(11, 2)` | the head's top-right corner: a tip and a 2×2 bead | yes |
+
+```
+S warned          M warned          L warned          M nudged
+.BBBBBBW          .BBBBBBBBW.       .BBBBBBBBBBW.     .WBBBBBBBW.
+.BEBBEBW          .BBEBBBEWW.       .BBEBBBBBEWW.     .WWEBBBEWW.
+ABBBBBBA          .BBEBBBEBB.       .BBEBBBBBEWW.     .BBEBBBEBB.
+...               ...               ...               ...
+```
+(`W` = `GUARD.drop`; S's drop sits in sprite column 7, which is clear except for `arms.up`.)
+
+**The drip (M and L, running or waiting with a drop).** It uses the hop's slot clock (§12.5, 10 slots of 200 ms, same
+seed): in slots 2, 3 and 4 one pixel at the body's right column (`body.x1`) is drawn `GUARD.dripMix` toward the
+drop, at rows `dropBottom + 1`, `+ 2`, `+ 3` (skipped past the body's last row). Slots 0-1 and 5-9: no drip. A bead
+of sweat runs down the side of the head once every 2 s, just before the hop, so it needs no frame beyond `FPS.glow`.
+Nudged robots drip on both sides (mirrored column `body.x0`).
+
+**Globes.** The same drop on the canvas, outside the ring: anchor `a = round(p + (r + ringPx + 1.5) × (cos 45°,
+-sin 45°)) + (0, 1)`. For `r ≥ 2.2` the pixels are `a + (1, -2)`, `a + (0, -1)`, `a + (1, -1)`; below 2.2, `a + (0,
+-1)` and `a`. Nudged: mirrored about the node's vertical axis (one o'clock and eleven o'clock). Drawn after the
+halo and rims, before links. No drip on globes. The drop counts as node pixels for label clearance.
+
+**When it shows.** From the agent's first `guard.warned` (one drop) or `guard.nudged` (two) until the agent is done
+or failed. Done and failed robots and globes never show a drop (the guard is about live agents; the ghost and the
+dead robot already say the agent stopped). A waiting agent keeps its drop (cost limits can be passed while waiting).
+
+**Drop flash** when a `guard.warned` or `guard.nudged` event arrives: `GUARD.flashMs` (450 ms), 3 steps on the pulse
+machinery: `q3(flash)` 3 and 1 → the drop pixels in `#ffffff`, 2 → `GUARD.drop`. Never coalesced (these events are
+rare). It runs at `FPS.busy` like any pulse.
+
+**How it combines** (one row per neighbour; the drop is drawn on the sprite or beside it, outlines are drawn round
+the body, so they never fight):
+
+| With | Result |
+|---|---|
+| stuck (amber outline) | both: amber outline round the body, drop on the head |
+| clash (red outline blinking) | both |
+| hop | the drop rides with the sprite; drip slots 2-4 come while the robot is on the ground (hop is slots 6-9) |
+| tool wave | both; at S, `arms.up` puts the arm on `(7, 1)`: the **arm wins** for the 450 ms of the wave |
+| error flash | both: red glow and outline, hurt eyes, drop unchanged |
+| blink | both |
+| done / failed | no drop |
+| degraded (section 6) | breathing off → no drip; pulse fade off → the flash is one frame of `#ffffff`, held for `pulseHoldMs` |
+| still frame (Svg) | drop shown, no drip, no flash |
+
+**Words elsewhere** (so the drop is never the only carrier):
+- Spotlight row 4, right-aligned before `! stuck`: `over time-box 21m/20m` or `over $3.20/$3` in `STATUS.warn`
+  (when warned), `nudged 31m/30m` (when nudged). If both limits are passed, the one furthest past its act level.
+- Tree: ` over` after the figures, `STATUS.warn`.
+- The toast and the `guard.*` feed lines are the spec's.
+
+**A blocked swarm in the header.**
+- Row 0, the cost group: quiet below the swarm warn level (no limit shown). From the warn level it becomes
+  `≈$11.20/$20`, figure in `STATUS.warn`, `/$20` in `TEXT.dim`. From the act level the figure is `STATUS.failed`.
+- Row 1, right-aligned notes, new priority 0 (before the degraded note): while spawns are blocked,
+  ` BLOCKED ` (`GUARD.blockedBadge`) then ` new agents` `TEXT.dim` · `/omnis budget <usd>` `TEXT.dim`. Priority 2
+  (after the degraded note): `n over budget` in `STATUS.warn` while any agent shows a drop.
+- 1-row header and summary line: ` BLOCKED ` right-aligned before the gaps marker, nothing else.
+- The badge is a word in reverse video, so it reads without colour.
+
+### 13.3 Replay
+
+So nobody mistakes a replay for live: **a badge, a clock and a tinted header, all three, for as long as the replay
+is on** (including after it ends, until `/omnis replay stop`).
+
+- Row 0 starts with ` REPLAY 10× ` (`REPLAY.badge`; speed as an integer then `×`), then ` 03:12` in
+  `TEXT.primary` (replay time since the swarm started) and ` / 08:40` in `TEXT.dim` (the swarm's length after gap
+  cutting is *not* used: the clock shows the swarm's own time, so "3:12" means 3:12 into the real run). Over an hour:
+  `1:03:12`. Then two spaces and the usual row 0 (`◆ name · …`). The badge and clock are never dropped; the
+  whole-or-absent rule applies to everything after them.
+- When the replay reaches the end: ` 08:40 / 08:40 end` (`end` `TEXT.dim`), and the row 1 notes gain
+  `/omnis replay stop` in `TEXT.dim` at priority 1.
+- Both header rows (and the 1-row header and summary line) are painted `REPLAY.raised` instead of
+  `CANVAS_RAISED`. The rest of the pane is unchanged: same renderer, same style, so a replay looks like the run did.
+- 1-row header and summary line: ` REPLAY 10× ` first, then the clock if it fits whole, then the usual parts.
+- Ages in the feed, the burn rate and live timeline bars are measured against the replay clock.
+- No motion of its own: the badge doesn't blink.
+
+### 13.4 GIF export: header mark and summary card
+
+**Frame.** The full layout at 120×44 cells, rasterised at 8×16 px a cell: **960×704 px**. The header during the clip
+is the replay header (13.3) with the real speed (e.g. ` REPLAY 24× `), plus the wordmark `OmnisSwarm` right-aligned
+at the end of row 0 (`Omnis` in `ACCENT`, `Swarm` in `TEXT.primary`), with the gaps marker moved to its left.
+
+**Summary card** for the clip's last 3 s (30 frames at 10 fps): **60×14 cells, centred in the graph region**
+(at the full step: columns 30-89, rows 7-20 of the top grid). The graph under it holds its final state and is
+dimmed: every graph cell outside the card has fg and bg mixed 0.5 toward `CANVAS`. The bottom grid stays as it is.
+
+Fade-in over the first 3 frames (0.3 s): the card's cells `mix(dimmed graph, card, k)` and the graph dimming at
+`0.5 × k`, for `k` = 1/3, 2/3, 1. Then 27 frames still. No other motion on the card.
+
+Layout (card-relative cells; background `CANVAS_RAISED`; row 0's upper pixel is a line of `ACCENT`, drawn as `▀`
+in `ACCENT` over `CANVAS_RAISED`):
+
+| Row | Columns | Content |
+|---|---|---|
+| 1-3 | 3-10 | The mark (pixels, below) |
+| 1 | 13 | `Omnis` `ACCENT` + `Swarm` `TEXT.primary` |
+| 2 | 13 | `swarm replay` `TEXT.dim` |
+| 5 | 3 | swarm name `TEXT.primary` · topology `TEXT.dim` · `ended 14:05` `TEXT.dim` (separators `TEXT.faint`) |
+| 7 / 8 | 3, 17, 31, 45 | Four figures in `TEXT.primary` over their labels in `TEXT.dim`: agents (`6` / `agents`), duration (`12m 40s`; `1h 05m` past an hour), cost (`≈$1.31`, `+` when some agents are unpriced), messages (`42` / `messages`) |
+| 10 | 3 | `✓ 4 done   ✕ 1 failed   ◌ 1 waiting`: each glyph in its status colour, words `TEXT.dim`; a status with 0 is left out |
+| 11 | 3 | `● opus 2   ● sonnet 3   ● haiku 1`: answered model families, dot in the model colour, words `TEXT.dim` |
+| 12 | 3 | `2026-10-22 · 8:40 of work in 24 s` `TEXT.dim` |
+
+Every text colour on `CANVAS_RAISED` passes: `TEXT.primary` 14.8, `TEXT.dim` 6.9, `STATUS.failed` 5.21; the model
+dots are signals, 4.83-13.20.
+
+**The mark** (original, no mascot): three nodes and their links, the swarm in miniature. 8×6 px at card pixels
+x 3-10, y 2-7. Key: `O` `MODEL.opus`, `S` `MODEL.sonnet`, `F` `MODEL.fable`, `A` `ACCENT`, `.` card background.
+```
+...OO...
+...OO...
+..A..A..
+.A....A.
+SS....FF
+SS.AA.FF
+```
+The mark appears only on the card; the header uses the wordmark (a 6-px mark would be one cell tall there and turn
+to mush).
+
+### 13.5 Model badge (`sonnet → haiku`)
+
+When the requested and answered model families differ:
+- **Spotlight row 0**, in place of the model id: `sonnet` in `TEXT.dim`, ` → ` in `TEXT.faint`, `haiku` in the
+  answered model's colour (`MODEL.haiku`). The `●` and every other model colour in the pane (globe fill, robot glow and
+  bar, chip dot, tree name, timeline bar) are the **answered** model: that is what ran and what it cost.
+- **Spotlight row 1**, right side: `≈$0.04` `TEXT.primary`, then ` · saves ` `TEXT.dim`, `≈$0.08` in
+  `STATUS.running`, ` vs requested` `TEXT.dim`. If the answered model costs more: ` · costs ≈$0.05 more vs requested`
+  with the figure in `STATUS.warn`. The words say which way, so the green/amber is a bonus. Either part is whole or
+  absent (section 9); `vs requested` is never cut, since without it the figure reads as Router's own.
+- **Graph label**: a mark after the name, `↓` in `TEXT.dim` (answered model cheaper) or `↑` in `STATUS.warn` (dearer),
+  with a space before it: `▶ coder-1 ↓`. Dropped in the glyph-only fallback. The same mark follows the name in the tree.
+- Compact spotlight (1 row): ` · sonnet → haiku` after the name, same colours; the saving is left out.
+- Same family (e.g. two Sonnet versions): no badge.
+
+### 13.6 Budget
+
+- Frames: the drip uses the glow slot clock; the drop flash is a pulse at `FPS.busy`; the replay adds nothing; the
+  GIF card is frames in a file, not the pane.
+- Pairs: the drop adds 1-2 colours per node with a drop (drop, drip mix); the replay tint swaps one background for
+  another; the badges add 2. Not measured: check `pairCount` on a guard and a replay golden.
+
+### 13.7 To check on the goldens
+
+- [ ] Warned and nudged robots at S, M and L match 13.2 pixel for pixel; the drop stays inside the box at the top of a hop.
+- [ ] No drop on a done or failed node; a waiting agent keeps it.
+- [ ] Globes show the drop outside the ring, never an amber rim for the guard; stuck still shows its amber rim.
+- [ ] Every frame of a replay shows ` REPLAY n× `, the clock and `REPLAY.raised` on the header, at every size step.
+- [ ] The GIF card sits at columns 30-89, rows 7-20, the graph behind it dimmed, and fits 60×14 with a 4-digit cost.
+- [ ] `sonnet → haiku` and `saves … vs requested` show whole or not at all; the label mark is `↓`/`↑`.
+- [ ] ` BLOCKED ` shows on row 1 (or right-aligned on a 1-row header) for as long as spawns are denied.

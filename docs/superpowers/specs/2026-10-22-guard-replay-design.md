@@ -32,7 +32,7 @@ Non-goals:
 
 ### 2.2 Actions
 
-1. **Warn.** A `guard.warned` event; the agent shows a warning badge in the pane (design: a sweat drop on robots, an amber rim on globes; designer owns the look); a toast naming the agent, the limit and the value, e.g. `coder-b: 21 min, past its 20 min time-box`.
+1. **Warn.** A `guard.warned` event; the agent shows a warning badge in the pane (a sweat drop on robots and globes alike: one drop when warned, two when nudged; amber already means stuck; look in `docs/design/pane.md` §13); a toast naming the agent, the limit and the value, e.g. `coder-b: 21 min, past its 20 min time-box`.
 2. **Nudge.** A `guard.nudged` event; `$.session.send({ to: { agentId } })` with: "You're past your time-box (30 min / $5). Wrap up what you have, report to main, and stop." and a copy to `main` naming the agent and the limit. A send that isn't delivered is recorded, not retried.
 3. **Block.** A `guard.blocked` event; while the swarm cost is at or past the act limit, a `tool.check` hook denies the lead's `Agent` calls with: "Swarm budget $20 reached. Raise it with /omnis budget <usd> or finish with the agents you have." Running agents carry on. Only the swarm owned by this session is guarded.
 
