@@ -27,7 +27,11 @@ export type View = {
   style?: 'globe' | 'robot'
   /** Nothing moves where this frame goes (the Svg): robots draw their still frame (pane.md 12.6). */
   still?: boolean
+  budget?: ViewBudget | null
 }
+
+/** The budget guard's figures for the header (pane.md 13.2); filled by the pane, absent in replays and GIFs. */
+export type ViewBudget = { swarmUsd: number; limit: number; warn: number; blocked: boolean }
 
 export type Chip = { id: string; label: string; color: number; pinned: boolean }
 

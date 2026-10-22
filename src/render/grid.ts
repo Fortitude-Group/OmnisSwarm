@@ -277,14 +277,14 @@ export function limitPairs(grid: Grid, max: number): number {
 }
 
 /** One coloured run of text. */
-export type Part = readonly [text: string, fg: number]
+export type Part = readonly [text: string, fg: number, bg?: number]
 
 /** Writes parts left to right from x, stopping before maxX. Returns the next free column. */
 export function writeParts(grid: Grid, x: number, y: number, parts: readonly Part[], maxX: number, bg?: number): number {
   let cx = x
-  for (const [text, fg] of parts) {
+  for (const [text, fg, own] of parts) {
     if (cx >= maxX) break
-    cx += grid.text(cx, y, text, fg, bg, maxX - cx)
+    cx += grid.text(cx, y, text, fg, own ?? bg, maxX - cx)
   }
   return cx
 }
