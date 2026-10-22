@@ -77,6 +77,21 @@ test('raising a limit re-arms the stages above where they fired', () => {
   assert.deepEqual(evaluate(s, raised, 0, min(41)).map(a => a.kind), ['warn'])
 })
 
+test('raising the agent cost and swarm limits re-arms their stages', () => {
+  const usage = ev('agent.usage', { model: 'claude-opus-5-5', input: 0, output: 100_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 1 })
+  const s = foldAll('s1', [started, usage, ev('guard.warned', { limit: 'agentCost', value: 3.1, threshold: 3 }, { agent: 'a1', atSec: 2 }),
+    ev('guard.nudged', { limit: 'agentCost', value: 5.1, threshold: 5, delivered: true }, { agent: 'a1', atSec: 3 }),
+    ev('guard.warned', { limit: 'swarmCost', value: 10.4, threshold: 10 }, { atSec: 4 }), ev('guard.blocked', { value: 20, threshold: 20 }, { atSec: 5 })])
+  assert.deepEqual(evaluate(s, DEFAULT_LIMITS, 20, min(1)), [])
+  const raised = { ...DEFAULT_LIMITS, agentUsd: 0.5, swarmUsd: 40 }
+  // agent at $2: warn at 0.5*0.6=0.3 and act at 0.5 are below the $3/$5 already fired, so nothing; swarm 25 passes the new warn (20) only
+  assert.deepEqual(evaluate(s, raised, 25, min(1)), [{ kind: 'swarm-warn', value: 25, threshold: 20 }])
+  const high = { ...DEFAULT_LIMITS, agentUsd: 10, swarmUsd: 60 }
+  assert.deepEqual(evaluate(s, high, 60, min(1)).map(a => a.kind), ['swarm-warn', 'block'])
+  fold(s, ev('agent.usage', { model: 'claude-opus-5-5', input: 0, output: 200_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 6 }))
+  assert.deepEqual(evaluate(s, { ...high, agentUsd: 5.5 }, 0, min(1)).map(a => a.kind), ['warn', 'nudge'])
+})
+
 test('swarm cost warns at half and blocks at the limit', () => {
   const s = foldAll('s1', [started])
   assert.deepEqual(evaluate(s, DEFAULT_LIMITS, 10.4, min(1)), [{ kind: 'swarm-warn', value: 10.4, threshold: 10 }])
