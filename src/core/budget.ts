@@ -102,7 +102,9 @@ export function evaluate(state: SwarmState, limits: Limits, swarmUsd: number, no
 
 export const isBlocked = (limits: Limits, swarmUsd: number): boolean => swarmUsd >= limits.swarmUsd
 
-const shown = (limit: 'time' | 'agentCost', value: number): string => (limit === 'time' ? `${Math.floor(value)} min` : `≈$${value.toFixed(2)}`)
+/** Minutes are floored, so a figure never claims more time than has passed; under ten they keep one decimal. */
+const minutes = (value: number): string => (value >= 10 ? `${Math.floor(value)}` : `${Math.floor(value * 10) / 10}`)
+const shown = (limit: 'time' | 'agentCost', value: number): string => (limit === 'time' ? `${minutes(value)} min` : `≈$${value.toFixed(2)}`)
 
 export function toastText(a: GuardAction, name: string, limits: Limits): string {
   switch (a.kind) {

@@ -72,7 +72,8 @@ test('the server speaks MCP over stdio and writes the swarm log', async () => {
     assert.match(bad.result.content[0].text, /topology must be one of/)
 
     for (const line of s.stdoutLines) assert.doesNotThrow(() => JSON.parse(line), `non-JSON on stdout: ${line}`)
-    assert.ok(s.out.stderr.includes('omnis: project root'))
+    // Claude Code logs a server's stderr as [ERROR], so a normal start writes nothing there.
+    assert.ok(!s.out.stderr.includes('omnis: project root'))
   } finally {
     await s.stop()
     rmSync(root, { recursive: true, force: true })
@@ -81,7 +82,8 @@ test('the server speaks MCP over stdio and writes the swarm log', async () => {
 
 test('an unexpanded placeholder root is ignored in favour of CLAUDE_PROJECT_DIR', async () => {
   const root = tmpRoot()
-  const s = start(SERVER, { OMNIS_PROJECT_DIR: '${CLAUDE_PROJECT_DIR}', CLAUDE_PROJECT_DIR: root })
+  // OMNIS_DEBUG makes the server say which root it chose.
+  const s = start(SERVER, { OMNIS_PROJECT_DIR: '${CLAUDE_PROJECT_DIR}', CLAUDE_PROJECT_DIR: root, OMNIS_DEBUG: '1' })
   try {
     await s.call(1, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0' } })
     assert.ok(s.out.stderr.includes(root))

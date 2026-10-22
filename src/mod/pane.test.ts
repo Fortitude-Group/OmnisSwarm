@@ -173,7 +173,7 @@ test("the recorder does not record the pane's omnis_feed pulls as agent tool cal
 
 for (const openAs of ['throw', 'hang'] as const) {
   const how = openAs === 'throw' ? 'throws' : 'never answers'
-  test(`an Agent call's result comes back unchanged when ui.open ${how}`, { options: { panel: 'auto' } }, async ($, on) => {
+  test(`an Agent call's result comes back unchanged when ui.open ${how}`, { ...KIT, options: { panel: 'auto' } }, async ($, on) => {
     const seen = engine(on, openAs)
     const answer = { status: 'completed', content: [{ type: 'text', text: 'Reviewed.' }] }
     on('tool.call', () => ({ result: answer as never }))
@@ -291,7 +291,7 @@ test('two session.starts and then an open still pull at most 4 times a second', 
 })
 
 for (const feed of ['error', 'garbage'] as const) {
-  test(`a reply that ${feed === 'error' ? 'is an error' : 'will not parse'} shows the degraded note and keeps the last frame`, async ($, on) => {
+  test(`a reply that ${feed === 'error' ? 'is an error' : 'will not parse'} shows the degraded note and keeps the last frame`, KIT, async ($, on) => {
     const { seen, clock, ui, top } = await opened($, on)
     expect(await top()).toContain('architect')
     seen.feed = feed
@@ -385,7 +385,7 @@ test('giving up on a hung pull drops the server and backs off before connecting 
 })
 
 for (const fault of ['panes', 'register'] as const) {
-  test(`session.start returns when ${fault === 'panes' ? 'ui.panes' : 'command.register'} never answers`, async ($, on) => {
+  test(`session.start returns when ${fault === 'panes' ? 'ui.panes' : 'command.register'} never answers`, KIT, async ($, on) => {
     engine(on, 'ok', { [fault]: 'hang' })
     expect(await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })).toEqual({ cwd: '/' })
   })
@@ -406,7 +406,7 @@ test('auto opens the pane while a foreground Agent call is still running', { ...
 })
 
 for (const [what, pin] of [['a number', 42], ['an object', { toString: 1, valueOf: 1 }], ['an unknown agent', 'a-gone']] as const) {
-  test(`a stored pin that is ${what} counts as no pin, and the pane draws normally`, async ($, on) => {
+  test(`a stored pin that is ${what} counts as no pin, and the pane draws normally`, KIT, async ($, on) => {
     const seen = engine(on)
     on('state.get', (_, e) => ({ value: { value: String(e.key) === 'panePinned' ? pin : undefined, version: 0 } }))
     const clock = mock.clock(on, { now: FIVE_AT.mid })

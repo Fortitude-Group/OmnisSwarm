@@ -34,10 +34,10 @@ export const GLYPH = {
 } as const
 
 /**
- * The budget guard (pane.md 13.1). `drop` is 16.95:1 on CANVAS, 2.78:1 on terracotta; `dripMix` is the drip pixel's
- * mix of body toward drop (2.08:1 on terracotta; motion carries it). `blockedBadge` is 5.72:1.
+ * The budget guard (pane.md 13.1). `drop` is a pale water blue: 10.23:1 on CANVAS, 1.68:1 on terracotta, told apart by hue
+ * (22-27 OKLab from the body). The drip is the full drop colour; at 0.7 it vanished. `blockedBadge` is 5.72:1.
  */
-export const GUARD = { drop: 0xe0f4ff, dripMix: 0.7, flashMs: 450, blockedBadge: { fg: CANVAS, bg: STATUS.failed } } as const
+export const GUARD = { drop: 0x7cc4ff, dripMix: 1, flashMs: 450, blockedBadge: { fg: CANVAS, bg: STATUS.failed } } as const
 /** A replay (pane.md 13.1): `raised` = mix(CANVAS_RAISED, ACCENT, 0.08), `TEXT.primary` 13.10 on it; the badge is 7.43:1. */
 export const REPLAY = { raised: 0x202337, badge: { fg: CANVAS, bg: ACCENT } } as const
 
