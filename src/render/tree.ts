@@ -5,7 +5,7 @@ import { clipText, fmtTokens, fmtUsd } from './format.ts'
 import { dropsFor } from './guard-badge.ts'
 import { type Grid, type Part, writeParts } from './grid.ts'
 import { orderAgents, parentsOf } from './layout.ts'
-import { STATUS, TEXT, modelColor, statusGlyph } from './tokens.ts'
+import { STATUS, TEXT, modelColor, routeText, statusGlyph } from './tokens.ts'
 import type { Rect } from './types.ts'
 
 const MAX_INDENT = 8
@@ -53,6 +53,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
   rows.forEach((row, i) => {
     const s = stats[row.id]!
     const agent = state.agents[row.id]
+    const route = s.route !== null && s.model !== null ? routeText(s.route) : null
     const nameColor = s.status === 'failed' ? STATUS.failed : s.placeholder ? TEXT.dim : modelColor(s.model)
     writeParts(grid, area.x + 1, area.y + i, [
       ['  '.repeat(Math.min(row.depth, MAX_INDENT)), TEXT.dim],
@@ -60,6 +61,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
       [clipText(s.name, 24), nameColor],
       ['  ', TEXT.dim],
       [s.model === null ? '– tok · –' : `${fmtTokens(s.tokens.total)} tok · ${fmtUsd(s.costUsd)}`, TEXT.dim],
+      ...(route === null ? [] : [[' · ', TEXT.dim] as Part, [route.text, route.color] as Part]),
       ...(agent !== undefined && dropsFor(agent) > 0 ? [[' over', STATUS.warn] as Part] : []),
     ], maxX)
   })

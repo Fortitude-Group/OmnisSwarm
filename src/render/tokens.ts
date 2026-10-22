@@ -3,7 +3,7 @@
  * decided; this file copies its Tokens table. Change a value there first, then here. Pure and mod-safe.
  */
 import type { ToolKind } from '../core/events.ts'
-import type { AgentStatus } from '../core/stats.ts'
+import type { AgentStatus, RouteStats } from '../core/stats.ts'
 
 /** The pane paints its own dark canvas, so every colour here is checked against it, on dark and light terminals alike. */
 export const CANVAS = 0x0b0f17
@@ -73,6 +73,23 @@ export function modelFamily(model: string | null): ModelFamily {
 }
 
 export const modelColor = (model: string | null): number => MODEL[modelFamily(model)]
+
+/** Both ends of a routed call: family names when the families differ ("sonnet", "haiku"), otherwise the full ids. */
+export function routeEnds(requested: string, model: string): [string, string] {
+  const from = modelFamily(requested)
+  const to = modelFamily(model)
+  if (from === to) return [requested, model]
+  return [from === 'other' ? requested : from, to === 'other' ? model : to]
+}
+
+export const routeLabel = (requested: string, model: string): string => routeEnds(requested, model).join(' → ')
+
+/** The routing badge's figure: "saved 64%", "cost +20%" when routed to a dearer model, or "routed" when unpriced. */
+export function routeText(r: RouteStats): { text: string; color: number } {
+  if (r.savedPct === null || !Number.isFinite(r.savedPct)) return { text: 'routed', color: TEXT.dim }
+  const pct = Math.round(Math.abs(r.savedPct) * 100)
+  return r.savedPct >= 0 ? { text: `saved ${pct}%`, color: TEXT.dim } : { text: `cost +${pct}%`, color: STATUS.warn }
+}
 
 export const statusGlyph = (status: AgentStatus, placeholder = false): string => (placeholder ? GLYPH.unknown : GLYPH[status])
 

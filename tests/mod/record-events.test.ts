@@ -103,6 +103,17 @@ test('agentUsage puts all cache writes in the 5-minute bucket and cleans the num
   assert.deepEqual(odd.data, { model: 'm', input: 0, output: 3, cacheRead: 0, cacheWrite5m: 1e9, cacheWrite1h: 0 })
 })
 
+test('agentUsage records the requested model only when a router answered with another', () => {
+  const u = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-haiku-5-5' }
+  assert.equal(agentUsage(u, 'a1', 'claude-sonnet-5-5').data.requested, 'claude-sonnet-5-5')
+  assert.equal(Object.hasOwn(agentUsage(u, 'a1', 'claude-haiku-5-5').data, 'requested'), false)
+  assert.equal(Object.hasOwn(agentUsage(u, 'a1', 'claude-haiku-5-5[1m]').data, 'requested'), false)
+  assert.equal(Object.hasOwn(agentUsage(u, 'a1').data, 'requested'), false)
+  assert.equal(Object.hasOwn(agentUsage(u, 'a1', 42).data, 'requested'), false)
+  assert.equal(Object.hasOwn(agentUsage({ ...u, model: '' }, 'a1', 'claude-sonnet-5-5').data, 'requested'), false)
+  assert.equal(agentUsage(u, 'a1', `x\u0007${'y'.repeat(200)}`).data.requested!.length, 80)
+})
+
 test('toolEvent', () => {
   assert.deepEqual(toolEvent('start', 'Bash', { command: 'ls' }, 'lead'), {
     type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'ls', isError: false },

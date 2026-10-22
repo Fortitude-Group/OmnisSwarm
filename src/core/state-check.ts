@@ -40,6 +40,9 @@ const usage = (x: unknown): boolean =>
 
 const guardRec = (x: unknown): boolean =>
   exact(x, ['timeWarn', 'timeAct', 'costWarn', 'costAct']) && Object.values(x).every(nnum)
+const routeRec = (x: unknown): boolean =>
+  exact(x, ['calls', 'requested', 'baselineUsd', 'baselineKnown']) && num(x.calls) && str(x.requested, 80) &&
+  num(x.baselineUsd) && typeof x.baselineKnown === 'boolean'
 const budget = (x: unknown): boolean => exact(x, ['agentMinutes', 'agentUsd', 'swarmUsd']) && Object.values(x).every(nnum)
 const swarmGuard = (x: unknown): boolean => exact(x, ['warn', 'block']) && Object.values(x).every(nnum)
 
@@ -49,8 +52,11 @@ const AGENT_KEYS = [
     'files', 'messagesIn', 'messagesOut', 'lastActivity',
 ]
 
+/** Keys an agent gains only once something happens to it. */
+const OPTIONAL_AGENT_KEYS = ['guard', 'route']
+
 const agent = (x: unknown): boolean =>
-  exact(x, isPlain(x) && Object.hasOwn(x, 'guard') ? [...AGENT_KEYS, 'guard'] : AGENT_KEYS) &&
+  exact(x, isPlain(x) ? [...AGENT_KEYS, ...OPTIONAL_AGENT_KEYS.filter(k => Object.hasOwn(x, k))] : AGENT_KEYS) &&
   str(x.id, 130) && str(x.name, 64) && str(x.role, 64) && str(x.description, 120) && str(x.parent, 64) &&
   typeof x.placeholder === 'boolean' && num(x.startedAt) && nnum(x.finishedAt) && num(x.runs) && x.runs >= 1 && num(x.activeMs) &&
   (x.outcome === null || isOneOf(AGENT_OUTCOMES, x.outcome)) && nstr(x.reason, 80) && nstr(x.model, 80) &&
@@ -59,7 +65,8 @@ const agent = (x: unknown): boolean =>
   exact(x.tools, TOOL_KINDS) && Object.values(x.tools).every(num) &&
   num(x.openTools) && num(x.errors) && num(x.errorsInRow) &&
   list(x.files, MAX_FILES, f => str(f, 80)) && num(x.messagesIn) && num(x.messagesOut) && num(x.lastActivity) &&
-  (!Object.hasOwn(x, 'guard') || guardRec(x.guard))
+  (!Object.hasOwn(x, 'guard') || guardRec(x.guard)) &&
+  (!Object.hasOwn(x, 'route') || routeRec(x.route))
 
 const session = (x: unknown): x is Rec =>
   exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&

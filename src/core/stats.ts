@@ -71,11 +71,22 @@ export function fileClashes(state: SwarmState, nowMs?: number): Clash[] {
   return clashes.sort((x, y) => x.path.localeCompare(y.path))
 }
 
+/** `savedPct`: the share of the requested model's cost the routing saved (negative when it cost more); null when either side is unpriced. */
+export type RouteStats = { requested: string; calls: number; savedPct: number | null }
+
+export function routeStats(a: AgentState): RouteStats | null {
+  const r = a.route
+  if (r === undefined) return null
+  const savedPct = a.costKnown && r.baselineKnown && r.baselineUsd > 0 ? 1 - a.costUsd / r.baselineUsd : null
+  return { requested: r.requested, calls: r.calls, savedPct }
+}
+
 export type AgentStats = {
   id: string
   name: string
   role: string
   model: string | null
+  route: RouteStats | null
   status: AgentStatus
   placeholder: boolean
   lifetimeMs: number
@@ -102,6 +113,7 @@ export function agentStats(state: SwarmState, id: string, nowMs: number, clashes
     name: a.name,
     role: a.role,
     model: a.model,
+    route: routeStats(a),
     status: agentStatus(a, nowMs),
     placeholder: a.placeholder,
     lifetimeMs: a.activeMs + (a.finishedAt === null ? Math.max(0, nowMs - a.startedAt) : 0),

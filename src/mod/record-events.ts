@@ -4,6 +4,7 @@
  */
 import { LIMITS, NAME, isSafeKey, type AgentOutcome, type EventData, type ToolKind } from '../core/events.ts'
 import { LEAD } from '../core/fold.ts'
+import { sameModel } from '../core/prices.ts'
 import type { RecordBody } from '../core/recording.ts'
 
 export type Fields = Readonly<Record<string, unknown>>
@@ -138,19 +139,27 @@ export function agentFinished(reason: string, agent: string): RecordBody<'agent.
   return { type: 'agent.finished', agent, data: { outcome, reason: cleanText(reason, LIMITS.reason) } }
 }
 
-/** turn.step doesn't split cache writes by lifetime, so all of them go in the 5-minute bucket (spec section 7). */
-export function agentUsage(rawUsage: StepUsage, agent: string): RecordBody<'agent.usage'> {
+/**
+ * turn.step doesn't split cache writes by lifetime, so all of them go in the 5-minute bucket (spec section 7).
+ * `requested` is the model the step's request named. It is kept only when the answer came from another model, which
+ * means a gateway such as OmnisRouter routed the call.
+ */
+export function agentUsage(rawUsage: StepUsage, agent: string, rawRequested?: unknown): RecordBody<'agent.usage'> {
   const usage = isObj(rawUsage) as Partial<StepUsage>
+  const model = cleanText(usage.model, 80)
+  const requested = cleanText(rawRequested, 80)
+  const routed = model !== '' && requested !== '' && !sameModel(requested, model)
   return {
     type: 'agent.usage',
     agent,
     data: {
-      model: cleanText(usage.model, 80),
+      model,
       input: tokens(usage.input_tokens, MAX_USAGE),
       output: tokens(usage.output_tokens, MAX_USAGE),
       cacheRead: tokens(usage.cache_read_input_tokens, MAX_USAGE),
       cacheWrite5m: tokens(usage.cache_creation_input_tokens, MAX_USAGE),
       cacheWrite1h: 0,
+      ...(routed && { requested }),
     },
   }
 }

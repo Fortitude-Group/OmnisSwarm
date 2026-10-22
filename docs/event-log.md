@@ -47,7 +47,7 @@ same user could edit `.omnis-swarm` directly.
 | `swarm.ended` | mcp | `outcome?` |
 | `agent.started` | recorder | `name`, `role`, `description` (≤120), `parent` (agent id or `lead`) |
 | `agent.finished` | recorder | `outcome` (`answer`\|`aborted`\|`failed`), `reason?` (≤80) |
-| `agent.usage` | recorder (written through the server) | `model`, `input`, `output`, `cacheRead`, `cacheWrite5m`, `cacheWrite1h` (token counts for one API call) |
+| `agent.usage` | recorder (written through the server) | `model`, `input`, `output`, `cacheRead`, `cacheWrite5m`, `cacheWrite1h` (token counts for one API call), `requested?` (≤80: the model the request named, present only when a gateway such as OmnisRouter answered with another; ids that differ only by case, a `[1m]`-style suffix or a `-YYYYMMDD` date count as the same) |
 | `agent.tool` | recorder | `phase` (`start`\|`end`), `tool`, `kind` (`read`\|`edit`\|`bash`\|`search`\|`web`\|`agent`\|`other`), `subject` (path or command, ≤80), `isError` |
 | `message.sent` | recorder | `to` (agent **name** as given to SendMessage), `summary` (≤200) |
 | `memory.put` | mcp | `key`, `bytes`, `preview` (≤80). The envelope `agent` is the writer's name as given to the tool (default `lead`), not an agent id |

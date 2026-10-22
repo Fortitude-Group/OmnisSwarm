@@ -54,6 +54,12 @@ export function priceFor(model: string): Price | null {
   return null
 }
 
+/** The model id without case, a bracketed suffix such as `[1m]`, or a `-YYYYMMDD` date. */
+const baseModel = (model: string): string => model.toLowerCase().replace(/\[[^\]]*\]$/, '').replace(/-\d{8}$/, '')
+
+/** True when two ids name the same model, so a dated id or a context suffix is not mistaken for a routed call. */
+export const sameModel = (a: string, b: string): boolean => baseModel(a) === baseModel(b)
+
 /** Dollars for one call's usage, or null when the model isn't in the table. */
 export function costOf(model: string, usage: Usage): number | null {
   const base = priceFor(model)

@@ -3,7 +3,7 @@ import {
   AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, GUARD_LIMITS, GUARD_MAX, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
   type AgentOutcome, type BudgetKey, type GuardLimit, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
-import { costOf, type Usage } from './prices.ts'
+import { costOf, sameModel, type Usage } from './prices.ts'
 
 export const LEAD = 'lead'
 
@@ -21,6 +21,12 @@ export const MAX_EDITS = 10
 const SPEND_KEEP_MS = 600_000
 
 export type UsageSample = { at: number; output: number; gapMs: number }
+
+/**
+ * Calls a gateway answered with a model other than the one requested. `requested` is the latest routed call's.
+ * `baselineUsd` is what every call would have cost at the requested model (an unrouted call at its own price).
+ */
+export type AgentRoute = { calls: number; requested: string; baselineUsd: number; baselineKnown: boolean }
 
 /** The threshold each guard stage last fired at, or null. */
 export type AgentGuard = { timeWarn: number | null; timeAct: number | null; costWarn: number | null; costAct: number | null }
@@ -55,6 +61,8 @@ export type AgentState = {
   lastActivity: number
   /** Absent until a guard stage first fires; readers treat absent as all null. */
   guard?: AgentGuard
+  /** Absent until a call is routed to another model; readers treat absent as never routed. */
+  route?: AgentRoute
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -119,6 +127,21 @@ const text = (x: unknown, max: number): string =>
     : ''
 const trim = <T>(list: T[], max: number): void => {
   while (list.length > max) list.shift()
+}
+
+/** Runs before the call's own cost is added, so a first route's baseline is what the earlier, unrouted calls cost. */
+function foldRoute(a: AgentState, requested: string, usage: Usage, usd: number | null): void {
+  const routed = requested !== '' && a.model !== null && !sameModel(requested, a.model)
+  if (!routed && a.route === undefined) return
+  const route = a.route ?? { calls: 0, requested, baselineUsd: a.costUsd, baselineKnown: a.costKnown }
+  const base = routed ? costOf(requested, usage) : usd
+  if (routed) {
+    route.calls++
+    route.requested = requested
+  }
+  if (base === null) route.baselineKnown = false
+  else route.baselineUsd += base
+  a.route = route
 }
 
 function agentOf(state: SwarmState, id: string, at: number, name?: string): AgentState {
@@ -240,6 +263,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       a.tokens.cacheWrite5m += usage.cacheWrite5m
       a.tokens.cacheWrite1h += usage.cacheWrite1h
       const usd = a.model === null ? null : costOf(a.model, usage)
+      foldRoute(a, text(d.requested, 80), usage, usd)
       if (usd === null) {
         a.costKnown = false
       } else {
