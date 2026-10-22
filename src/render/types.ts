@@ -33,6 +33,12 @@ export type View = {
 /** The budget guard's figures for the header (pane.md 13.2); filled by the pane, absent in replays and GIFs. */
 export type ViewBudget = { swarmUsd: number; limit: number; warn: number; blocked: boolean }
 
+/**
+ * A replay on screen (pane.md 13.3): its speed, the log time since the swarm's first event, the swarm's own length
+ * (no gap cutting), and whether it has played to the end.
+ */
+export type ReplayNote = { speed: number; clockMs: number; totalMs: number; ended: boolean }
+
 export type Chip = { id: string; label: string; color: number; pinned: boolean }
 
 /**

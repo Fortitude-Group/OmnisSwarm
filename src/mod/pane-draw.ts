@@ -10,6 +10,7 @@ import type { Frame, View } from '../render/types.ts'
 import { prunePulses } from './pane-model.ts'
 import { PANE_ID, periodFailed, startPulling, type PaneHooks } from './pane-pull.ts'
 import { hostOf, rt, type Host } from './pane-runtime.ts'
+import { replayClockMs, replayTotalMs } from './replay.ts'
 
 /** The Svg source for a grid off the terminal, or null for the summary as text: no Svg on the surface, or one too big to send. */
 export const svgSource = (grid: Grid, alt: string, canDraw: boolean, max = SVG_SOURCE_MAX): string | null => (canDraw ? gridToSvg(grid, alt, max) : null)
@@ -17,8 +18,10 @@ export const svgSource = (grid: Grid, alt: string, canDraw: boolean, max = SVG_S
 export const sizeKey = (g: Grid): string => `${g.columns}x${g.rows}`
 /** The pin counts only while its agent is in the state; a pin on an agent that has gone is no pin. */
 export const pinOf = (state: SwarmState): string | null => (rt.pinned !== null && Object.hasOwn(state.agents, rt.pinned) ? rt.pinned : null)
+/** The model on screen: the replay's while one plays, otherwise the live one. */
+const shownModel = () => rt.replay?.model ?? rt.model
 export const viewOf = (pinned: string | null): View => ({
-  pinned, spotlight: rt.spot, pulses: rt.model.pulses, lagMs: rt.model.lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
+  pinned, spotlight: rt.spot, pulses: shownModel().pulses, lagMs: shownModel().lagMs, tween: rt.tween, style: rt.style, still: rt.surface !== null && rt.surface !== 'terminal',
 })
 export const waitingText = (): string =>
   rt.model.degraded !== null
@@ -27,13 +30,18 @@ export const waitingText = (): string =>
 
 /** The frame at `now` under the budget cap, after choosing the spotlight. Starts a glide when the nodes changed. Null until there is a state and a size. */
 export function frameAt(now: number): Frame | null {
-  const state = rt.model.state
+  const run = rt.replay
+  const model = shownModel()
+  const state = model.state
   if (state === null || rt.size === null) return null
-  rt.model = { ...rt.model, pulses: prunePulses(rt.model.pulses, now) }
+  const pruned = { ...model, pulses: prunePulses(model.pulses, now) }
+  if (run !== null) run.model = pruned
+  else rt.model = pruned
   const pinned = pinOf(state)
-  rt.spot = chooseSpotlight(rt.spot, pinned, state, rt.model.pulses, now)
-  const { degraded, degradedAgents, hiddenFinished } = rt.model
-  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished }, budgetFps(rt.renderAvgMs))
+  rt.spot = chooseSpotlight(rt.spot, pinned, state, pruned.pulses, now)
+  const { degraded, degradedAgents, hiddenFinished } = pruned
+  const replay = run === null ? null : { speed: run.speed, clockMs: replayClockMs(now), totalMs: replayTotalMs(), ended: run.ended }
+  const frame = render(state, viewOf(pinned), now, rt.size, { degraded, degradedAgents, hiddenFinished, replay }, budgetFps(rt.renderAvgMs))
   if (rt.last !== null && frame.nodesKey !== rt.last.nodesKey) rt.tween = { from: rt.last.positions, at: now }
   return frame
 }
@@ -185,6 +193,9 @@ export function stopAll(): void {
 }
 
 export function closed(byPerson: boolean): void {
+  // Closing the pane ends a replay: it opens live next time.
+  rt.replay?.timer?.cancel()
+  rt.replay = null
   rt.open = false
   rt.shown = false
   rt.closedByPerson = rt.closedByPerson || byPerson
@@ -199,12 +210,32 @@ export const hooks: PaneHooks<Host> = {
   host: () => rt.host,
   closed: () => closed(false),
   hidden: stopFrames,
-  show,
+  // While a replay plays, live news is not drawn and does not touch what the replay shows.
+  show: (host, now) => {
+    if (rt.replay === null) show(host, now)
+  },
   swarmChanged: () => {
+    if (rt.replay !== null) return
     rt.spot = null
     rt.tween = null
     rt.last = null
   },
+}
+
+/** The live pulls, started unless a replay plays (they stop for it, and start again when it stops). */
+export function startLive(host: Host): void {
+  if (rt.replay === null) startPulling(hooks, host)
+}
+
+/** Stops the live pulls for a replay; a pull in flight drops its answer. */
+export function pauseLive(): void {
+  rt.pullTimer?.cancel()
+  rt.pullTimer = null
+  rt.pullMs = 0
+  if (rt.pulling) {
+    rt.pulling = false
+    rt.pullSeq++
+  }
 }
 
 export async function openPane($: EngineInterface): Promise<{ isPlaced: boolean; reason: string }> {
@@ -212,7 +243,7 @@ export async function openPane($: EngineInterface): Promise<{ isPlaced: boolean;
     const result = await $.ui.open({ id: PANE_ID, title: 'Swarm' })
     rt.closedByPerson = false
     rt.open = true
-    startPulling(hooks, rt.host ?? hostOf($))
+    startLive(rt.host ?? hostOf($))
     return result.isPlaced ? { isPlaced: true, reason: '' } : { isPlaced: false, reason: result.reason }
   } catch (err) {
     return { isPlaced: false, reason: err instanceof Error ? err.message.slice(0, 160) : 'the pane could not be opened' }
