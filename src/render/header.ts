@@ -12,9 +12,10 @@ const MIN_GOAL = 12
 
 /**
  * What the pane has to say about the last read. `notes` sit right-aligned on row 1, in priority order and before the
- * goal; `short` is the one-word form for a one-row header and the summary line.
+ * goal; `short` is the one-word form for a one-row header and the summary line. `wordmark`: the GIF's `OmnisSwarm`
+ * at the right end of row 0 (13.4); never set in the pane.
  */
-export type HeaderNotes = { notes: readonly Part[]; short: Part | null; budget?: ViewBudget | null; overBudget?: number; replay?: ReplayNote | null }
+export type HeaderNotes = { notes: readonly Part[]; short: Part | null; budget?: ViewBudget | null; overBudget?: number; replay?: ReplayNote | null; wordmark?: boolean }
 const NO_NOTES: HeaderNotes = { notes: [], short: null }
 
 const cost = (t: SwarmTotals): string => `${fmtUsd(t.costUsd)}${t.costPartial ? '+' : ''}`
@@ -38,6 +39,7 @@ export const fmtClock = (ms: number): string => {
 }
 
 const STOP_NOTE: Part = ['/omnis replay stop', TEXT.dim]
+const WORDMARK: readonly Part[] = [['Omnis', ACCENT], ['Swarm', TEXT.primary]]
 const bgOf = (hn: HeaderNotes): number => (hn.replay ? REPLAY.raised : CANVAS_RAISED)
 
 /**
@@ -70,13 +72,14 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   const maxX = area.x + area.w - 1
   const replay = hn.replay ?? null
   const gaps: Part[] = state.gaps > 0 ? [[`${GLYPH.gap} ${state.gaps} gap${state.gaps === 1 ? '' : 's'}`, STATUS.warn]] : []
-  // Right-aligned on row 0: the short degraded note (one-row header only), then the gaps marker.
+  // Right-aligned on row 0: the short degraded note (one-row header only), then the gaps marker, then the GIF's wordmark.
   const blocked = hn.budget?.blocked === true
   const right: Part[] = [
     ...(area.h < 2 && hn.short !== null ? [hn.short, ...(gaps.length > 0 || blocked ? [SEP] : [])] : []),
     ...(area.h < 2 && blocked ? [BLOCKED, ...(gaps.length > 0 ? [[' ', TEXT.dim] as Part] : [])] : []),
     ...gaps,
   ]
+  if (hn.wordmark === true) right.push(...(right.length > 0 ? [SEP] : []), ...WORDMARK)
   const limit = right.length === 0 ? maxX : maxX - width(right) - 1
   const groups: Part[][] = [
     ...(area.h < 2 ? [] : [[SEP, [state.swarm.topology, TEXT.dim]] as Part[]]),
@@ -106,7 +109,8 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   // Right of the tasks, in priority order: the notes, then the goal if all of it or MIN_GOAL cells of it fit.
   const build = (hint: boolean): Part[] => {
     const groups1: Part[][] = [
-      ...(replay?.ended === true ? [[STOP_NOTE]] : []),
+      // The stop hint is a pane command; the GIF (wordmark) has nothing to stop.
+      ...(replay?.ended === true && hn.wordmark !== true ? [[STOP_NOTE]] : []),
       ...(blocked ? [[BLOCKED, [' new agents', TEXT.dim], ...(hint ? [SEP, ['/omnis budget <usd>', TEXT.dim] as Part] : [])] as Part[]] : []),
       ...hn.notes.map((n): Part[] => [n]),
       ...(hn.overBudget !== undefined && hn.overBudget > 0 ? [[[`${hn.overBudget} over budget`, STATUS.warn]] as Part[]] : []),

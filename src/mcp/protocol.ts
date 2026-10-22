@@ -17,6 +17,9 @@ export type ToolDef = {
   inputSchema: Record<string, unknown>
   handler: (args: Args) => ToolResult
 }
+/** A tool that takes a while (omnis_export): its reply goes out when the promise settles, and other calls are answered meanwhile. */
+export type AsyncToolDef = Omit<ToolDef, 'handler'> & { handler: (args: Args) => Promise<ToolResult> }
+export type AnyToolDef = ToolDef | AsyncToolDef
 export type ServerInfo = { name: string; version: string }
 
 type Id = string | number | null
@@ -44,7 +47,10 @@ function cleanValue(value: unknown, depth: number): unknown {
   return value
 }
 
-export function handleMessage(msg: unknown, tools: readonly ToolDef[], info: ServerInfo): RpcReply | null {
+/** With only synchronous tools the reply is synchronous; an async tool's call answers with a promise of its reply. */
+export function handleMessage(msg: unknown, tools: readonly ToolDef[], info: ServerInfo): RpcReply | null
+export function handleMessage(msg: unknown, tools: readonly AnyToolDef[], info: ServerInfo): RpcReply | null | Promise<RpcReply | null>
+export function handleMessage(msg: unknown, tools: readonly AnyToolDef[], info: ServerInfo): RpcReply | null | Promise<RpcReply | null> {
   if (!isObj(msg)) return rpcError(null, -32600, 'Invalid Request')
   const hasId = typeof msg.id === 'string' || typeof msg.id === 'number'
   const id: Id = hasId ? (msg.id as string | number) : null
@@ -74,16 +80,18 @@ export function handleMessage(msg: unknown, tools: readonly ToolDef[], info: Ser
       }
       const args = (isObj(params.arguments) ? cleanValue(params.arguments, 0) : Object.create(null)) as Args
       const fail = (text: string) => rpcResult(id, { content: [{ type: 'text', text }], isError: true })
+      const finish = (result: unknown): RpcReply =>
+        !isObj(result) || typeof result.text !== 'string'
+          ? fail('Tool returned no text')
+          : rpcResult(id, { content: [{ type: 'text', text: result.text }], isError: result.isError === true })
+      const failWith = (err: unknown): RpcReply => fail(err instanceof Error ? err.message : typeof err === 'string' ? err : 'Tool failed')
       try {
         const result: unknown = tool.handler(args)
-        if (isObj(result) && typeof result.then === 'function') {
-          ;(result.then as (a: undefined, b: () => void) => unknown).call(result, undefined, () => {}) // swallow a later rejection
-          return fail('Tool handlers must be synchronous')
-        }
-        if (!isObj(result) || typeof result.text !== 'string') return fail('Tool returned no text')
-        return rpcResult(id, { content: [{ type: 'text', text: result.text }], isError: result.isError === true })
+        // A promise is answered when it settles; the reply carries the call's id, so it may overtake others.
+        if (isObj(result) && typeof result.then === 'function') return Promise.resolve(result as unknown as PromiseLike<unknown>).then(finish, failWith)
+        return finish(result)
       } catch (err) {
-        return fail(err instanceof Error ? err.message : typeof err === 'string' ? err : 'Tool failed')
+        return failWith(err)
       }
     }
     default:
@@ -95,7 +103,7 @@ const idOf = (msg: unknown): Id => (isObj(msg) && (typeof msg.id === 'string' ||
 
 /** Serves until `input` ends (or `output` fails). Lines over MAX_LINE_BYTES are discarded without buffering. */
 export function runStdio(
-  tools: readonly ToolDef[],
+  tools: readonly AnyToolDef[],
   info: ServerInfo,
   input: Readable = process.stdin,
   output: Writable = process.stdout,
@@ -127,7 +135,8 @@ export function runStdio(
       }
       try {
         const reply = handleMessage(msg, tools, info)
-        if (reply !== null) send(reply)
+        if (reply instanceof Promise) reply.then(r => { if (r !== null) send(r) }, () => send(rpcError(idOf(msg), -32603, 'Internal error')))
+        else if (reply !== null) send(reply)
       } catch {
         send(rpcError(idOf(msg), -32603, 'Internal error'))
       }
