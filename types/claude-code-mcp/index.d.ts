@@ -1,6 +1,6 @@
 // Vendored from the engine-written .claude-plugin/types/claude-code-mcp/index.d.ts,
-// as a Claude Code 2.1.306 session laid it down beside this mod (2026-10-22).
-// The core declarations in ../claude-code are 2.1.307. Refresh: see docs/superpowers/plans/2026-10-21-omnisswarm-phase2-recorder.md, Task 1 Step 6.
+// as a Claude Code 2.1.308 session laid it down beside this mod (2026-10-22).
+// The core declarations in ../claude-code are 2.1.308. Refresh: see docs/superpowers/plans/2026-10-21-omnisswarm-phase2-recorder.md, Task 1 Step 6.
 // Trimmed to this plugin's own entries: the other servers that session had connected are left out. The entries under
 // mcp__omnis-swarm__ (the server's name when it comes from .mcp.json) are copies of the plugin-named ones.
 // The inputs of the MCP tools the session had connected when this mod
@@ -11,6 +11,11 @@
 export {}
 declare module 'claude-code' {
   interface McpToolInputs {
+    /** Internal to the OmnisSwarm plugin: renders a recorded swarm to a GIF for /omnis export gif. When the OmnisSwarm mod is loaded it refuses calls from the model. */
+    "mcp__plugin_omnis-swarm_omnis-swarm__omnis_export": {
+      swarm: string
+      style: "globe" | "robot"
+    }
     /** Internal to the OmnisSwarm pane. When the OmnisSwarm mod is loaded it refuses calls from the model. */
     "mcp__plugin_omnis-swarm_omnis-swarm__omnis_feed": {
       /** The offset from the last reply; 0 for the whole state. */
@@ -40,10 +45,17 @@ declare module 'claude-code' {
     "mcp__plugin_omnis-swarm_omnis-swarm__omnis_record": {
       sessionId: string
       ts: string
-      type: "agent.started" | "agent.finished" | "agent.usage" | "agent.tool" | "message.sent" | "session.measure"
+      type: "agent.started" | "agent.finished" | "agent.usage" | "agent.tool" | "message.sent" | "session.measure" | "budget.set" | "guard.warned" | "guard.nudged" | "guard.blocked"
       agent?: string
       data: {}
       dropped?: number
+    }
+    /** Internal to the OmnisSwarm pane: reads a recorded swarm for /omnis replay. When the OmnisSwarm mod is loaded it refuses calls from the model. */
+    "mcp__plugin_omnis-swarm_omnis-swarm__omnis_replay": {
+      /** The swarm to replay; the most recent when left out. */
+      swarm?: string
+      /** The offset from the last reply; 0 to start. */
+      since?: number
     }
     /** End the running swarm. Its log stays on disk; the next agent or omnis_swarm_init starts a new one. */
     "mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_end": {
@@ -58,6 +70,15 @@ declare module 'claude-code' {
       topology: "hierarchical" | "mesh" | "star"
       /** One line on what the swarm is for. */
       goal?: string
+      /** Optional limits for this swarm. Warnings come at 2/3 of the minutes, 3/5 of the agent dollars and 1/2 of the swarm dollars. */
+      budget?: {
+        /** Minutes an agent may run before it is asked to wrap up. */
+        agentMinutes?: number
+        /** Approximate dollars an agent may spend before it is asked to wrap up. */
+        agentUsd?: number
+        /** Dollars the swarm may spend before new agents are blocked. */
+        swarmUsd?: number
+      }
     }
     /** Summarise the running swarm: agents with status, tokens and approximate cost, task counts and memory keys. */
     "mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_status": {}
@@ -74,6 +95,11 @@ declare module 'claude-code' {
       state: "pending" | "active" | "done" | "failed"
       assignee?: string
       note?: string
+    }
+    /** Internal to the OmnisSwarm plugin: renders a recorded swarm to a GIF for /omnis export gif. When the OmnisSwarm mod is loaded it refuses calls from the model. */
+    "mcp__omnis-swarm__omnis_export": {
+      swarm: string
+      style: "globe" | "robot"
     }
     /** Internal to the OmnisSwarm pane. When the OmnisSwarm mod is loaded it refuses calls from the model. */
     "mcp__omnis-swarm__omnis_feed": {
@@ -104,10 +130,17 @@ declare module 'claude-code' {
     "mcp__omnis-swarm__omnis_record": {
       sessionId: string
       ts: string
-      type: "agent.started" | "agent.finished" | "agent.usage" | "agent.tool" | "message.sent" | "session.measure"
+      type: "agent.started" | "agent.finished" | "agent.usage" | "agent.tool" | "message.sent" | "session.measure" | "budget.set" | "guard.warned" | "guard.nudged" | "guard.blocked"
       agent?: string
       data: {}
       dropped?: number
+    }
+    /** Internal to the OmnisSwarm pane: reads a recorded swarm for /omnis replay. When the OmnisSwarm mod is loaded it refuses calls from the model. */
+    "mcp__omnis-swarm__omnis_replay": {
+      /** The swarm to replay; the most recent when left out. */
+      swarm?: string
+      /** The offset from the last reply; 0 to start. */
+      since?: number
     }
     /** End the running swarm. Its log stays on disk; the next agent or omnis_swarm_init starts a new one. */
     "mcp__omnis-swarm__omnis_swarm_end": {
@@ -122,6 +155,15 @@ declare module 'claude-code' {
       topology: "hierarchical" | "mesh" | "star"
       /** One line on what the swarm is for. */
       goal?: string
+      /** Optional limits for this swarm. Warnings come at 2/3 of the minutes, 3/5 of the agent dollars and 1/2 of the swarm dollars. */
+      budget?: {
+        /** Minutes an agent may run before it is asked to wrap up. */
+        agentMinutes?: number
+        /** Approximate dollars an agent may spend before it is asked to wrap up. */
+        agentUsd?: number
+        /** Dollars the swarm may spend before new agents are blocked. */
+        swarmUsd?: number
+      }
     }
     /** Summarise the running swarm: agents with status, tokens and approximate cost, task counts and memory keys. */
     "mcp__omnis-swarm__omnis_swarm_status": {}
