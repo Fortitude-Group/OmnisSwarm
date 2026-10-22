@@ -185,3 +185,13 @@ test('a guard event becomes a guard pulse that is never coalesced', () => {
   assert.equal(guard.coalesced, undefined)
   assert.equal(guard.kind, 'other')
 })
+
+test('only a guard event the fold accepts, for an agent that shows a drop, makes a pulse', () => {
+  const evs = [
+    ev('guard.warned', { limit: 'swarmCost', value: 11, threshold: 10 }, { atSec: 1 }),
+    ev('guard.warned', { limit: 'time', value: -1, threshold: 20 }, { agent: 'a1', atSec: 2 }),
+    ev('guard.warned', { limit: 'time', value: 21, threshold: 0 }, { agent: 'a1', atSec: 3 }),
+    ev('guard.warned', { limit: 'time', value: 21, threshold: 20 }, { agent: 'a1', atSec: 4 }),
+  ]
+  assert.deepEqual(pulsesFrom(evs).map(p => p.at), [Date.parse(evs[3]!.ts)])
+})

@@ -2,7 +2,7 @@
  * What the pane holds between pulls: the swarm it follows, the offset it has read to, its own fold of the state (from
  * the events the server hands it, never from the log), recent tool pulses and how late events arrive. Pure, mod-safe.
  */
-import { TOOL_KINDS, isOneOf, type SwarmEvent } from '../core/events.ts'
+import { GUARD_MAX, TOOL_KINDS, isOneOf, type SwarmEvent } from '../core/events.ts'
 import type { FeedReply } from '../core/feed-reply.ts'
 import { LEAD, fold, type SwarmState } from '../core/fold.ts'
 import type { Pulse } from '../render/types.ts'
@@ -35,8 +35,11 @@ export function pulsesFrom(events: readonly SwarmEvent[]): Pulse[] {
     const at = Date.parse(e.ts)
     if (Number.isNaN(at)) continue
     if (e.type !== 'agent.tool') {
-      // The drop flash. A swarm-wide warning has no agent and no drop to flash.
-      if (e.agent !== undefined && e.data.limit !== 'swarmCost') out.push({ agent: e.agent, kind: 'other', at, isError: false, guard: true })
+      // The drop flash, only for an event the fold accepts (see its guard case) and that gives an agent a drop: a
+      // swarm-wide warning has none, and a rejected event must not cost 20 fps.
+      const { value, threshold, limit } = e.data
+      const ok = typeof value === 'number' && value >= 0 && value <= GUARD_MAX && typeof threshold === 'number' && threshold > 0 && threshold <= GUARD_MAX
+      if (ok && e.agent !== undefined && (limit === 'time' || limit === 'agentCost')) out.push({ agent: e.agent, kind: 'other', at, isError: false, guard: true })
       continue
     }
     const kind = isOneOf(TOOL_KINDS, e.data.kind) ? e.data.kind : 'other'

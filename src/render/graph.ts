@@ -32,7 +32,7 @@ export type GraphInput = {
 }
 
 /** `box`: the robot's box, in robot style. */
-type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState; box?: Box }
+export type Node = { id: string; p: Point; r: number; fill: number; s: AgentStats; a: AgentState; box?: Box }
 type Rim = { color: number; k: number; flare: boolean } | null
 
 /** Positions beyond this are treated as garbage; it keeps every loop below bounded. */
@@ -219,7 +219,7 @@ function dotPath(dots: Dots, path: (t: number) => Point, length: number, color: 
 const globeDropCount = (n: Node): Drops => (n.s.status === 'done' || n.s.status === 'failed' || n.s.placeholder ? 0 : dropsFor(n.a))
 
 /** Cells holding a node's disc or ring, and a globe's sweat drops: labels keep clear of them. */
-function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
+export function solidCells(area: Rect, nodes: readonly Node[]): Uint8Array {
   const solid = new Uint8Array(area.w * area.h)
   for (const n of nodes) {
     const reach = n.r + GRAPH.ringPx
