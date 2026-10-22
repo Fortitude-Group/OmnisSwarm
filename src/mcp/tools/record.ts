@@ -4,7 +4,7 @@
  * unguarded, so this checks everything itself (spec section 6). It builds each event's data
  * afresh from known fields, so nothing else the caller sends reaches the log.
  */
-import { AGENT_OUTCOMES, LIMITS, NAME, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
+import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
 import { appendEvent } from '../../core/log.ts'
 import { RECORDER_TYPES, RECORD_TOOL, SESSION_ID, type RecorderType } from '../../core/recording.ts'
 import type { Args, ToolDef } from '../protocol.ts'
@@ -41,6 +41,14 @@ function oneOf<T extends string>(d: Args, key: string, values: readonly T[]): T 
   const v = d[key]
   if (typeof v !== 'string' || !(values as readonly string[]).includes(v)) throw new InputError(`data.${key} must be one of: ${values.join(', ')}`)
   return v as T
+}
+
+function measure(d: Args, key: string, min: number): number {
+  const v = d[key]
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > GUARD_MAX || (min > 0 && v === 0)) {
+    throw new InputError(`data.${key} must be a number from ${min} to ${GUARD_MAX}`)
+  }
+  return v
 }
 
 function agentName(d: Args, key: string): string {
@@ -81,6 +89,28 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     }
     case 'message.sent':
       return { to: text(d, 'to', 64, true), summary: text(d, 'summary', LIMITS.summary) }
+    case 'budget.set': {
+      const out: EventData['budget.set'] = {}
+      for (const key of BUDGET_KEYS) {
+        if (d[key] === undefined) continue
+        const v = d[key]
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > BUDGET_MAX[key]) throw new InputError(`data.${key} must be a number above 0 and at most ${BUDGET_MAX[key]}`)
+        out[key] = v
+      }
+      if (Object.keys(out).length === 0) throw new InputError('data must set at least one of agentMinutes, agentUsd, swarmUsd')
+      return out
+    }
+    case 'guard.warned':
+      return { limit: oneOf(d, 'limit', GUARD_LIMITS), value: measure(d, 'value', 0), threshold: measure(d, 'threshold', 1e-9) }
+    case 'guard.nudged': {
+      if (typeof d.delivered !== 'boolean') throw new InputError('data.delivered must be true or false')
+      return {
+        limit: oneOf(d, 'limit', ['time', 'agentCost'] as const), value: measure(d, 'value', 0), threshold: measure(d, 'threshold', 1e-9),
+        delivered: d.delivered, ...(d.reason !== undefined && { reason: text(d, 'reason', LIMITS.reason) }),
+      }
+    }
+    case 'guard.blocked':
+      return { value: measure(d, 'value', 0), threshold: measure(d, 'threshold', 1e-9) }
     case 'session.measure': {
       const usd = d.costUsd
       if (usd !== undefined && (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0 || usd > MAX_USD)) {
@@ -122,6 +152,10 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       if (!isObj(args.data)) throw new InputError('data must be an object')
       const dropped = args.dropped === undefined ? 0 : count(args, 'dropped')
       const data = dataFor(type, args.data)
+      const agentLevel = type === 'guard.nudged' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
+      const swarmLevel = type === 'budget.set' || type === 'guard.blocked' || (type === 'guard.warned' && !agentLevel)
+      if (agentLevel && agent === undefined) throw new InputError(`${type} for an agent limit needs agent`)
+      if (swarmLevel && agent !== undefined) throw new InputError(`${type} is about the swarm and takes no agent`)
       if (dropped > 0) Object.assign(data, { dropped })
       const now = new Date(ts)
       // Checked before anything touches the disk, so a refused call writes nothing.
@@ -134,7 +168,7 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       session.noteSession(sessionId)
       const swarm = session.swarmOrCreate(now)
       if (!appendEvent(root, { ...probe, swarm })) throw new Error('append failed')
-      return { text: 'ok' }
+      return { text: `ok ${swarm}` }
     },
   }
   return [{

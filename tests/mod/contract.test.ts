@@ -30,6 +30,6 @@ test("every body the recorder builds, awkward input included, is accepted by omn
   for (const body of bodies) {
     assert.ok(body !== null)
     const reply = record!.handler({ sessionId: SID, ts: new Date(Date.now()).toISOString(), ...body })
-    assert.deepEqual(reply, { text: 'ok' }, JSON.stringify(body).slice(0, 160))
+    assert.match(reply.text, /^ok [a-z0-9]/, JSON.stringify(body).slice(0, 160))
   }
 })
