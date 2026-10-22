@@ -94,3 +94,17 @@ test('the GIF header ends row 0 with the wordmark and drops the pane-only stop h
   assert.doesNotMatch(row1!, /omnis replay stop/)
   assert.match(gridText(render(state, emptyView(), END, size, { replay }).top)[1]!, /omnis replay stop/)
 })
+
+test('the agent count matches the header, and "ended" is local time', () => {
+  const endedAt = state.lastAt
+  const top = render(state, emptyView(), END, size).top
+  const totals = swarmTotals(state, END)
+  drawCard(top, graphOf(), state, totals, { durationMs: swarmDurationMs(state), clipMs: 24_000, endedAt }, 1)
+  const text = gridText(top)
+  assert.match(text[0]!, new RegExp(`${totals.agents} agents`))
+  const card = cardRect(graphOf())
+  assert.equal(text[card.y + 7]!.slice(card.x + 3, card.x + 3 + String(totals.agents).length), String(totals.agents))
+  const d = new Date(endedAt)
+  const local = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  assert.match(text[card.y + 5]!, new RegExp(`ended ${local}`))
+})

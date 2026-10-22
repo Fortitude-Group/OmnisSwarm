@@ -117,8 +117,9 @@ export async function renderGif(events: SwarmEvent[], swarm: string, style: Styl
   throw new InputError('The GIF would be too large even sped up; nothing was written.')
 }
 
-/** yyyymmdd-hhmm in UTC. */
-const stamp = (d: Date): string => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 13)
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+/** yyyymmdd-hhmm in the server machine's local time zone (sorts by time within a zone). */
+const stamp = (d: Date): string => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`
 
 export function createExportTools(ctx: ToolContext): AsyncToolDef[] {
   const { root } = ctx

@@ -9,7 +9,8 @@ import { fiveAgentEvents, FIVE_SWARM } from '../fixtures/swarm-five.ts'
 import { decodeGif } from '../gif/decode.ts'
 import { tmpRoot } from '../helpers.ts'
 
-const NOW = new Date('2026-10-22T14:05:00.000Z')
+/** 14:05 local time on the machine running the tests: the file name is stamped in local time. */
+const NOW = new Date(2026, 9, 22, 14, 5)
 
 test('omnis_export writes .omnis-swarm/exports/<swarm>-<yyyymmdd-hhmm>.gif and answers its path', async () => {
   const root = tmpRoot()

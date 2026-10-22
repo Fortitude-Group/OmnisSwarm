@@ -12,11 +12,11 @@
                       ▀▀▀▀▀ ▀▀                                                            ▀▀▀▀▀▀                        
                        ▀ ▀ ▀ ▀   auth refactor · hierarchical                             ▀▀▀▀▀▀                        
                                                                                                                         
-                       ▀ ▀ ▀ ▀   5             0m 30s        ≈$0.57+       9              ▀▀▀▀▀▀                        
+                       ▀ ▀ ▀ ▀   6             0m 30s        ≈$0.57+       9              ▀▀▀▀▀▀                        
                       ▀▀▀▀▀ ▀▀   agents        duration      cost          messages        ghost                        
                       ▶ archit                                                                                          
-                                 ▶ 3 running   ✓ 1 done   ✕ 1 failed                                                    
-                                 ● opus 1   ● sonnet 2   ● haiku 1   ● other 1                                          
+                                 ▶ 4 running   ✓ 1 done   ✕ 1 failed                                                    
+                                 ● opus 2   ● sonnet 2   ● haiku 1   ● other 1                                          
                                  2026-10-21 · 00:30 of work in 24 s                                                     
                                                                                                                         
                                     ▀▀ ▀▀  ▀▀ ▀▀                         ⠈⠂▀▀  ▀▀                                       

@@ -2,7 +2,7 @@
  * The GIF's summary card (pane.md 13.4): 60x14 cells centred over the graph for the clip's last 3 s, the graph dimmed
  * behind it. Every figure comes from the swarm state and CardInfo, never from the clip's frames. Pure.
  */
-import { LEAD, type SwarmState } from '../core/fold.ts'
+import type { SwarmState } from '../core/fold.ts'
 import { agentStatus, type AgentStatus, type SwarmTotals } from '../core/stats.ts'
 import { DEFAULT, mix } from './color.ts'
 import { fmtUsd } from './format.ts'
@@ -43,9 +43,9 @@ export function fmtDur(ms: number): string {
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
-/** Times on the card are UTC, as the export's file name is. */
-const ymd = (ms: number): string => { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}` }
-const hhmm = (ms: number): string => { const d = new Date(ms); return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}` }
+/** Times on the card are in the local time zone of the machine drawing it, as the export's file name is. */
+const ymd = (ms: number): string => { const d = new Date(ms); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` }
+const hhmm = (ms: number): string => { const d = new Date(ms); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}` }
 
 /** The mark (13.4): three nodes and their links, 8x6 pixels. */
 const MARK = ['...OO...', '...OO...', '..A..A..', '.A....A.', 'SS....FF', 'SS.AA.FF'] as const
@@ -82,7 +82,8 @@ function cardGrid(state: SwarmState, totals: SwarmTotals, info: CardInfo): Grid 
     ...(info.endedAt !== null ? [SEP, [`ended ${hhmm(info.endedAt)}`, TEXT.dim] as Part] : []),
   ])
 
-  const agents = Object.values(state.agents).filter(a => !a.placeholder && a.id !== LEAD)
+  // Every named agent, the lead included, as the header counts them; the status and model rows add up to the same.
+  const agents = Object.values(state.agents).filter(a => !a.placeholder)
   const messages = Object.values(state.links).reduce((n, l) => n + l.count, 0)
   const figures: readonly [string, string][] = [
     [String(agents.length), 'agents'],
