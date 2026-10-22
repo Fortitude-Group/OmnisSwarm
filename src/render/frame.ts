@@ -7,6 +7,7 @@ import { clipText } from './format.ts'
 import { FULL_MOTION, motionFor, tween, type Motion } from './fx.ts'
 import { clashActive, drawGraph } from './graph.ts'
 import { Grid, limitPairs, writeParts, type Part } from './grid.ts'
+import { dropsFor } from './guard-badge.ts'
 import { drawHeader, drawSummary, summaryText, type HeaderNotes } from './header.ts'
 import { layoutNodes, nodesKey, orderAgents, structuralEdges, type Edge } from './layout.ts'
 import { planRegions } from './regions.ts'
@@ -187,7 +188,8 @@ export function render(state: SwarmState, view: View, nowMs: number, size: Size,
   else if (notes.degraded === 'unreadable') noteParts.push(['⚠ Waiting for the swarm…', STATUS.warn])
   if (notes.hiddenFinished !== undefined && notes.hiddenFinished > 0) noteParts.push([`+${notes.hiddenFinished} finished`, TEXT.dim])
   const short: Part | null = notes.degraded === 'too-large' ? ['⚠ too large', STATUS.warn] : notes.degraded === 'unreadable' ? ['⚠ waiting', STATUS.warn] : null
-  const hn: HeaderNotes = { notes: noteParts, short }
+  const overBudget = real.reduce((n, a) => n + (dropsFor(a) > 0 ? 1 : 0), 0)
+  const hn: HeaderNotes = { notes: noteParts, short, budget: view.budget ?? null, overBudget }
 
   let positions: Record<string, Point> = {}
   const robots = view.style === 'robot'

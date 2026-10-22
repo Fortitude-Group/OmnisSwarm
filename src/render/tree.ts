@@ -2,7 +2,8 @@
 import type { SwarmState } from '../core/fold.ts'
 import type { AgentStats } from '../core/stats.ts'
 import { clipText, fmtTokens, fmtUsd } from './format.ts'
-import { type Grid, writeParts } from './grid.ts'
+import { dropsFor } from './guard-badge.ts'
+import { type Grid, type Part, writeParts } from './grid.ts'
 import { orderAgents, parentsOf } from './layout.ts'
 import { STATUS, TEXT, modelColor, statusGlyph } from './tokens.ts'
 import type { Rect } from './types.ts'
@@ -51,6 +52,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
   const maxX = area.x + area.w - 1
   rows.forEach((row, i) => {
     const s = stats[row.id]!
+    const agent = state.agents[row.id]
     const nameColor = s.status === 'failed' ? STATUS.failed : s.placeholder ? TEXT.dim : modelColor(s.model)
     writeParts(grid, area.x + 1, area.y + i, [
       ['  '.repeat(Math.min(row.depth, MAX_INDENT)), TEXT.dim],
@@ -58,6 +60,7 @@ export function drawTree(grid: Grid, area: Rect, state: SwarmState, stats: Reado
       [clipText(s.name, 24), nameColor],
       ['  ', TEXT.dim],
       [s.model === null ? '– tok · –' : `${fmtTokens(s.tokens.total)} tok · ${fmtUsd(s.costUsd)}`, TEXT.dim],
+      ...(agent !== undefined && dropsFor(agent) > 0 ? [[' over', STATUS.warn] as Part] : []),
     ], maxX)
   })
   if (total > room) writeParts(grid, area.x + 1, area.y + room - 1, [[`… ${total - rows.length} more`, TEXT.dim]], maxX)

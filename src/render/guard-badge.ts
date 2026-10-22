@@ -61,3 +61,24 @@ export function guardFlash(pulses: readonly Pulse[], agent: string, tEff: number
   for (const p of pulses) if (p.guard === true && p.agent === agent && p.at <= tEff && p.at > newest) newest = p.at
   return tEff - newest < Math.max(GUARD.flashMs, motion.pulseHoldMs) ? 0xffffff : null
 }
+
+const fmtM = (min: number): string => `${Math.floor(min)}m`
+const fmtD = (usd: number): string => `$${Number.isInteger(usd) ? usd : usd.toFixed(2)}`
+
+/** §13.2 words: 'over time-box 21m/20m', 'over $3.20/$3', 'nudged 31m/30m'; the limit furthest past its own stage wins. */
+export function guardWords(a: AgentState, now: number): string | null {
+  if (dropsFor(a) === 0) return null
+  const g = a.guard
+  if (g === undefined) return null
+  const minutes = Math.max(0, now - a.startedAt) / 60_000
+  const spent = Math.round(a.costUsd * 100) / 100
+  // Each limit speaks at its own stage: the act threshold once nudged, else the warn one; a limit not reached is silent.
+  const cands: Array<{ ratio: number; words: string }> = []
+  const time = g.timeAct ?? g.timeWarn
+  if (time !== null) cands.push({ ratio: minutes / time, words: `${g.timeAct !== null ? 'nudged' : 'over time-box'} ${fmtM(minutes)}/${fmtM(time)}` })
+  const cost = g.costAct ?? g.costWarn
+  if (cost !== null) cands.push({ ratio: a.costUsd / cost, words: `${g.costAct !== null ? 'nudged' : 'over'} ${fmtD(spent)}/${fmtD(cost)}` })
+  let best: { ratio: number; words: string } | null = null
+  for (const c of cands) if (best === null || c.ratio > best.ratio) best = c
+  return best === null ? null : best.words
+}

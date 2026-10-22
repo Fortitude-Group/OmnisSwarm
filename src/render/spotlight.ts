@@ -3,6 +3,7 @@ import { TOOL_KINDS } from '../core/events.ts'
 import type { AgentState, SwarmState } from '../core/fold.ts'
 import { agentStatus, type AgentStats } from '../core/stats.ts'
 import { clipText, fmtDuration, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
+import { guardWords } from './guard-badge.ts'
 import { type Grid, type Part, writeParts, writeRight } from './grid.ts'
 import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, statusGlyph } from './tokens.ts'
 import type { Pulse, Rect, Spot } from './types.ts'
@@ -130,7 +131,9 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
     for (const k of TOOL_KINDS) parts.push([`${KIND_LETTER[k]} `, KIND[k]], [`${s.tools[k]}  `, s.tools[k] > 0 ? TEXT.primary : TEXT.dim])
     parts.push([' errors ', TEXT.dim], [String(s.errors), s.errors > 0 ? STATUS.failed : TEXT.dim])
     if (s.stuck) parts.push(['  ', TEXT.dim], [`${GLYPH.stuck} stuck`, STATUS.warn])
-    writeParts(grid, x, row(4), parts, maxX, bg)
+    const end = writeParts(grid, x, row(4), parts, maxX, bg)
+    const words = guardWords(a, now)
+    if (words !== null && maxX - [...words].length >= end + 2) writeRight(grid, row(4), [[words, STATUS.warn]], end + 2, maxX, bg)
   }
   // 5: files, messages, clashes
   if (rows > 5) {
