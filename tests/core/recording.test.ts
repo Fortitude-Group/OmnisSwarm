@@ -50,3 +50,14 @@ test('the guard rule denies an internal tool to anyone but this plugin, and igno
   assert.equal(guardVerdict(FEED, 'intruder', 'omnis-swarm'), 'deny')
   assert.equal(guardVerdict('Bash', 'engine', 'omnis-swarm'), 'pass')
 })
+
+test('the guard matches this plugin by name with or without an @marketplace suffix, on either side', () => {
+  assert.equal(guardVerdict(RECORD, 'omnis-swarm@omnis-swarm', 'omnis-swarm'), 'pass')
+  assert.equal(guardVerdict(RECORD, 'omnis-swarm', 'omnis-swarm@omnis-swarm'), 'pass')
+  assert.equal(guardVerdict(FEED, 'omnis-swarm@other-market', 'omnis-swarm@omnis-swarm'), 'pass')
+  // Look-alikes stay out: a longer name, our name after the @, an empty origin.
+  assert.equal(guardVerdict(RECORD, 'omnis-swarm-evil', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, 'evil@omnis-swarm', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, '', 'omnis-swarm'), 'deny')
+  assert.equal(guardVerdict(RECORD, 'engine', 'omnis-swarm'), 'deny')
+})
