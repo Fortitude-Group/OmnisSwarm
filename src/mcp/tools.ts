@@ -4,10 +4,11 @@ import { parseBudget, type BudgetPatch } from '../core/budget.ts'
 import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/log.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { uniqueSwarmId } from '../core/swarm.ts'
-import { MEMORY_KEY, type SwarmState } from '../core/fold.ts'
+import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
 import type { Session } from './session.ts'
+import { writeReport } from './tools/report.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
 export type ToolContext = { root: string; now?: () => Date; session: Session }
@@ -134,7 +135,15 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         emit(makeEvent({ type: 'swarm.ended', swarm: id, src: 'mcp', data: outcome === undefined ? {} : { outcome }, now: clock() }))
         if (readCurrent(root) === id) clearCurrent(root)
         session.letGo()
-        return { text: `Swarm ${id} ended.` }
+        const s = session.state(id).state
+        const lastWork = Math.max(0, ...Object.values(s.agents).filter(a => a.id !== LEAD && !a.placeholder).map(a => a.lastActivity))
+        if (s.lastReport !== undefined && lastWork <= s.lastReport.at) return { text: `Swarm ${id} ended.` }
+        try {
+          return { text: `Swarm ${id} ended. ${writeReport(root, session, id, clock())}` }
+        } catch (err) {
+          process.stderr.write(`omnis: report on omnis_swarm_end failed: ${err instanceof Error ? err.message : String(err)}\n`)
+          return { text: `Swarm ${id} ended. The report could not be written (see the server log).` }
+        }
       },
     },
     {

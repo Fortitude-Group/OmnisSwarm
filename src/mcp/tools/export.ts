@@ -7,7 +7,7 @@ import { existsSync, lstatSync, mkdirSync, renameSync, rmSync, writeFileSync } f
 import { join } from 'node:path'
 import { isValidSwarmId, type SwarmEvent } from '../../core/events.ts'
 import { emptyState, fold, foldAll } from '../../core/fold.ts'
-import { isLink, logPaths, readEvents, swarmLogPath } from '../../core/log.ts'
+import { isLink, readEvents, swarmLogPath } from '../../core/log.ts'
 import { EXPORT_TOOL } from '../../core/recording.ts'
 import { fitSpeed, logTimeAt, retime } from '../../core/replay-clock.ts'
 import { swarmTotals } from '../../core/stats.ts'
@@ -20,6 +20,7 @@ import { chooseSpotlight } from '../../render/spotlight.ts'
 import { CELL_H, CELL_W } from '../../render/svg.ts'
 import type { Spot, Tween } from '../../render/types.ts'
 import { markPulses, prunePulses, pulsesFrom } from '../../mod/pane-model.ts'
+import { stamp, writeUnique } from '../out-file.ts'
 import type { Args, AsyncToolDef, ToolResult } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, reqEnum, reqString } from '../validate.ts'
@@ -53,10 +54,6 @@ export function readAllEvents(file: string, max = MAX_EVENTS): SwarmEvent[] {
     offset = read.offset
   }
 }
-
-/** Second and later exports in the same minute get -2, -3, … after the stamp. */
-const MAX_SAME_MINUTE = 99
-const taken = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false }) !== undefined
 
 async function encodeAt(events: readonly SwarmEvent[], swarm: string, style: Style, speed: number, caps: Caps, pause: () => Promise<void>): Promise<{ gif: Uint8Array; frames: number } | 'over'> {
   const size = { columns: GIF_COLUMNS, rows: GIF_ROWS }
@@ -122,10 +119,6 @@ export async function renderGif(events: SwarmEvent[], swarm: string, style: Styl
   throw new InputError('The GIF would be too large even sped up; nothing was written.')
 }
 
-const pad2 = (n: number): string => String(n).padStart(2, '0')
-/** yyyymmdd-hhmm in the server machine's local time zone (sorts by time within a zone). */
-const stamp = (d: Date): string => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`
-
 export function createExportTools(ctx: ToolContext): AsyncToolDef[] {
   const { root } = ctx
   const clock = ctx.now ?? (() => new Date())
@@ -149,25 +142,7 @@ export function createExportTools(ctx: ToolContext): AsyncToolDef[] {
       if (!existsSync(file) || isLink(file)) throw new InputError(`No swarm ${swarm} here.`)
       try {
         const { gif, speed } = await renderGif(readAllEvents(file), swarm, style)
-        const dir = join(logPaths(root).dir, 'exports')
-        if (isLink(dir)) throw new Error('refusing a link for the exports folder')
-        mkdirSync(dir, { recursive: true })
-        // The name is built only from the validated id, a timestamp and a counter, inside the exports folder. No await
-        // between choosing it and the rename, so two exports in this server cannot pick the same name.
-        const base = `${swarm}-${stamp(clock())}`
-        let n = 1
-        while (n <= MAX_SAME_MINUTE && taken(join(dir, n === 1 ? `${base}.gif` : `${base}-${n}.gif`))) n++
-        if (n > MAX_SAME_MINUTE) throw new Error('too many exports this minute')
-        const name = n === 1 ? `${base}.gif` : `${base}-${n}.gif`
-        const target = join(dir, name)
-        const temp = `${target}.${process.pid}.tmp`
-        try {
-          rmSync(temp, { force: true })
-          writeFileSync(temp, gif, { flag: 'wx' })
-          renameSync(temp, target)
-        } finally {
-          rmSync(temp, { force: true })
-        }
+        const name = writeUnique(root, 'exports', `${swarm}-${stamp(clock())}`, '.gif', gif)
         return { text: `GIF written to .omnis-swarm/exports/${name} (${Math.round(gif.length / 1024)} KB, ${speed}× speed).` }
       } catch (err) {
         if (err instanceof InputError) throw err
