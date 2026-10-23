@@ -60,3 +60,24 @@ test('a refusal is recorded once per agent and path in BLOCK_DEDUPE_MS', () => {
   assert.equal(h.shouldRecord('a3', '/p/x', 1), true)
   assert.equal(h.shouldRecord('a2', '/p/x', BLOCK_DEDUPE_MS), true)
 })
+
+test('under a drive letter, a Git Bash /c/ path and a //?/ long path name the same file', () => {
+  const want = { key: 'c:/proj/src/x.ts', shown: 'src/x.ts' }
+  assert.deepEqual(normalisePath('/c/proj/src/x.ts', 'C:\\proj'), want)
+  assert.deepEqual(normalisePath('\\\\?\\C:\\proj\\src\\x.ts', 'C:\\proj'), want)
+  assert.deepEqual(normalisePath('//?/c:/proj/src/x.ts', 'C:\\proj'), want)
+  assert.deepEqual(normalisePath('/c/proj/x', '/home/c'), { key: '/c/proj/x', shown: '/c/proj/x' })
+})
+
+test('reserve holds at once, and its undo restores what was there', () => {
+  const h = new Holds()
+  const undo = h.reserve('/p/x', 'a1', 0)
+  assert.equal(h.clashWith('/p/x', 'a2', 1), 'a1')
+  undo()
+  assert.equal(h.clashWith('/p/x', 'a2', 1), null)
+  h.take('/p/y', 'a1', 0)
+  h.reserve('/p/y', 'a1', HOLD_IDLE_MS - 1)()
+  assert.equal(h.clashWith('/p/y', 'a2', HOLD_IDLE_MS - 2), 'a1')
+  assert.equal(h.clashWith('/p/y', 'a2', HOLD_IDLE_MS), null)
+  assert.equal(h.reserve('/p/z', null, 0)(), undefined)
+})

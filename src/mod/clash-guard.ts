@@ -23,9 +23,12 @@ export const warnText = (agent: string, path: string, holder: string): string =>
 let holds = new Holds()
 let setting: ClashSetting = 'block'
 
-type Look = { key: string; shown: string; subject: string; agent: string | null; holder: string | null; now: number }
+type Look = { key: string; shown: string; subject: string; agent: string | null; holder: string | null; now: number; undo: () => void }
 
-/** What a real file-tool call is about, or null when it isn't the guard's business. */
+/**
+ * What a real file-tool call is about, or null when it isn't the guard's business. The clash check and the hold's
+ * reservation happen with no await between them, so two agents racing for a fresh file can't both pass.
+ */
 async function look($: EngineInterface, e: { tool: string; input: unknown; tool_use_id?: string; agentId?: string }): Promise<Look | null> {
   if (e.tool_use_id === undefined) return null
   const input = (typeof e.input === 'object' && e.input !== null ? e.input : {}) as Fields
@@ -33,19 +36,22 @@ async function look($: EngineInterface, e: { tool: string; input: unknown; tool_
   if (path === null) return null
   const now = await $.clock.now()
   const agent = e.agentId ?? null
-  return { ...path, subject: toolSubject(e.tool, input), agent, holder: holds.clashWith(path.key, agent, now), now }
+  const holder = holds.clashWith(path.key, agent, now)
+  const undo = holder === null ? holds.reserve(path.key, agent, now) : () => undefined
+  return { ...path, subject: toolSubject(e.tool, input), agent, holder, now, undo }
 }
 
-/** Records the clash (once a minute per agent and path) and answers the refusal, or null in warn mode after telling the lead. */
-async function clashed($: EngineInterface, l: Look, holder: string): Promise<{ decision: 'deny'; reason: string } | null> {
-  const [holderName, agentName] = await Promise.all([agentLabel($, holder), agentLabel($, l.agent)])
+/** Records the clash, at most once a minute per agent and path; true when this one was recorded. */
+function noted($: EngineInterface, l: Look, holder: string): boolean {
   const who = l.agent ?? LEAD
-  if (holds.shouldRecord(who, l.key, l.now)) {
-    void record($, { type: 'clash.blocked', agent: who, data: { path: l.subject || l.shown, holder, mode: setting === 'warn' ? 'warn' : 'block' } })
-  }
-  if (setting !== 'warn') return { decision: 'deny', reason: refusalText(holderName, l.shown) }
-  void $.session.append({ message: { type: 'user', content: [{ type: 'text', text: warnText(agentName, l.shown, holderName) }] } }).catch(() => undefined)
-  return null
+  if (!holds.shouldRecord(who, l.key, l.now)) return false
+  void record($, { type: 'clash.blocked', agent: who, data: { path: l.subject || l.shown, holder, mode: setting === 'warn' ? 'warn' : 'block' } })
+  return true
+}
+
+async function warnLead($: EngineInterface, l: Look, holder: string): Promise<void> {
+  const [holderName, agentName] = await Promise.all([agentLabel($, holder), agentLabel($, l.agent)])
+  await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: warnText(agentName, l.shown, holderName) }] } }).catch(() => undefined)
 }
 
 export function registerClashGuard(on: On, options: PluginOptions): void {
@@ -55,12 +61,20 @@ export function registerClashGuard(on: On, options: PluginOptions): void {
 
   on('tool.check', { tool: CLASH_TOOLS }, async ($, e, next) => {
     const l = await look($, e)
-    if (l !== null && l.holder !== null) {
-      const refused = await clashed($, l, l.holder)
-      if (refused !== null) return refused
+    if (l === null) return next(e)
+    if (l.holder !== null && setting === 'block') {
+      noted($, l, l.holder)
+      return { decision: 'deny', reason: refusalText(await agentLabel($, l.holder), l.shown) }
     }
-    const result = await next(e)
-    if (l !== null && result.decision !== 'deny') holds.take(l.key, l.agent, l.now)
+    let result
+    try {
+      result = await next(e)
+    } catch (err) {
+      l.undo()
+      throw err
+    }
+    if (result.decision === 'deny') l.undo()
+    else if (l.holder !== null && noted($, l, l.holder)) void warnLead($, l, l.holder)
     return result
   }).catch((_$, e, next) => next(e))
 

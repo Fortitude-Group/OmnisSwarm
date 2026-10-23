@@ -6,14 +6,17 @@ import { KIT } from './test-engine.ts'
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const T0 = Date.parse('2026-10-23T10:00:00.000Z')
 const REFUSED = 'coder-1 is editing src/x.ts. Message them, or wait until they finish.'
-type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; readonly appends: string[]; beneath: 'allow' | 'deny' }
+type Seen = { records: Array<{ type: string; agent?: string; data: Record<string, unknown> }>; readonly appends: string[]; beneath: 'allow' | 'deny'; cwdFails: boolean }
 
 function engine(on: On): Seen {
   const session = mock.session(on)
-  const seen: Seen = { records: [], beneath: 'allow', get appends() { return session.appended().map(row => JSON.stringify(row.message)) } }
+  const seen: Seen = { records: [], beneath: 'allow', cwdFails: false, get appends() { return session.appended().map(row => JSON.stringify(row.message)) } }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: SID }))
-  on('session.cwd', () => ({ value: '/p' }))
+  on('session.cwd', () => {
+    if (seen.cwdFails) throw new Error('cwd unreadable')
+    return { value: '/p' }
+  })
   on('state.get', () => ({ value: { value: undefined, version: 0 } }))
   on('state.set', () => ({ value: { isSet: true as const, version: 1 } }))
   on('agent.list', () => ({ value: [{ id: 'a1', name: 'coder-1', description: '', type: 'coder' }, { id: 'a2', name: 'coder-2', description: '', type: 'coder' }] as never }))
@@ -102,4 +105,67 @@ test('other tools and a query without a call id are left alone', KIT, async ($, 
   await editAs($, 'a1', 'src/x.ts')
   expect((await $.tool.check({ tool: 'Read', input: { file_path: 'src/x.ts' }, tool_use_id: 'toolu_r', agentId: 'a2' } as never)).decision).toBe('allow')
   expect((await $.tool.check({ tool: 'Edit', input: { file_path: 'src/x.ts' } })).decision).toBe('allow')
+})
+
+test('two subagents editing the same fresh file at once: exactly one gets it', KIT, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  const decisions = (await Promise.all([editAs($, 'a1', 'src/race.ts'), editAs($, 'a2', 'src/race.ts')])).map(r => r.decision).sort()
+  expect(decisions).toEqual(['allow', 'deny'])
+  await clock.settle()
+  expect(clashes(seen).length).toBe(1)
+})
+
+test('a hold reserved for an edit the engine then refuses is given back', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  seen.beneath = 'deny'
+  const [first, second] = await Promise.all([editAs($, 'a1', 'src/y.ts'), editAs($, 'a2', 'src/y.ts')])
+  expect(first.decision).toBe('deny')
+  expect(second.decision).toBe('deny')
+  seen.beneath = 'allow'
+  expect((await editAs($, 'a2', 'src/y.ts')).decision).toBe('allow')
+})
+
+test('a failure in the guard fails open: the verdict beneath comes back, not an error', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  await editAs($, 'a1', 'src/x.ts')
+  seen.cwdFails = true
+  expect((await editAs($, 'a2', 'src/x.ts')).decision).toBe('allow')
+  seen.beneath = 'deny'
+  expect((await editAs($, 'a2', 'src/x.ts')).decision).toBe('deny')
+})
+
+test('a hold ends on every way a turn can end', KIT, async ($, on) => {
+  await boot($, on)
+  for (const reason of ['answer', 'aborted', 'refusal', 'error'] as const) {
+    const file = `src/${reason}.ts`
+    await editAs($, 'a1', file)
+    expect((await editAs($, 'a2', file)).decision).toBe('deny')
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: reason === 'aborted', turnId: `t${++n}`, agentId: 'a1', reason, ...(reason === 'refusal' && { refusal: { category: null, explanation: null } }) } as never)
+    expect((await editAs($, 'a2', file)).decision).toBe('allow')
+  }
+})
+
+test('the lead is refused with the same words and its clash is recorded as the lead', KIT, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await editAs($, 'a1', 'src/x.ts')
+  expect(await editAs($, undefined, 'src/x.ts')).toEqual({ decision: 'deny', reason: REFUSED })
+  await clock.settle()
+  expect(clashes(seen)).toEqual([{ type: 'clash.blocked', agent: 'lead', data: { path: 'src/x.ts', holder: 'a1', mode: 'block' } }])
+})
+
+test('warn tells the lead once a minute per agent and path, and not for an edit the engine refuses', { ...KIT, options: { clashGuard: 'warn' } }, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  const told = () => seen.appends.filter(a => a.includes('[OmnisSwarm clash guard]')).length
+  await editAs($, 'a1', 'src/x.ts')
+  seen.beneath = 'deny'
+  await editAs($, 'a2', 'src/x.ts')
+  await clock.settle()
+  expect(told()).toBe(0)
+  expect(clashes(seen)).toEqual([])
+  seen.beneath = 'allow'
+  await editAs($, 'a2', 'src/x.ts')
+  await editAs($, 'a2', 'src/x.ts')
+  await clock.settle()
+  expect(told()).toBe(1)
+  expect(clashes(seen).length).toBe(1)
 })

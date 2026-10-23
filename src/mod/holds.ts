@@ -34,9 +34,11 @@ function squash(p: string): string {
 export function normalisePath(raw: unknown, cwd: string): FilePath | null {
   if (typeof raw !== 'string' || raw.trim() === '') return null
   const base = squash(cwd.replace(/\\/g, '/'))
-  const p = raw.trim().replace(/\\/g, '/')
-  const full = squash(ABSOLUTE.test(p) ? p : `${base}/${p}`)
   const fold = DRIVE.test(base)
+  let p = raw.trim().replace(/\\/g, '/').replace(/^\/\/\?\//, '')
+  // Git Bash writes C:/x as /c/x; only a drive-letter cwd tells us that is what it means.
+  if (fold) p = p.replace(/^\/([A-Za-z])(?=\/|$)/, '$1:')
+  const full = squash(ABSOLUTE.test(p) ? p : `${base}/${p}`)
   const key = fold ? full.toLowerCase() : full
   const baseKey = fold ? base.toLowerCase() : base
   const prefix = baseKey.endsWith('/') ? baseKey : `${baseKey}/`
@@ -74,6 +76,22 @@ export class Holds {
     if (holder !== null && holder !== agent) return
     if (this.#holds.size >= SWEEP_AT) for (const k of [...this.#holds.keys()]) this.#holderOf(k, now)
     this.#holds.set(key, { holder: agent, lastAt: now })
+  }
+
+  /**
+   * Like take, but returns an undo: the edit is not yet known to go ahead, so the hold is reserved at once (no await between
+   * the clash check and this) and the undo puts back what was there if the edit is then refused or fails.
+   */
+  reserve(key: string, agent: string | null, now: number): () => void {
+    if (agent === null) return () => undefined
+    const before = this.#holds.get(key)
+    this.take(key, agent, now)
+    const mine = this.#holds.get(key)
+    return () => {
+      if (this.#holds.get(key) !== mine) return
+      if (before !== undefined && before.holder === agent) this.#holds.set(key, before)
+      else this.#holds.delete(key)
+    }
   }
 
   /** The holder finished: every hold it had ends. */
