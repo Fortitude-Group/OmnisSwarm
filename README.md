@@ -39,6 +39,7 @@ claude plugin update omnis-swarm@omnis-swarm
 - `/omnis replay [swarm] [speed]` replays a recorded swarm in the pane. Leave the swarm out and you get the most recent one. Speed is 1 to 60, and 10× if you don't say. `/omnis replay stop` goes back to live.
 - `/omnis export gif [swarm]` renders a swarm (the most recent, by default) to a looping GIF in `.omnis-swarm/exports/`, drawn in your saved style. It runs in the background and a toast gives you the path when it's written. If the server hasn't answered after 5 minutes, it gives up and says so.
 - `/omnis budget` shows the limits, the swarm's spend so far and whether new agents are allowed. `/omnis budget <usd>` sets the swarm budget, above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
+- `/omnis report` writes the run report now, without waiting for the swarm to go quiet.
 - `/omnis-swarm:watch` does the same as `/omnis pane`. It doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
 
 ## The budget guard
@@ -53,14 +54,29 @@ Three limits, each with a warning before it acts:
 
 Warnings show up as toasts. The dollar figures are estimates (hence the ≈ in front of them). They're worked out from token counts and the price table in `src/core/prices.ts`, not read off your bill. Once Claude Code reports its own session cost, the swarm total uses that, counted from when the swarm began.
 
+## The clash guard
+
+When a subagent edits a file, it holds that file until it finishes or goes 10 minutes without editing it. Anyone else who tries (the lead included) is refused with `<holder> is editing <path>. Message them, or wait until they finish.` The lead never holds files. Agents in their own git worktree edit different paths, so they never clash. The pane marks a refusal `! clash (blocked) <path>` on the spotlight card.
+
+One blind spot, and it's a real one. The guard only sees Edit, Write and NotebookEdit, so writes made through Bash (`sed -i`, `>`, `mv`) sail straight past it.
+
+## Stuck nudges
+
+An agent counts as stuck if its last 5 tool calls failed, or it ran the same tool on the same thing 4 times with no edit in between. It's asked once to step back and try another approach, or report to main. The lead gets a one-line note, and the pane shows the agent's stuck look while it lasts.
+
+## The run report
+
+Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
+
 ## Settings
 
-Four of them, all in `userConfig`:
+Five of them, all in `userConfig`:
 
 - `panel`: `command` (the default) opens the pane only when you ask, with `/omnis pane` or `/omnis-swarm:watch`. `auto` also opens it when a swarm starts. `off` never opens it.
 - `budgetAgentMinutes`: the agent time-box, 1 to 1440 minutes. Default 30.
 - `budgetAgentUsd`: the agent budget in dollars, above 0 and at most 1000. Default 5.
 - `budgetSwarmUsd`: the swarm budget in dollars, above 0 and at most 1000. Default 20.
+- `clashGuard`: `block` (the default) refuses an edit to a file another agent holds. `warn` lets the edit go ahead and tells the lead. `off` turns the guard off.
 
 Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omnis budget <usd>` changes the budget of the swarm that's running and leaves the setting alone.
 
