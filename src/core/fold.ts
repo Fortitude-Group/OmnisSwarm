@@ -1,7 +1,7 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
-  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, GUARD_LIMITS, GUARD_MAX, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GuardLimit, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
+  type AgentOutcome, type BudgetKey, type GuardLimit, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
 import { costOf, sameModel, type Usage } from './prices.ts'
 
@@ -19,6 +19,8 @@ export const MAX_SAMPLES = 30
 export const MAX_RECENT = 5
 export const MAX_EDITS = 10
 const SPEND_KEEP_MS = 600_000
+/** A clash.blocked marks the refused agent's own edit entry when the recorder's start for it is this close. */
+const CLASH_MATCH_MS = 5_000
 
 export type UsageSample = { at: number; output: number; gapMs: number }
 
@@ -32,6 +34,12 @@ export type AgentRoute = { q: string; d: number }
 
 /** The threshold each guard stage last fired at, or null. */
 export type AgentGuard = { timeWarn: number | null; timeAct: number | null; costWarn: number | null; costAct: number | null }
+/**
+ * Set once the stuck guard nudges the agent. on: still stuck (until the pattern re-arms). p: the last pattern. s: the
+ * last subject. n: nudges so far. Kept after it re-arms, so the run report can list it.
+ */
+export type AgentStuck = { on: boolean; p: StuckPattern; s: string; n: number }
+export type EditEntry = { agent: string; at: number; blocked?: true }
 
 export type AgentState = {
   id: string
@@ -65,6 +73,8 @@ export type AgentState = {
   guard?: AgentGuard
   /** Absent until a call is routed to another model; readers treat absent as never routed. */
   route?: AgentRoute
+  /** Absent until the stuck guard first nudges the agent. */
+  stuckBy?: AgentStuck
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -96,13 +106,15 @@ export type SwarmState = {
   memory: Record<string, MemoryEntry>
   tasks: Record<string, TaskEntry>
   feed: FeedItem[]
-  edits: Record<string, { agent: string; at: number }[]>
+  edits: Record<string, EditEntry[]>
   spend: { at: number; usd: number }[]
   events: number
   lastAt: number
   gaps: number
   budget: Record<BudgetKey, number | null>
   guard: { warn: number | null; block: number | null }
+  /** The latest run report; absent until one is written. */
+  lastReport?: { path: string; at: number }
 }
 
 export function emptyState(id: string): SwarmState {
@@ -173,6 +185,7 @@ function revive(a: AgentState, at: number): void {
   a.reason = null
   a.finishedAt = null
   a.startedAt = at
+  if (a.stuckBy !== undefined) a.stuckBy.on = false
   a.runs++
 }
 
@@ -290,6 +303,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
           list.push({ agent: a.id, at })
           trim(list, MAX_EDITS)
         }
+        if (a.stuckBy?.on === true && (kind === 'edit' || (a.stuckBy.p === 'repeating' && subject !== a.stuckBy.s))) a.stuckBy.on = false
       } else {
         a.openTools = Math.max(0, a.openTools - 1)
         if (d.isError === true) {
@@ -297,6 +311,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
           a.errorsInRow++
         } else {
           a.errorsInRow = 0
+          if (a.stuckBy?.p === 'failing') a.stuckBy.on = false
         }
       }
       a.lastActivity = at
@@ -395,6 +410,42 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       if (threshold === null || guardNum(e.data.value, 0) === null) break
       state.guard.block = threshold
       feed(state, { at, kind: 'agent', agent: LEAD, text: `swarm budget ${limitText('swarmCost', threshold)} reached: new agents blocked` })
+      break
+    }
+    case 'clash.blocked': {
+      const d = e.data
+      const path = text(d.path, 80)
+      if (path === '' || !isSafeKey(path) || !isOneOf(CLASH_MODES, d.mode)) break
+      const a = agentOf(state, who, at)
+      const holderId = text(d.holder, 64)
+      const holder = Object.hasOwn(state.agents, holderId) ? state.agents[holderId]!.name : holderId
+      const list = Object.hasOwn(state.edits, path) ? state.edits[path]! : (state.edits[path] = [])
+      // The recorder's start for the refused call usually landed first: mark it rather than add a second entry.
+      let entry: EditEntry | undefined
+      for (let i = list.length - 1; i >= 0 && entry === undefined; i--) {
+        if (list[i]!.agent === a.id && Math.abs(at - list[i]!.at) <= CLASH_MATCH_MS) entry = list[i]
+      }
+      if (entry === undefined) {
+        entry = { agent: a.id, at }
+        list.push(entry)
+        trim(list, MAX_EDITS)
+      }
+      if (d.mode === 'block') entry.blocked = true
+      a.lastActivity = at
+      feed(state, { at, kind: 'agent', agent: a.id, text: d.mode === 'block' ? `${a.name} was refused: ${holder} holds ${path}` : `${a.name} edited ${path} while ${holder} holds it` })
+      break
+    }
+    case 'agent.stuck': {
+      const d = e.data
+      if (who === LEAD || !isOneOf(STUCK_PATTERNS, d.pattern)) break
+      const a = agentOf(state, who, at)
+      a.stuckBy = { on: true, p: d.pattern, s: text(d.subject, 80), n: (a.stuckBy?.n ?? 0) + 1 }
+      feed(state, { at, kind: 'agent', agent: a.id, text: `${a.name} looks stuck (${d.pattern}), asked to step back${d.delivered === true ? '' : ' (not delivered)'}` })
+      break
+    }
+    case 'report.written': {
+      const path = text(e.data.path, 120)
+      if (path !== '') state.lastReport = { path, at }
       break
     }
     case 'task.updated': {

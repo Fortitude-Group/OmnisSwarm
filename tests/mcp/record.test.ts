@@ -287,3 +287,30 @@ test('a lone surrogate in free text is refused and nothing is written', () => {
   }
   assert.equal(readCurrent(root), null)
 })
+
+test('clash.blocked and agent.stuck are recorded with an agent, and refused without one or with bad data', () => {
+  const { call, events } = setup()
+  call({ sessionId: SID, ts: TS, type: 'clash.blocked', agent: 'a2', data: { path: 'src/x.ts', holder: 'a1', mode: 'block' } })
+  call({ sessionId: SID, ts: TS, type: 'agent.stuck', agent: 'a2', data: { pattern: 'repeating', count: 4, subject: 'npm test', delivered: false, reason: 'gone' } })
+  const got = events(SWARM).slice(-2)
+  assert.deepEqual(got.map(e => [e.type, e.agent, e.data]), [
+    ['clash.blocked', 'a2', { path: 'src/x.ts', holder: 'a1', mode: 'block' }],
+    ['agent.stuck', 'a2', { pattern: 'repeating', count: 4, subject: 'npm test', delivered: false, reason: 'gone' }],
+  ])
+  const bad = [
+    { type: 'clash.blocked', data: { path: 'src/x.ts', holder: 'a1', mode: 'block' } },
+    { type: 'clash.blocked', agent: 'a2', data: { path: '', holder: 'a1', mode: 'block' } },
+    { type: 'clash.blocked', agent: 'a2', data: { path: 'x', holder: 'a 1', mode: 'block' } },
+    { type: 'clash.blocked', agent: 'a2', data: { path: 'x', holder: 'a1', mode: 'off' } },
+    { type: 'agent.stuck', data: { pattern: 'failing', count: 5, subject: 'x', delivered: true } },
+    { type: 'agent.stuck', agent: 'a2', data: { pattern: 'looping', count: 5, subject: 'x', delivered: true } },
+    { type: 'agent.stuck', agent: 'a2', data: { pattern: 'failing', count: 5, subject: 'x' } },
+    { type: 'agent.stuck', agent: 'a2', data: { pattern: 'failing', count: -1, subject: 'x', delivered: true } },
+  ]
+  for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
+})
+
+test('report.written is the server\'s own event: omnis_record refuses it', () => {
+  const { call } = setup()
+  assert.throws(() => call({ sessionId: SID, ts: TS, type: 'report.written', data: { path: 'x', agents: 1, minutes: 1, costUsd: 1 } }), InputError)
+})

@@ -66,7 +66,7 @@ test('two agents editing one file within ten minutes is a clash', () => {
     edit('a1', 'src/auth.ts', 10), edit('a2', 'src/auth.ts', 100),
     edit('a1', 'src/old.ts', 10), edit('a2', 'src/old.ts', 10 + 601),
   ])
-  assert.deepEqual(fileClashes(s), [{ path: 'src/auth.ts', agents: ['a1', 'a2'] }])
+  assert.deepEqual(fileClashes(s), [{ path: 'src/auth.ts', agents: ['a1', 'a2'], blocked: false }])
   assert.deepEqual(agentStats(s, 'a2', at(200))!.clashes, ['src/auth.ts'])
 })
 
@@ -126,7 +126,7 @@ test('clashes: old ones drop when now is given, the 600 s boundary counts, and a
   assert.equal(fileClashes(s, at(100)).length, 1)
   assert.equal(fileClashes(s).length, 1)
   assert.deepEqual(agentStats(s, 'a1', at(3600))!.clashes, [])
-  assert.deepEqual(agentStats(s, 'a1', at(3600), [{ path: 'x.ts', agents: ['a1'] }])!.clashes, ['x.ts'])
+  assert.deepEqual(agentStats(s, 'a1', at(3600), [{ path: 'x.ts', agents: ['a1'], blocked: false }])!.clashes, ['x.ts'])
   assert.equal(swarmTotals(s, at(100), []).clashes, 0)
   assert.equal(swarmTotals(s, at(100)).clashes, 1)
 })

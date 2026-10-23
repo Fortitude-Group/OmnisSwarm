@@ -4,7 +4,7 @@
  * unguarded, so this checks everything itself (spec section 6). It builds each event's data
  * afresh from known fields, so nothing else the caller sends reaches the log.
  */
-import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
+import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, STUCK_PATTERNS, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
 import { appendEvent } from '../../core/log.ts'
 import { RECORDER_TYPES, RECORD_TOOL, SESSION_ID, type RecorderType } from '../../core/recording.ts'
 import type { Args, ToolDef } from '../protocol.ts'
@@ -110,6 +110,15 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
         delivered: d.delivered, ...(d.reason !== undefined && { reason: text(d, 'reason', LIMITS.reason) }),
       }
     }
+    case 'clash.blocked':
+      return { path: text(d, 'path', LIMITS.subject, true), holder: agentName(d, 'holder'), mode: oneOf(d, 'mode', CLASH_MODES) }
+    case 'agent.stuck': {
+      if (typeof d.delivered !== 'boolean') throw new InputError('data.delivered must be true or false')
+      return {
+        pattern: oneOf(d, 'pattern', STUCK_PATTERNS), count: count(d, 'count', 1000), subject: text(d, 'subject', LIMITS.subject),
+        delivered: d.delivered, ...(d.reason !== undefined && { reason: text(d, 'reason', LIMITS.reason) }),
+      }
+    }
     case 'guard.blocked':
       return { value: measure(d, 'value', 0), threshold: measure(d, 'threshold', 1e-9) }
     case 'session.measure': {
@@ -153,9 +162,9 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       if (!isObj(args.data)) throw new InputError('data must be an object')
       const dropped = args.dropped === undefined ? 0 : count(args, 'dropped')
       const data = dataFor(type, args.data)
-      const agentLevel = type === 'guard.nudged' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
+      const agentLevel = type === 'guard.nudged' || type === 'clash.blocked' || type === 'agent.stuck' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
       const swarmLevel = type === 'budget.set' || type === 'guard.blocked' || (type === 'guard.warned' && !agentLevel)
-      if (agentLevel && agent === undefined) throw new InputError(`${type} for an agent limit needs agent`)
+      if (agentLevel && agent === undefined) throw new InputError(type === 'clash.blocked' || type === 'agent.stuck' ? `${type} needs agent` : `${type} for an agent limit needs agent`)
       if (swarmLevel && agent !== undefined) throw new InputError(`${type} is about the swarm and takes no agent`)
       if (dropped > 0) Object.assign(data, { dropped })
       const now = new Date(ts)

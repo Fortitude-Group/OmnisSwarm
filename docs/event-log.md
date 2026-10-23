@@ -58,9 +58,12 @@ same user could edit `.omnis-swarm` directly.
 | `guard.warned` | recorder | `limit` (`time`\|`agentCost`\|`swarmCost`), `value`, `threshold` (minutes for `time`, USD otherwise, both at most 1,000,000). `agent` is required for `time` and `agentCost` and absent for `swarmCost` |
 | `guard.nudged` | recorder | `limit` (`time`\|`agentCost`), `value`, `threshold`, `delivered` (bool: whether the wrap-up message reached the agent), `reason?` (≤80, why it was not delivered). `agent` is required |
 | `guard.blocked` | recorder | `value`, `threshold` (USD): the swarm reached its budget and the lead's new agents are refused until it is raised or the swarm ends. Swarm-level, no `agent` |
+| `clash.blocked` | recorder | `path` (≤80, the recorder's subject for the refused call), `holder` (the holding agent's id), `mode` (`block`|`warn`). `agent` (the refused or warned agent) is required. Repeats for the same agent and path within 60 s are not recorded |
+| `agent.stuck` | recorder | `pattern` (`failing`|`repeating`), `count`, `subject` (≤80), `delivered` (bool), `reason?` (≤80). `agent` is required |
+| `report.written` | mcp | `path` (the report file, relative to the project), `agents` (subagents), `minutes`, `costUsd`. Written by `omnis_report` and `omnis_swarm_end` |
 
 `omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
-knows which swarm it is folding. `omnis_replay` and `omnis_export` are internal tools like
+knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_report` are internal tools like
 `omnis_record` and `omnis_feed`: the mod refuses them when the model calls them.
 
 ## Reading rules

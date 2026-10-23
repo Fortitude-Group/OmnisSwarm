@@ -25,6 +25,11 @@ export type BudgetKey = keyof typeof BUDGET_MAX
 export const BUDGET_KEYS: readonly BudgetKey[] = ['agentMinutes', 'agentUsd', 'swarmUsd']
 /** The bound on a guard event's value and threshold. */
 export const GUARD_MAX = 1e6
+export const STUCK_PATTERNS = ['failing', 'repeating'] as const
+export type StuckPattern = (typeof STUCK_PATTERNS)[number]
+/** How a clash was handled: refused, or let through with a warning to the lead. */
+export const CLASH_MODES = ['block', 'warn'] as const
+export type ClashMode = (typeof CLASH_MODES)[number]
 
 export type EventData = {
   'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean; session?: string }
@@ -43,6 +48,12 @@ export type EventData = {
   'guard.warned': { limit: GuardLimit; value: number; threshold: number }
   'guard.nudged': { limit: Exclude<GuardLimit, 'swarmCost'>; value: number; threshold: number; delivered: boolean; reason?: string }
   'guard.blocked': { value: number; threshold: number }
+  /** agent: the refused (or warned) agent. path: the recorder's subject for the call. holder: the holding agent's id. */
+  'clash.blocked': { path: string; holder: string; mode: ClashMode }
+  /** agent: the stuck agent. subject: the last tool call's subject. */
+  'agent.stuck': { pattern: StuckPattern; count: number; subject: string; delivered: boolean; reason?: string }
+  /** path: the report file, relative to the project. */
+  'report.written': { path: string; agents: number; minutes: number; costUsd: number }
 }
 export type EventType = keyof EventData
 
@@ -50,6 +61,7 @@ export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
   'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked',
+  'clash.blocked', 'agent.stuck', 'report.written',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {
