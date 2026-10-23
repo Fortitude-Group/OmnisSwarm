@@ -5,6 +5,7 @@ import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/lo
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { uniqueSwarmId } from '../core/swarm.ts'
 import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
+import { hasNewWork } from '../core/report.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import type { ToolDef } from './protocol.ts'
 import type { Session } from './session.ts'
@@ -137,8 +138,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         session.letGo()
         try {
           const s = session.state(id).state
-          const lastWork = Math.max(0, ...Object.values(s.agents).filter(a => a.id !== LEAD && !a.placeholder).map(a => a.lastActivity))
-          if (s.lastReport !== undefined && lastWork <= s.lastReport.at) return { text: `Swarm ${id} ended.` }
+          if (s.lastReport !== undefined && !hasNewWork(s)) return { text: `Swarm ${id} ended.` }
           return { text: `Swarm ${id} ended. ${writeReport(root, session, id, clock())}` }
         } catch (err) {
           process.stderr.write(`omnis: report on omnis_swarm_end failed: ${err instanceof Error ? err.message : String(err)}\n`)

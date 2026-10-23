@@ -25,13 +25,13 @@ export class StuckWatch {
     return t
   }
 
-  /** A tool call started. An edit re-arms both patterns; the same tool on the same subject again may be a repeating hit. */
+  /**
+   * A tool call started. The same tool on the same subject again may be a repeating hit. An edit start leaves both
+   * patterns alone: the edit may be refused, and only one that goes ahead (its end) re-arms them.
+   */
   start(agent: string, tool: string, kind: ToolKind, subject: string): StuckHit | null {
     const t = this.#track(agent)
-    if (kind === 'edit') {
-      Object.assign(t, { failing: 0, failFired: false, repeatKey: null, repeats: 0, repeatFired: false })
-      return null
-    }
+    if (kind === 'edit') return null
     const key = REPEAT_KINDS.includes(kind) && subject !== '' ? `${tool}\n${subject}` : null
     if (key === null || key !== t.repeatKey) {
       Object.assign(t, { repeatKey: key, repeats: key === null ? 0 : 1, repeatFired: false })
@@ -43,12 +43,16 @@ export class StuckWatch {
     return { pattern: 'repeating', count: t.repeats, tool, subject }
   }
 
-  /** A tool call ended. A success re-arms failing; the fifth failure in a row is a failing hit. */
-  end(agent: string, tool: string, subject: string, isError: boolean): StuckHit | null {
+  /**
+   * A tool call ended. A success re-arms failing, and an edit that went ahead re-arms both. The fifth failure in a row,
+   * refused edits included, is a failing hit.
+   */
+  end(agent: string, tool: string, kind: ToolKind, subject: string, isError: boolean): StuckHit | null {
     const t = this.#track(agent)
     if (!isError) {
       t.failing = 0
       t.failFired = false
+      if (kind === 'edit') Object.assign(t, { repeatKey: null, repeats: 0, repeatFired: false })
       return null
     }
     t.failing++

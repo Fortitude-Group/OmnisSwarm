@@ -1,14 +1,17 @@
 /**
  * The stuck guard (spec section 3): watches each subagent's tool calls, and when one fails five times in a row or runs
- * the same thing four times with no edit in between, asks it once to step back, tells the lead and records agent.stuck.
+ * the same thing four times with no edit going ahead in between, asks it once to step back, tells the lead and records
+ * agent.stuck.
  * Observe-only: every hook calls next once and returns its result unchanged.
  */
 import type { EngineInterface, On } from 'claude-code'
+import type { ToolKind } from '../core/events.ts'
 import { INTERNAL_TOOL } from '../core/recording.ts'
 import { agentLabel } from './agent-name.ts'
 import { cleanText, toolKind, toolSubject, type Fields } from './record-events.ts'
 import { record } from './recorder.ts'
 import { StuckWatch, nudgeFor, stuckMainText, type StuckHit } from './stuck.ts'
+import { TURN_ENDS } from './turn-ends.ts'
 
 /** Module state; a hot reload starts every count over. */
 let watch = new StuckWatch()
@@ -42,10 +45,12 @@ export function registerStuckGuard(on: On): void {
     const tool = cleanText(String(e.tool), 80)
     const watched = typeof agent === 'string' && tool !== '' && !INTERNAL_TOOL.test(tool)
     let subject = ''
+    let kind: ToolKind = 'other'
     if (watched) {
       try {
         subject = toolSubject(tool, e as unknown as Fields)
-        const hit = watch.start(agent, tool, toolKind(tool), subject)
+        kind = toolKind(tool)
+        const hit = watch.start(agent, tool, kind, subject)
         if (hit !== null) void nudge($, agent, hit).catch(() => undefined)
       } catch {
         // A miscount costs a nudge, never the call.
@@ -54,7 +59,7 @@ export function registerStuckGuard(on: On): void {
     const result = await next(e)
     if (watched) {
       try {
-        const hit = watch.end(agent, tool, subject, result.isError === true || result.deny !== undefined)
+        const hit = watch.end(agent, tool, kind, subject, result.isError === true || result.deny !== undefined)
         if (hit !== null) void nudge($, agent, hit).catch(() => undefined)
       } catch {
         // As above.
@@ -63,8 +68,7 @@ export function registerStuckGuard(on: On): void {
     return result
   }).catch((_$, e, next) => next(e))
 
-  // The reason matcher keeps this apart from the recorder's unmatched turn.complete hook. The integrator folds the turn-end work into one hook that calls stuckAgentEnded.
-  on('turn.complete', { reason: ['answer', 'aborted', 'refusal', 'error'] as const }, async ($, e, next) => {
+  on('turn.complete', { reason: TURN_ENDS }, async ($, e, next) => {
     const result = await next(e)
     if (e.agentId !== undefined) stuckAgentEnded(e.agentId)
     return result

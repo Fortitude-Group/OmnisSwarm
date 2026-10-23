@@ -66,7 +66,7 @@ export function fileClashes(state: SwarmState, nowMs?: number): Clash[] {
         }
       }
     }
-    if (agents.size > 0) clashes.push({ path, agents: [...agents].sort(), blocked: edits.at(-1)?.blocked === true })
+    if (agents.size > 0) clashes.push({ path, agents: [...agents].sort(), blocked: edits.some(e => e.blocked === true) })
   }
   return clashes.sort((x, y) => x.path.localeCompare(y.path))
 }

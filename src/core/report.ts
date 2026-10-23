@@ -73,6 +73,16 @@ function tasks(s: SwarmState): string[] {
   return [`${counts}.`, ...all.filter(t => t.state === 'failed').map(t => `- Failed: ${md(t.id)} ${md(t.title)}`)]
 }
 
+/**
+ * True when the swarm has a subagent and one did something since the last report, or there is no report yet.
+ * omnis_swarm_end writes a report on this or when there has never been one; the quiet trigger's report needs this.
+ */
+export function hasNewWork(s: SwarmState): boolean {
+  const subs = Object.values(s.agents).filter(a => a.id !== LEAD && !a.placeholder)
+  if (subs.length === 0) return false
+  return s.lastReport === undefined || Math.max(...subs.map(a => a.lastActivity)) > s.lastReport.at
+}
+
 export function reportSummary(s: SwarmState, nowMs: number): { agents: number; minutes: number; costUsd: number } {
   const agents = shown(s)
   return {

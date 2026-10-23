@@ -82,3 +82,14 @@ test('the lead and internal tools are never nudged, and a finished agent starts 
   await clock.settle()
   expect(seen.sends).toEqual([])
 })
+
+test('five refused edits in a row: one failing nudge, as a refused edit re-arms nothing', KIT, async ($, on) => {
+  on('session.cwd', () => ({ value: '/p' }))
+  on('tool.check', { tool: 'Edit' }, () => ({ decision: 'deny' as const, reason: 'coder-2 is editing src/a.ts.' }))
+  const { clock, seen } = await boot($, on)
+  seen.fail = false
+  for (let i = 0; i < 6; i++) await run($, 'Edit', { file_path: 'src/a.ts' }, 'a1')
+  await clock.settle()
+  expect(seen.sends.map(s => s.text)).toEqual(["Your last 5 tool calls failed. Step back and try another approach, or report to main what's blocking you."])
+  expect(stuck(seen)).toEqual([{ type: 'agent.stuck', agent: 'a1', data: { pattern: 'failing', count: 5, subject: 'src/a.ts', delivered: true } }])
+})

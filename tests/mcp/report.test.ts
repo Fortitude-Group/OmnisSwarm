@@ -94,3 +94,29 @@ test('a report writes nothing outside .omnis-swarm/reports besides its own event
   assert.ok(norm.includes('/.omnis-swarm/reports'))
   assert.ok(norm.some(p => /^\/\.omnis-swarm\/reports\/auth-\d{8}-\d{4}\.md$/.test(p)))
 })
+const SKIP = { text: 'Nothing new to report.', isError: true }
+
+test('a quiet omnis_report skips a swarm with no subagent', () => {
+  const { root, report, tool } = setup()
+  tool('omnis_swarm_init', { name: 'auth', topology: 'mesh' })
+  assert.deepEqual(report.handler({ quiet: true }), SKIP)
+  assert.equal(existsSync(join(root, '.omnis-swarm', 'reports')), false)
+})
+
+test('a quiet omnis_report skips when no subagent did anything since the last report', () => {
+  const { root, report, tool } = setup()
+  tool('omnis_swarm_init', { name: 'auth', topology: 'mesh' })
+  appendEvent(root, ev('agent.started', { name: 'coder-1', role: 'coder', description: '', parent: 'lead' }, { agent: 'a1', swarm: 'auth', atSec: 1 }))
+  report.handler({})
+  assert.deepEqual(report.handler({ quiet: true }), SKIP)
+  assert.equal(reports(root).length, 1)
+})
+
+test('a quiet omnis_report writes when a subagent has worked since the last report, and quiet must be true', () => {
+  const { root, report, tool } = setup()
+  tool('omnis_swarm_init', { name: 'auth', topology: 'mesh' })
+  appendEvent(root, ev('agent.started', { name: 'coder-1', role: 'coder', description: '', parent: 'lead' }, { agent: 'a1', swarm: 'auth', atSec: 1 }))
+  assert.match(report.handler({ quiet: true }).text, /^Swarm report: \.omnis-swarm\/reports\/auth-\d{8}-\d{4}\.md · 1 agent · /)
+  assert.equal(reports(root).length, 1)
+  assert.throws(() => report.handler({ quiet: 'yes' }), InputError)
+})

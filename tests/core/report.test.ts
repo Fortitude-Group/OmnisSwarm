@@ -98,6 +98,11 @@ test('the summary and the pointer line', () => {
   assert.equal(pointerText('r.md', { agents: 1, minutes: 0, costUsd: 0 }), 'Swarm report: r.md · 1 agent · 0 min · ≈$0.00.')
 })
 
+test('the clash line keeps (blocked) when the holder edits again after the refusal', () => {
+  const md = reportMarkdown(foldAll('auth-refactor', [...busy(), tool('a1', 'edit', 'src/a.ts', 230)]), at(1400), 60)
+  assert.ok(md.includes('- Clash on src/a.ts: coder-1, coder-2 (blocked).'))
+})
+
 const EXPECTED_BUSY = `# Swarm report: auth refactor
 
 hierarchical · started 2026-10-21 11:00 · ended 2026-10-21 11:23 · 23 min · ≈$2.70 · 2 agents

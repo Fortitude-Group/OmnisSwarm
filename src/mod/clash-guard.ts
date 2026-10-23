@@ -10,10 +10,9 @@ import { agentLabel } from './agent-name.ts'
 import { Holds, clashSettingFrom, normalisePath, type ClashSetting } from './holds.ts'
 import { toolSubject, type Fields } from './record-events.ts'
 import { record } from './recorder.ts'
+import { TURN_ENDS } from './turn-ends.ts'
 
 const CLASH_TOOLS = ['Edit', 'Write', 'NotebookEdit']
-/** Every turn end. A matcher is needed because the recorder already holds the one unmatched turn.complete hook. */
-const FINISHED = ['answer', 'aborted', 'refusal', 'error'] as const
 
 export const refusalText = (holder: string, path: string): string => `${holder} is editing ${path}. Message them, or wait until they finish.`
 export const warnText = (agent: string, path: string, holder: string): string =>
@@ -78,7 +77,7 @@ export function registerClashGuard(on: On, options: PluginOptions): void {
     return result
   }).catch((_$, e, next) => next(e))
 
-  on('turn.complete', { reason: FINISHED }, async ($, e, next) => {
+  on('turn.complete', { reason: TURN_ENDS }, async ($, e, next) => {
     const result = await next(e)
     if (e.agentId !== undefined) holds.releaseAll(e.agentId)
     return result
