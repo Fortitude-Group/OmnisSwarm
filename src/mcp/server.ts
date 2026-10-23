@@ -15,4 +15,4 @@ if (process.env.OMNIS_DEBUG) process.stderr.write(`omnis: project root ${root}\n
 
 const session = new Session(root)
 const tools = toolFactories.flatMap(factory => factory({ root, session }))
-void runStdio(tools, { name: 'omnis-swarm', version: '0.1.0' })
+void runStdio(tools, { name: 'omnis-swarm', version: '0.2.0' })

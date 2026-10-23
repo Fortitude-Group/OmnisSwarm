@@ -26,7 +26,7 @@ Or in one go:
 /plugin install omnis-swarm --marketplace Fortitude-Group/OmnisSwarm
 ```
 
-The version is pinned (0.1.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
+The version is pinned (0.2.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
 
 ```
 claude plugin update omnis-swarm@omnis-swarm
