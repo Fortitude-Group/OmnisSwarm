@@ -56,7 +56,7 @@ An unknown value is treated as `block`.
 
 ### 2.4 Pane
 
-A `clash.blocked` event counts as a clashing edit for `fileClashes`, so the existing dashed line and blink (`pane.md` §5) show it with no new drawing. The spotlight's `! clash <path>` line gains ` (blocked)` when the latest clash on that path was refused. The designer confirms the wording in `pane.md` §14.
+A `clash.blocked` event counts as a clashing edit for `fileClashes`, so the existing dashed line and blink (`pane.md` §5) show it with no new drawing. The spotlight's `! clash <path>` line gains ` (blocked)` when the clash guard refused an edit in that clash (an edit kept on the path was refused, so the holder editing again later doesn't clear it). The designer confirms the wording in `pane.md` §14.
 
 ## 3. Stuck nudges
 

@@ -492,7 +492,7 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
   then `! stuck` in `STATUS.warn` when stuck.
 - Row 5: `files` `TEXT.dim`, the count `TEXT.primary`, the paths `TEXT.dim` clipped with `…`. Right: `msgs ↓in ↑out`
   in `TEXT.dim`, then `! clash <path>` in `STATUS.failed` when this agent is in a live clash (`! clash (blocked) <path>`
-  when the clash guard refused the latest edit on that path, §14). The path keeps its end, clipped from the left with `…`.
+  when the clash guard refused an edit kept on that path, §14). The path keeps its end, clipped from the left with `…`.
 - Compact (1 row): `● name ▶ running · 25s · 67k tok · ≈$0.12 · ctx 6%`, colours as above.
 - No agents yet: `No agents yet.` in `TEXT.dim` on `CANVAS_RAISED`.
 
@@ -1090,8 +1090,8 @@ The look of the clash guard and stuck nudges in `docs/superpowers/specs/2026-10-
 glyphs, colours or motion: both reuse what §4 and §5 already draw.
 
 **Refused clash.** A refused edit (`clash.blocked`, mode `block`) counts as a clashing edit, so the red dashed line and the
-blinking rims of §5 show it unchanged. The spotlight's clash line reads `! clash (blocked) <path>` when the latest edit on
-that path was refused. The path gives up 10 of its 32 cells to `(blocked) `, so a long path keeps the line's width, and
+blinking rims of §5 show it unchanged. The spotlight's clash line reads `! clash (blocked) <path>` when an edit on
+that path was refused (the holder editing again later doesn't clear it). The path gives up 10 of its 32 cells to `(blocked) `, so a long path keeps the line's width, and
 it keeps `STATUS.failed` (never dimmed: the faint greys read poorly on the light theme). `(blocked)` comes before the
 path so that at narrow widths the path clips first, not the state, and the path clips from the left so the file name
 stays. A warned clash (mode `warn`) reads as any other clash.
