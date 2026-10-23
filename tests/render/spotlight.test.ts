@@ -135,3 +135,24 @@ test('on a narrow card the right-hand text never overwrites the left', () => {
   drawSpotlight(t, rect(0, 0, 60, 6), stats, s.agents['a-cod1']!, mid, false)
   assert.match(gridText(t)[5]!, /^ files 2 {2}\S.* msgs ↓2/)
 })
+
+test('a refused clash says (blocked) before its path, and a long path keeps its file name and the line its width', () => {
+  const s = state()
+  const stats = agentStats(s, 'a-cod1', mid)!
+  const row = (st: typeof stats): string => {
+    const g = new Grid(110, 6, CANVAS)
+    drawSpotlight(g, rect(0, 0, 110, 6), st, s.agents['a-cod1']!, mid, false)
+    const line = gridText(g)[5]!
+    return line.slice(line.indexOf('! clash')).trimEnd()
+  }
+  const short = stats.clashes[0]!
+  assert.equal(row({ ...stats, blockedClashes: [short] }), `! clash (blocked) ${short}`)
+  assert.equal(row(stats), `! clash ${short}`)
+  const long = 'src/very/deeply/nested/module/folder/token.ts'
+  const blocked = row({ ...stats, clashes: [long], blockedClashes: [long] })
+  const plain = row({ ...stats, clashes: [long], blockedClashes: [] })
+  assert.match(blocked, /^! clash \(blocked\) ….*\/token\.ts$/)
+  assert.match(plain, /^! clash ….*\/token\.ts$/)
+  assert.equal([...blocked].length, [...plain].length)
+  assert.equal([...plain].length, '! clash '.length + 32)
+})

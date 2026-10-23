@@ -2,7 +2,7 @@
 import { TOOL_KINDS } from '../core/events.ts'
 import type { AgentState, SwarmState } from '../core/fold.ts'
 import { agentStatus, type AgentStats } from '../core/stats.ts'
-import { clipText, fmtDuration, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
+import { clipTail, clipText, fmtDuration, fmtPercent, fmtTokens, fmtUsd } from './format.ts'
 import { guardWords } from './guard-badge.ts'
 import { type Grid, type Part, writeParts, writeRight } from './grid.ts'
 import { CANVAS_RAISED, GLYPH, KIND, KIND_LETTER, SPOTLIGHT_HOLD_MS, STATUS, TEXT, contextColor, modelColor, routedFamilies, statusGlyph } from './tokens.ts'
@@ -154,7 +154,13 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   // 5: files, messages, clashes
   if (rows > 5) {
     const right: Part[] = [[`msgs ↓${s.messagesIn} ↑${s.messagesOut}`, TEXT.dim]]
-    if (s.clashes.length > 0) right.push(['  ', TEXT.dim], [`${GLYPH.clash} clash ${clipText(s.clashes[0]!, 32)}`, STATUS.failed])
+    if (s.clashes.length > 0) {
+      const path = s.clashes[0]!
+      const blocked = s.blockedClashes.includes(path)
+      // The same 32 cells either way: '(blocked) ' takes 10 of them from the path. It comes first, so a narrow card cuts
+      // the path, not the state, and the path keeps its end (the file name).
+      right.push(['  ', TEXT.dim], [`${GLYPH.clash} clash ${blocked ? '(blocked) ' : ''}${clipTail(path, blocked ? 22 : 32)}`, STATUS.failed])
+    }
     const start = writeRight(grid, row(5), right, x, maxX, bg)
     const limit = Math.max(x, start - 1)
     const cx = writeParts(grid, x, row(5), [['files ', TEXT.dim], [String(s.files.length), TEXT.primary]], limit, bg)
