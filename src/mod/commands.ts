@@ -8,6 +8,7 @@ import { budgetCommand, budgetSub } from './budget-command.ts'
 import { exportCommand, exportSub } from './export-command.ts'
 import { paneCommand, paneSub } from './pane-commands.ts'
 import { replayCommand, replaySub } from './replay-command.ts'
+import { reportCommand, reportSub } from './run-report.ts'
 
 export type Sub = {
   /** The first word after /omnis. */
@@ -21,7 +22,7 @@ export type Sub = {
 }
 
 /** Subcommands not built yet are null: they add nothing to the text and answer null, which runOmnis turns into the usage. */
-const SUBS: readonly Sub[] = [paneSub, budgetSub, replaySub, exportSub].filter((s): s is Sub => s !== null)
+const SUBS: readonly Sub[] = [paneSub, budgetSub, replaySub, exportSub, reportSub].filter((s): s is Sub => s !== null)
 
 export const COMMAND_DESCRIPTION = `OmnisSwarm: ${SUBS.map(s => s.describe).join(', ')}`
 export const COMMAND_HINT = SUBS.map(s => s.hint).join(' | ')
@@ -35,6 +36,7 @@ export async function runOmnis($: EngineInterface, args: string): Promise<string
     case 'budget': return (await budgetCommand($, words)) ?? USAGE
     case 'replay': return (await replayCommand($, words)) ?? USAGE
     case 'export': return (await exportCommand($, words)) ?? USAGE
+    case 'report': return (await reportCommand($, words)) ?? USAGE
     default: return USAGE
   }
 }
