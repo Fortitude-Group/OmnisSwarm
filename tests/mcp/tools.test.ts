@@ -285,7 +285,7 @@ test('task_update takes an assignee, and swarm_end logs its outcome', () => {
   const upd = events('upd').find(e => e.type === 'task.updated')
   assert.deepEqual(upd?.data, { id: 't1', state: 'active', assignee: 'coder' })
   call('omnis_swarm_end', { outcome: 'shipped' })
-  assert.deepEqual(events('upd').at(-1)?.data, { outcome: 'shipped' })
+  assert.deepEqual(events('upd').find(e => e.type === 'swarm.ended')?.data, { outcome: 'shipped' })
   assert.equal(readCurrent(root), null)
 })
 

@@ -241,7 +241,7 @@ test("after its own swarm ends, the hint keeps showing it rather than another se
   call('omnis_swarm_end', { outcome: 'done' })
   const after = pull({ since: live.offset, swarm: own })
   assert.ok(after.kind === 'events' && after.swarm === own)
-  assert.deepEqual(after.events.map(e => e.type), ['swarm.ended'])
+  assert.deepEqual(after.events.map(e => e.type), ['swarm.ended', 'report.written'])
   const fresh = pull({ swarm: own })
   assert.ok(fresh.kind === 'state' && fresh.swarm === own)
   assert.deepEqual(pull(), { v: 1, kind: 'none' })
