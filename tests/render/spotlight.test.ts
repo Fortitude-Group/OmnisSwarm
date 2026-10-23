@@ -135,3 +135,14 @@ test('on a narrow card the right-hand text never overwrites the left', () => {
   drawSpotlight(t, rect(0, 0, 60, 6), stats, s.agents['a-cod1']!, mid, false)
   assert.match(gridText(t)[5]!, /^ files 2 {2}\S.* msgs ↓2/)
 })
+
+test('a refused clash says (blocked) after its path, in the same width', () => {
+  const s = state()
+  const stats = agentStats(s, 'a-cod1', mid)!
+  const g = new Grid(110, 6, CANVAS)
+  drawSpotlight(g, rect(0, 0, 110, 6), { ...stats, blockedClashes: [stats.clashes[0]!] }, s.agents['a-cod1']!, mid, false)
+  assert.match(gridText(g)[5]!, /! clash .* \(blocked\)/)
+  const plain = new Grid(110, 6, CANVAS)
+  drawSpotlight(plain, rect(0, 0, 110, 6), stats, s.agents['a-cod1']!, mid, false)
+  assert.doesNotMatch(gridText(plain)[5]!, /blocked/)
+})

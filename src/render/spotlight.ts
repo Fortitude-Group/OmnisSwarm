@@ -154,7 +154,12 @@ export function drawSpotlight(grid: Grid, area: Rect, s: AgentStats, a: AgentSta
   // 5: files, messages, clashes
   if (rows > 5) {
     const right: Part[] = [[`msgs ↓${s.messagesIn} ↑${s.messagesOut}`, TEXT.dim]]
-    if (s.clashes.length > 0) right.push(['  ', TEXT.dim], [`${GLYPH.clash} clash ${clipText(s.clashes[0]!, 32)}`, STATUS.failed])
+    if (s.clashes.length > 0) {
+      const path = s.clashes[0]!
+      const blocked = s.blockedClashes.includes(path)
+      // The same 32 cells either way: ' (blocked)' takes 10 of them from the path.
+      right.push(['  ', TEXT.dim], [`${GLYPH.clash} clash ${clipText(path, blocked ? 22 : 32)}${blocked ? ' (blocked)' : ''}`, STATUS.failed])
+    }
     const start = writeRight(grid, row(5), right, x, maxX, bg)
     const limit = Math.max(x, start - 1)
     const cx = writeParts(grid, x, row(5), [['files ', TEXT.dim], [String(s.files.length), TEXT.primary]], limit, bg)

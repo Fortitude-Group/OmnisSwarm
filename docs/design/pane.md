@@ -1082,3 +1082,18 @@ When the requested and answered model families differ:
 - [ ] The GIF card sits at columns 30-89, rows 7-20, the graph behind it dimmed, and fits 60×14 with a 4-digit cost.
 - [ ] `sonnet → haiku` and `saves … vs requested` show whole or not at all; the label mark is `↓`/`↑`.
 - [ ] ` BLOCKED ` shows on row 1 (or right-aligned on a 1-row header) for as long as spawns are denied.
+
+## 14. Clash guard and stuck nudges
+
+The look of the clash guard and stuck nudges in `docs/superpowers/specs/2026-10-23-clash-stuck-report-design.md`. No new
+glyphs, colours or motion: both reuse what §4 and §5 already draw.
+
+**Refused clash.** A refused edit (`clash.blocked`, mode `block`) counts as a clashing edit, so the red dashed line and the
+blinking rims of §5 show it unchanged. The spotlight's clash line reads `! clash <path> (blocked)` when the latest edit on
+that path was refused. The path gives up 10 of its 32 cells to ` (blocked)`, so the line keeps its width, and it keeps
+`STATUS.failed`. A warned clash (mode `warn`) reads as any other clash.
+
+**Stuck nudge.** A nudged agent wears the §4 stuck look (amber outline, `!`, `stuck` on the spotlight's tools line) while
+its pattern holds, whether it was failing or repeating. It drops when the pattern re-arms (an edit, a success, or a
+different subject). The feed says `<name> looks stuck (<pattern>), asked to step back`, with ` (not delivered)` when the
+message didn't reach it.
