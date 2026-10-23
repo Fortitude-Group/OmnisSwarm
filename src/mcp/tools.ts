@@ -135,10 +135,10 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         emit(makeEvent({ type: 'swarm.ended', swarm: id, src: 'mcp', data: outcome === undefined ? {} : { outcome }, now: clock() }))
         if (readCurrent(root) === id) clearCurrent(root)
         session.letGo()
-        const s = session.state(id).state
-        const lastWork = Math.max(0, ...Object.values(s.agents).filter(a => a.id !== LEAD && !a.placeholder).map(a => a.lastActivity))
-        if (s.lastReport !== undefined && lastWork <= s.lastReport.at) return { text: `Swarm ${id} ended.` }
         try {
+          const s = session.state(id).state
+          const lastWork = Math.max(0, ...Object.values(s.agents).filter(a => a.id !== LEAD && !a.placeholder).map(a => a.lastActivity))
+          if (s.lastReport !== undefined && lastWork <= s.lastReport.at) return { text: `Swarm ${id} ended.` }
           return { text: `Swarm ${id} ended. ${writeReport(root, session, id, clock())}` }
         } catch (err) {
           process.stderr.write(`omnis: report on omnis_swarm_end failed: ${err instanceof Error ? err.message : String(err)}\n`)

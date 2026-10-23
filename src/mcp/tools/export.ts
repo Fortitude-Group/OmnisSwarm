@@ -3,8 +3,7 @@
  * path. Internal (the mod's guard refuses the model). Async: it yields every few frames so the recorder and the pane
  * keep being answered while it renders.
  */
-import { existsSync, lstatSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { isValidSwarmId, type SwarmEvent } from '../../core/events.ts'
 import { emptyState, fold, foldAll } from '../../core/fold.ts'
 import { isLink, readEvents, swarmLogPath } from '../../core/log.ts'

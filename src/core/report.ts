@@ -13,20 +13,20 @@ const local = (ms: number, tz: number): string => {
 const minutes = (ms: number): number => Math.round(Math.max(0, ms) / 60_000)
 const usd = (x: number): string => `≈$${x.toFixed(2)}`
 const int = (n: number): string => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-/** A table cell: a pipe would end the cell. */
-const cell = (s: string): string => s.replace(/\|/g, '\|')
+/** Model-influenced text for markdown: backslash-escapes what would make a link, an image, HTML, emphasis or a table cell. */
+const md = (s: string): string => s.replace(/\s+/g, ' ').replace(/[\\`*_[\]<>!|]/g, '\\$&')
 const times = (n: number): string => (n === 1 ? '1 time' : `${n} times`)
 
 const shown = (s: SwarmState): AgentState[] => {
   const all = Object.values(s.agents).filter(a => !a.placeholder)
   return [...all.filter(a => a.id === LEAD), ...all.filter(a => a.id !== LEAD).sort((x, y) => x.startedAt - y.startedAt)]
 }
-const runMs = (a: AgentState, now: number): number => a.activeMs + (a.finishedAt === null ? Math.max(0, now - a.startedAt) : 0)
-const nameOf = (s: SwarmState, id: string): string => (Object.hasOwn(s.agents, id) ? s.agents[id]!.name : id)
+const runMs = (a: AgentState, end: number): number => a.activeMs + (a.finishedAt === null ? Math.max(0, end - a.startedAt) : 0)
+const nameOf = (s: SwarmState, id: string): string => (Object.hasOwn(s.agents, id) ? md(s.agents[id]!.name) : md(id))
 const wallMs = (s: SwarmState, now: number): number => (s.swarm.endedAt ?? now) - (s.swarm.startedAt ?? now)
 
 function filesEdited(s: SwarmState, id: string): string {
-  const paths = Object.entries(s.edits).filter(([, list]) => list.some(e => e.agent === id && e.blocked !== true)).map(([p]) => p)
+  const paths = Object.entries(s.edits).filter(([, list]) => list.some(e => e.agent === id && e.blocked !== true)).map(([p]) => md(p))
   if (paths.length === 0) return '–'
   const more = paths.length - MAX_FILES
   return paths.slice(0, MAX_FILES).join(', ') + (more > 0 ? `, +${more} more` : '')
@@ -45,23 +45,23 @@ function problems(s: SwarmState): string[] {
   for (const a of shown(s)) {
     const g = a.guard
     if (g === undefined) continue
-    if (g.timeWarn !== null) out.push(`- ${a.name} passed its ${limitText('time', g.timeWarn)} time-box warning.`)
-    if (g.timeAct !== null) out.push(`- ${a.name} was asked to wrap up at its ${limitText('time', g.timeAct)} time-box.`)
-    if (g.costWarn !== null) out.push(`- ${a.name} passed its ${limitText('agentCost', g.costWarn)} warning.`)
-    if (g.costAct !== null) out.push(`- ${a.name} was asked to wrap up at its ${limitText('agentCost', g.costAct)} budget.`)
+    if (g.timeWarn !== null) out.push(`- ${md(a.name)} passed its ${limitText('time', g.timeWarn)} time-box warning.`)
+    if (g.timeAct !== null) out.push(`- ${md(a.name)} was asked to wrap up at its ${limitText('time', g.timeAct)} time-box.`)
+    if (g.costWarn !== null) out.push(`- ${md(a.name)} passed its ${limitText('agentCost', g.costWarn)} warning.`)
+    if (g.costAct !== null) out.push(`- ${md(a.name)} was asked to wrap up at its ${limitText('agentCost', g.costAct)} budget.`)
   }
-  for (const c of fileClashes(s)) out.push(`- Clash on ${c.path}: ${c.agents.map(id => nameOf(s, id)).join(', ')}${c.blocked ? ' (blocked)' : ''}.`)
+  for (const c of fileClashes(s)) out.push(`- Clash on ${md(c.path)}: ${c.agents.map(id => nameOf(s, id)).join(', ')}${c.blocked ? ' (blocked)' : ''}.`)
   for (const a of shown(s)) {
-    if (a.stuckBy !== undefined) out.push(`- ${a.name} looked stuck ${times(a.stuckBy.n)} and was asked to step back (last: ${a.stuckBy.p}, ${a.stuckBy.s || 'no subject'}).`)
+    if (a.stuckBy !== undefined) out.push(`- ${md(a.name)} looked stuck ${times(a.stuckBy.n)} and was asked to step back (last: ${md(a.stuckBy.p)}, ${a.stuckBy.s ? md(a.stuckBy.s) : 'no subject'}).`)
   }
-  for (const a of shown(s)) if (a.outcome === 'failed') out.push(`- ${a.name} failed${a.reason === null ? '' : `: ${a.reason}`}.`)
+  for (const a of shown(s)) if (a.outcome === 'failed') out.push(`- ${md(a.name)} failed${a.reason === null ? '' : `: ${md(a.reason)}`}.`)
   return out
 }
 
 function routing(s: SwarmState): string[] {
   const routed = shown(s).filter(a => a.route !== undefined)
   if (routed.length === 0) return []
-  const lines = routed.map(a => `- ${a.name}: asked for ${a.route!.q}, answered by ${a.model ?? 'an unknown model'}, saved ${usd(a.route!.d)}.`)
+  const lines = routed.map(a => `- ${md(a.name)}: asked for ${md(a.route!.q)}, answered by ${a.model === null ? 'an unknown model' : md(a.model)}, saved ${usd(a.route!.d)}.`)
   lines.push(`- Total saved: ${usd(routed.reduce((t, a) => t + a.route!.d, 0))}.`)
   return lines
 }
@@ -70,7 +70,7 @@ function tasks(s: SwarmState): string[] {
   const all = Object.values(s.tasks)
   if (all.length === 0) return []
   const counts = TASK_STATES.map(k => `${all.filter(t => t.state === k).length} ${k}`).join(', ')
-  return [`${counts}.`, ...all.filter(t => t.state === 'failed').map(t => `- Failed: ${t.id} ${t.title}`)]
+  return [`${counts}.`, ...all.filter(t => t.state === 'failed').map(t => `- Failed: ${md(t.id)} ${md(t.title)}`)]
 }
 
 export function reportSummary(s: SwarmState, nowMs: number): { agents: number; minutes: number; costUsd: number } {
@@ -87,7 +87,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
   const started = local(s.swarm.startedAt ?? nowMs, tzOffsetMin)
   const ended = s.swarm.endedAt === null ? 'still running' : `ended ${local(s.swarm.endedAt, tzOffsetMin)}`
   const lines = [
-    `# Swarm report: ${s.swarm.name}`,
+    `# Swarm report: ${md(s.swarm.name)}`,
     '',
     `${s.swarm.topology} · started ${started} · ${ended} · ${sum.minutes} min · ${usd(sum.costUsd)} · ${sum.agents} agent${sum.agents === 1 ? '' : 's'}`,
     '',
@@ -97,7 +97,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
   for (const a of shown(s)) {
     const cost = usd(a.costUsd) + (a.costKnown ? '' : '+')
     const name = a.id === LEAD ? 'main' : a.name
-    lines.push(`| ${cell(name)} | ${cell(a.role)} | ${outcome(a)} | ${minutes(runMs(a, nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${cell(filesEdited(s, a.id))} |`)
+    lines.push(`| ${md(name)} | ${md(a.role)} | ${outcome(a)} | ${minutes(runMs(a, s.swarm.endedAt ?? nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${filesEdited(s, a.id)} |`)
   }
   for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)]] as const) {
     if (body.length > 0) lines.push('', `## ${title}`, '', ...body)

@@ -54,7 +54,34 @@ test('a name or path with a pipe cannot break the table', () => {
     ev('agent.started', { name: 'a|b', role: 'coder', description: '', parent: LEAD }, { agent: 'a1', atSec: 0 }),
     tool('a1', 'edit', 'x|y.ts', 1),
   ])
-  assert.match(reportMarkdown(s, at(60), 0), /\| a\\|b \| coder \| running \| 1 min \| ≈\$0\.00 \| 0 \| x\\|y\.ts \|/)
+  assert.ok(reportMarkdown(s, at(60), 0).split('\n').includes(String.raw`| a\|b | coder | running | 1 min | ≈$0.00 | 0 | x\|y.ts |`))
+})
+
+test('markdown in model-influenced strings is escaped, so nothing renders as an image or link', () => {
+  const s = foldAll('![sw](http://h/?s)', [
+    ev('agent.started', { name: '![x](http://h/?a)', role: 'coder', description: '', parent: LEAD }, { agent: 'a1', atSec: 0 }),
+    ev('agent.stuck', { pattern: 'repeating', count: 4, subject: '<img src=x>', delivered: true }, { agent: 'a1', atSec: 5 }),
+    ev('agent.finished', { outcome: 'failed', reason: '*bold* `code` [l](u)' }, { agent: 'a1', atSec: 9 }),
+    ev('task.created', { id: 't1', title: '<b>x_y_</b>' }, { atSec: 1 }),
+    ev('task.updated', { id: 't1', state: 'failed' }, { atSec: 2 }),
+  ])
+  const md = reportMarkdown(s, at(60), 0)
+  assert.ok(md.startsWith(String.raw`# Swarm report: \!\[sw\](http://h/?s)` + '\n'))
+  assert.ok(md.includes(String.raw`| \!\[x\](http://h/?a) |`))
+  assert.ok(md.includes(String.raw`(last: repeating, \<img src=x\>)`))
+  assert.ok(md.includes(String.raw`failed: \*bold\* \`code\` \[l\](u).`))
+  assert.ok(md.includes(String.raw`- Failed: t1 \<b\>x\_y\_\</b\>`))
+  assert.doesNotMatch(md, /(^|[^\\])!\[/m)
+  assert.doesNotMatch(md, /(^|[^\\])</m)
+})
+
+test('an unfinished agent stops running at the end of an ended swarm', () => {
+  const s = foldAll('s1', [
+    ev('swarm.started', { name: 's1', topology: 'mesh', implicit: false }, { atSec: 0 }),
+    ev('agent.started', { name: 'tester', role: 'tester', description: '', parent: LEAD }, { agent: 'a1', atSec: 0 }),
+    ev('swarm.ended', { outcome: 'done' }, { atSec: 600 }),
+  ])
+  assert.match(reportMarkdown(s, at(6000), 0), /\| tester \| tester \| running \| 10 min \|/)
 })
 
 test('six files show five and +1 more', () => {

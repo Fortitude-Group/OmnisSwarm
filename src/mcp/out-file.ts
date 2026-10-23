@@ -17,8 +17,9 @@ export const stamp = (d: Date): string => `${d.getFullYear()}${pad2(d.getMonth()
  * choosing it and the rename, so two writes in this server cannot pick the same name. Answers the file name.
  */
 export function writeUnique(root: string, folder: 'exports' | 'reports', base: string, ext: '.gif' | '.md', data: string | Uint8Array): string {
-  const dir = join(logPaths(root).dir, folder)
-  if (isLink(dir)) throw new Error(`refusing a link for the ${folder} folder`)
+  const logDir = logPaths(root).dir
+  const dir = join(logDir, folder)
+  if (isLink(logDir) || isLink(dir)) throw new Error(`refusing a link for the ${folder} folder`)
   mkdirSync(dir, { recursive: true })
   let n = 1
   while (n <= MAX_SAME_MINUTE && taken(join(dir, n === 1 ? `${base}${ext}` : `${base}-${n}${ext}`))) n++

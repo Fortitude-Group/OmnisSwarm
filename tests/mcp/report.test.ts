@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent, readEvents, swarmLogPath } from '../../src/core/log.ts'
 import { Session } from '../../src/mcp/session.ts'
@@ -67,4 +67,30 @@ test('omnis_swarm_end with new work since the last report writes one and puts th
   const reply = tool('omnis_swarm_end', {}).text
   assert.match(reply, /^Swarm auth ended\. Swarm report: \.omnis-swarm\/reports\/auth-\d{8}-\d{4}\.md · 1 agent · \d+ min · ≈\$0\.00\.$/)
   assert.ok(existsSync(join(root, '.omnis-swarm', 'reports')))
+})
+
+const tree = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true, recursive: true }).map(e => join(e.parentPath, e.name).slice(dir.length)).sort()
+
+test('when the report cannot be written, end still answers and omnis_report fails with the fixed message', () => {
+  const { root, report, tool } = setup()
+  tool('omnis_swarm_init', { name: 'auth', topology: 'mesh' })
+  mkdirSync(join(root, '.omnis-swarm'), { recursive: true })
+  rmSync(join(root, '.omnis-swarm', 'reports'), { recursive: true, force: true })
+  writeFileSync(join(root, '.omnis-swarm', 'reports'), 'not a folder')
+  assert.throws(() => report.handler({}), { message: 'Could not write the swarm report (see the server log).' })
+  const reply = tool('omnis_swarm_end', {}).text
+  assert.equal(reply, 'Swarm auth ended. The report could not be written (see the server log).')
+})
+
+test('a report writes nothing outside .omnis-swarm/reports besides its own event', () => {
+  const { root, report, tool } = setup()
+  tool('omnis_swarm_init', { name: 'auth', topology: 'mesh' })
+  const before = tree(root)
+  report.handler({})
+  const added = tree(root).filter(p => !before.includes(p))
+  assert.equal(added.length, 2)
+  const norm = added.map(p => p.replaceAll('\\', '/'))
+  assert.ok(norm.includes('/.omnis-swarm/reports'))
+  assert.ok(norm.some(p => /^\/\.omnis-swarm\/reports\/auth-\d{8}-\d{4}\.md$/.test(p)))
 })
