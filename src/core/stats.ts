@@ -45,7 +45,7 @@ export function speed(a: AgentState, nowMs: number): number | null {
   return seconds === 0 ? null : recent.reduce((t, s) => t + s.output, 0) / seconds
 }
 
-export type Clash = { path: string; agents: string[] }
+export type Clash = { path: string; agents: string[]; blocked: boolean }
 
 /**
  * Paths edited by two or more agents within CLASH_WINDOW_MS of each other.
@@ -66,7 +66,7 @@ export function fileClashes(state: SwarmState, nowMs?: number): Clash[] {
         }
       }
     }
-    if (agents.size > 0) clashes.push({ path, agents: [...agents].sort() })
+    if (agents.size > 0) clashes.push({ path, agents: [...agents].sort(), blocked: edits.at(-1)?.blocked === true })
   }
   return clashes.sort((x, y) => x.path.localeCompare(y.path))
 }
@@ -99,6 +99,7 @@ export type AgentStats = {
   errors: number
   stuck: boolean
   clashes: string[]
+  blockedClashes: string[]
 }
 
 export function agentStats(state: SwarmState, id: string, nowMs: number, clashes: Clash[] = fileClashes(state, nowMs)): AgentStats | null {
@@ -124,8 +125,9 @@ export function agentStats(state: SwarmState, id: string, nowMs: number, clashes
     messagesIn: a.messagesIn,
     messagesOut: a.messagesOut,
     errors: a.errors,
-    stuck: a.outcome === null && a.errorsInRow >= STUCK_AFTER,
+    stuck: a.outcome === null && (a.errorsInRow >= STUCK_AFTER || a.stuckBy?.on === true),
     clashes: clashes.filter(c => c.agents.includes(a.id)).map(c => c.path),
+    blockedClashes: clashes.filter(c => c.blocked && c.agents.includes(a.id)).map(c => c.path),
   }
 }
 

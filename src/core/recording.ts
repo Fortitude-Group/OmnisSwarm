@@ -2,7 +2,7 @@
 import type { EventData } from './events.ts'
 
 /** The only event types omnis_record accepts. The server writes the swarm, memory and task events itself. */
-export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked'] as const
+export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked', 'clash.blocked', 'agent.stuck'] as const
 export type RecorderType = (typeof RECORDER_TYPES)[number]
 
 export const RECORD_TOOL = 'omnis_record'
@@ -15,6 +15,9 @@ export const REPLAY_TOOL = 'omnis_replay'
 
 /** The internal tool that renders a swarm to a GIF. */
 export const EXPORT_TOOL = 'omnis_export'
+
+/** The internal tool that writes a run report. */
+export const REPORT_TOOL = 'omnis_report'
 
 /** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
 export const SERVER_KEY = 'omnis-swarm'
@@ -30,7 +33,7 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
  * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report)$/
 
 /** A plugin name without an `@marketplace` suffix. Plugin names can't contain `@`, so the part before it is the name. */
 const bareName = (name: string): string => name.split('@', 1)[0] ?? ''

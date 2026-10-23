@@ -1,5 +1,5 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
-import { AGENT_OUTCOMES, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { AGENT_OUTCOMES, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
 import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
 
 const MAX_DEPENDS = 20
@@ -46,6 +46,16 @@ const routeRec = (x: unknown): boolean =>
 const budget = (x: unknown): boolean => exact(x, ['agentMinutes', 'agentUsd', 'swarmUsd']) && Object.values(x).every(nnum)
 const swarmGuard = (x: unknown): boolean => exact(x, ['warn', 'block']) && Object.values(x).every(nnum)
 
+const stuckRec = (x: unknown): boolean =>
+  exact(x, ['on', 'p', 's', 'n']) && typeof x.on === 'boolean' && isOneOf(STUCK_PATTERNS, x.p) && str(x.s, 80) && num(x.n)
+const editRec = (e: unknown): boolean => {
+  if (!isPlain(e)) return false
+  return exact(e, Object.hasOwn(e, 'blocked') ? ['agent', 'at', 'blocked'] : ['agent', 'at']) &&
+    str(e.agent, 130) && num(e.at) && (!Object.hasOwn(e, 'blocked') || e.blocked === true)
+}
+const lastReport = (x: unknown): boolean => exact(x, ['path', 'at']) && str(x.path, 120) && num(x.at)
+const STATE_KEYS = ['swarm', 'session', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps', 'budget', 'guard']
+
 const AGENT_KEYS = [
     'id', 'name', 'role', 'description', 'parent', 'placeholder', 'startedAt', 'finishedAt', 'runs', 'activeMs', 'outcome', 'reason', 'model',
     'tokens', 'costUsd', 'costKnown', 'calls', 'lastPrompt', 'samples', 'tools', 'openTools', 'errors', 'errorsInRow',
@@ -53,7 +63,7 @@ const AGENT_KEYS = [
 ]
 
 /** Keys an agent gains only once something happens to it. */
-const OPTIONAL_AGENT_KEYS = ['guard', 'route']
+const OPTIONAL_AGENT_KEYS = ['guard', 'route', 'stuckBy']
 
 const agent = (x: unknown): boolean =>
   exact(x, isPlain(x) ? [...AGENT_KEYS, ...OPTIONAL_AGENT_KEYS.filter(k => Object.hasOwn(x, k))] : AGENT_KEYS) &&
@@ -66,7 +76,8 @@ const agent = (x: unknown): boolean =>
   num(x.openTools) && num(x.errors) && num(x.errorsInRow) &&
   list(x.files, MAX_FILES, f => str(f, 80)) && num(x.messagesIn) && num(x.messagesOut) && num(x.lastActivity) &&
   (!Object.hasOwn(x, 'guard') || guardRec(x.guard)) &&
-  (!Object.hasOwn(x, 'route') || routeRec(x.route))
+  (!Object.hasOwn(x, 'route') || routeRec(x.route)) &&
+  (!Object.hasOwn(x, 'stuckBy') || stuckRec(x.stuckBy))
 
 const session = (x: unknown): x is Rec =>
   exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&
@@ -97,7 +108,7 @@ const info = (x: unknown, id: string): boolean =>
   typeof x.implicit === 'boolean' && nnum(x.startedAt) && nnum(x.endedAt) && nstr(x.outcome, 200)
 
 export function isSwarmState(x: unknown, id: string): x is SwarmState {
-  return exact(x, ['swarm', 'session', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps', 'budget', 'guard']) &&
+  return exact(x, isPlain(x) && Object.hasOwn(x, 'lastReport') ? [...STATE_KEYS, 'lastReport'] : STATE_KEYS) &&
     info(x.swarm, id) &&
     session(x.session) &&
     record(x.agents, agent) &&
@@ -106,7 +117,8 @@ export function isSwarmState(x: unknown, id: string): x is SwarmState {
     record(x.memory, memory) &&
     record(x.tasks, task) &&
     list(x.feed, MAX_FEED, feedItem) &&
-    record(x.edits, v => list(v, MAX_EDITS, e => exact(e, ['agent', 'at']) && str(e.agent, 130) && num(e.at))) &&
+    record(x.edits, v => list(v, MAX_EDITS, editRec)) &&
     list(x.spend, MAX_SPEND, s => exact(s, ['at', 'usd']) && num(s.at) && num(s.usd)) &&
-    num(x.events) && num(x.lastAt) && num(x.gaps) && budget(x.budget) && swarmGuard(x.guard)
+    num(x.events) && num(x.lastAt) && num(x.gaps) && budget(x.budget) && swarmGuard(x.guard) &&
+    (!Object.hasOwn(x, 'lastReport') || lastReport(x.lastReport))
 }
