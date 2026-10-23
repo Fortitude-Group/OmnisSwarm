@@ -5,11 +5,11 @@ import { KIT, RUN } from './test-engine.ts'
 
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const POINTER = 'Swarm report: .omnis-swarm/reports/s1-20261023-1000.md · 1 agent · 3 min · ≈$0.40.'
-type Seen = { reports: number; readonly appends: string[]; reply: { text: string; isError: boolean } }
+type Seen = { reports: number; args: unknown[]; readonly appends: string[]; reply: { text: string; isError: boolean }; endFails: boolean }
 
 function engine(on: On): Seen {
   const session = mock.session(on)
-  const seen: Seen = { reports: 0, reply: { text: POINTER, isError: false }, get appends() { return session.appended().map(row => JSON.stringify(row.message)) } }
+  const seen: Seen = { reports: 0, args: [], endFails: false, reply: { text: POINTER, isError: false }, get appends() { return session.appended().map(row => JSON.stringify(row.message)) } }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: SID }))
   on('state.get', () => ({ value: { value: undefined, version: 0 } }))
@@ -20,11 +20,13 @@ function engine(on: On): Seen {
   on('mcp.call', (_$, e) => {
     if (e.tool !== 'omnis_report') return { value: { content: [{ type: 'text', text: 'ok s1' }], isError: false } }
     seen.reports++
+    seen.args.push(e.args)
     return { value: { content: [{ type: 'text', text: seen.reply.text }], isError: seen.reply.isError } }
   })
   let id = 0
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++id}` }))
   on('turn.complete', () => ({ text: '' }))
+  on('tool.call', () => (seen.endFails ? { isError: true as const, result: 'No swarm.', text: 'No swarm.' } : { result: { content: 'Swarm s1 ended.' } as never, text: 'Swarm s1 ended.' }))
   return seen
 }
 
@@ -54,6 +56,7 @@ test('when the last subagent finishes and 30 s pass quietly, one report is writt
   expect(seen.reports).toBe(1)
   expect(pointers(seen).length).toBe(1)
   expect(seen.appends.map(a => JSON.parse(a).content)).toEqual([[{ type: 'text', text: POINTER }]])
+  expect(seen.args).toEqual([{ quiet: true }])
   await finish($, 'a1')
   await clock.advance(60_000)
   await clock.settle()
@@ -85,6 +88,7 @@ test('the lead finishing a turn is not a run going quiet', KIT, async ($, on) =>
 test('/omnis report answers the pointer, or the server\'s error', KIT, async ($, on) => {
   const { seen } = await boot($, on)
   expect(await $.command.run({ command: 'omnis', args: 'report', ...RUN })).toMatchObject({ text: POINTER })
+  expect(seen.args).toEqual([{}])
   seen.reply = { text: 'No swarm is running.', isError: true }
   expect(await $.command.run({ command: 'omnis', args: 'report', ...RUN })).toMatchObject({ text: 'No report was written: No swarm is running.' })
   expect(await $.command.run({ command: 'omnis', args: 'report now', ...RUN })).toMatchObject({ text: 'Usage: /omnis report writes a report of the current swarm.' })
@@ -135,4 +139,30 @@ test('an error reply on the quiet path appends nothing, and the next quiet tries
   await clock.settle()
   expect(seen.reports).toBe(2)
   expect(pointers(seen).length).toBe(1)
+})
+
+const end = ($: Engine) => $.tool.call({ tool: 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_swarm_end', tool_use_id: 'toolu_end', outcome: 'done' } as never)
+
+test('a successful omnis_swarm_end inside the quiet window means no quiet report', KIT, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await spawn($, 1)
+  await finish($, 'a1')
+  await clock.advance(10_000)
+  await end($)
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(seen.reports).toBe(0)
+  expect(seen.appends).toEqual([])
+})
+
+test('an omnis_swarm_end that fails leaves the quiet report to fire', KIT, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  seen.endFails = true
+  await spawn($, 1)
+  await finish($, 'a1')
+  await clock.advance(10_000)
+  await end($)
+  await clock.advance(20_000)
+  await clock.settle()
+  expect(seen.reports).toBe(1)
 })
