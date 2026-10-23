@@ -491,7 +491,8 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
   `TEXT.primary` (`TEXT.dim` when 0); `errors` `TEXT.dim` and the count in `STATUS.failed` when > 0, else `TEXT.dim`;
   then `! stuck` in `STATUS.warn` when stuck.
 - Row 5: `files` `TEXT.dim`, the count `TEXT.primary`, the paths `TEXT.dim` clipped with `…`. Right: `msgs ↓in ↑out`
-  in `TEXT.dim`, then `! clash <path>` in `STATUS.failed` when this agent is in a live clash.
+  in `TEXT.dim`, then `! clash <path>` in `STATUS.failed` when this agent is in a live clash (`! clash (blocked) <path>`
+  when the clash guard refused the latest edit on that path, §14). The path keeps its end, clipped from the left with `…`.
 - Compact (1 row): `● name ▶ running · 25s · 67k tok · ≈$0.12 · ctx 6%`, colours as above.
 - No agents yet: `No agents yet.` in `TEXT.dim` on `CANVAS_RAISED`.
 
@@ -1089,9 +1090,11 @@ The look of the clash guard and stuck nudges in `docs/superpowers/specs/2026-10-
 glyphs, colours or motion: both reuse what §4 and §5 already draw.
 
 **Refused clash.** A refused edit (`clash.blocked`, mode `block`) counts as a clashing edit, so the red dashed line and the
-blinking rims of §5 show it unchanged. The spotlight's clash line reads `! clash <path> (blocked)` when the latest edit on
-that path was refused. The path gives up 10 of its 32 cells to ` (blocked)`, so the line keeps its width, and it keeps
-`STATUS.failed`. A warned clash (mode `warn`) reads as any other clash.
+blinking rims of §5 show it unchanged. The spotlight's clash line reads `! clash (blocked) <path>` when the latest edit on
+that path was refused. The path gives up 10 of its 32 cells to `(blocked) `, so a long path keeps the line's width, and
+it keeps `STATUS.failed` (never dimmed: the faint greys read poorly on the light theme). `(blocked)` comes before the
+path so that at narrow widths the path clips first, not the state, and the path clips from the left so the file name
+stays. A warned clash (mode `warn`) reads as any other clash.
 
 **Stuck nudge.** A nudged agent wears the §4 stuck look (amber outline, `!`, `stuck` on the spotlight's tools line) while
 its pattern holds, whether it was failing or repeating. It drops when the pattern re-arms (an edit, a success, or a

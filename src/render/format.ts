@@ -45,6 +45,15 @@ export function fmtAge(ms: number): string {
 export const fmtPercent = (fraction: number | null): string =>
   fraction === null || !Number.isFinite(fraction) ? DASH : `${Math.round(fraction * 100)}%`
 
+/** At most `max` code points, the first one an ellipsis when cut: a path keeps its file name. */
+export function clipTail(s: string, max: number): string {
+  if (Number.isNaN(max)) return ''
+  const chars = Array.from(s)
+  if (chars.length <= max) return s
+  if (max <= 0) return ''
+  return `…${chars.slice(chars.length - max + 1).join('')}`
+}
+
 /** At most `max` code points, the last one an ellipsis when cut. */
 export function clipText(s: string, max: number): string {
   if (Number.isNaN(max)) return ''
