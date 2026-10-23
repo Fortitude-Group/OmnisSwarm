@@ -65,7 +65,7 @@ A `clash.blocked` event counts as a clashing edit for `fileClashes`, so the exis
 For each running subagent, from its `agent.tool` events in order:
 
 - **Failing:** `STUCK_NUDGE_AFTER = 5` tool calls in a row that ended with `isError`. (The pane's stuck look stays at 3, `STUCK_AFTER`; the nudge waits for 5.)
-- **Repeating:** `REPEAT_NUDGE_AFTER = 4` starts of the same tool on the same subject with no `edit`-kind tool start in between. Re-running a test after a fix doesn't count, because the fix is an edit.
+- **Repeating:** `REPEAT_NUDGE_AFTER = 4` starts of the same tool on the same subject with no edit that went ahead in between. Re-running a test after a fix doesn't count, because the fix is an edit.
 
 ### 3.2 Action
 
@@ -77,7 +77,7 @@ On a hit:
 2. `$.session.append` to main: `[OmnisSwarm] <name> looks stuck (<pattern>) and was asked to step back.` A send that isn't delivered says so, as the budget guard's does.
 3. An `agent.stuck` event (section 5). The agent shows the existing stuck look (amber outline and `!`) while the pattern holds; a repeating hit counts as stuck for the pane too.
 
-Each pattern fires once per agent. It re-arms when the agent starts an `edit`-kind tool or a tool call succeeds (failing), or starts any different tool or subject (repeating). Same route and same "delivered" handling as the budget guard's nudge (`src/mod/budget-guard.ts`).
+Each pattern fires once per agent. It re-arms when an edit goes ahead or a tool call succeeds (failing), or on any different tool or subject, or an edit that goes ahead (repeating). A refused edit is a failed call, so a loop of refused edits is nudged as failing. Same route and same "delivered" handling as the budget guard's nudge (`src/mod/budget-guard.ts`).
 
 ## 4. Run report
 

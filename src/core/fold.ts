@@ -202,6 +202,15 @@ function feed(state: SwarmState, item: FeedItem): void {
   trim(state.feed, MAX_FEED)
 }
 
+/** A failed edit wrote nothing: the agent's latest entry for it goes, unless the clash guard marked it refused. */
+function dropFailedEdit(state: SwarmState, agent: string, subject: string): void {
+  const list = Object.hasOwn(state.edits, subject) ? state.edits[subject]! : []
+  const i = list.findLastIndex(x => x.agent === agent)
+  if (i < 0 || list[i]!.blocked === true) return
+  list.splice(i, 1)
+  if (list.length === 0) delete state.edits[subject]
+}
+
 export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
   const at = Date.parse(e.ts)
   if (Number.isNaN(at)) return state
@@ -303,15 +312,17 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
           list.push({ agent: a.id, at })
           trim(list, MAX_EDITS)
         }
-        if (a.stuckBy?.on === true && (kind === 'edit' || (a.stuckBy.p === 'repeating' && subject !== a.stuckBy.s))) a.stuckBy.on = false
+        // An edit start re-arms nothing by itself: only an edit that goes ahead (its end, below) does.
+        if (a.stuckBy?.on === true && kind !== 'edit' && a.stuckBy.p === 'repeating' && subject !== a.stuckBy.s) a.stuckBy.on = false
       } else {
         a.openTools = Math.max(0, a.openTools - 1)
         if (d.isError === true) {
           a.errors++
           a.errorsInRow++
+          if (kind === 'edit') dropFailedEdit(state, a.id, subject)
         } else {
           a.errorsInRow = 0
-          if (a.stuckBy?.p === 'failing') a.stuckBy.on = false
+          if (a.stuckBy !== undefined && (a.stuckBy.p === 'failing' || kind === 'edit')) a.stuckBy.on = false
         }
       }
       a.lastActivity = at

@@ -74,7 +74,7 @@ test('tool calls count by kind, track files and reset the error run on success',
   assert.equal(a.openTools, 1)
   assert.equal(a.errors, 2)
   assert.equal(a.errorsInRow, 2)
-  assert.deepEqual(s.edits['src/a.ts'], [{ agent: 'a1', at: at(4) }])
+  assert.equal(s.edits['src/a.ts'], undefined) // the failed edit wrote nothing
   const after = fold(s, tool('end', 'edit', 'src/b.ts', false, 7))
   assert.equal(after.agents.a1!.errorsInRow, 0)
 })

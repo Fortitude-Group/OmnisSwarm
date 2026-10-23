@@ -4,20 +4,31 @@ import { REPEAT_NUDGE_AFTER, STUCK_NUDGE_AFTER, StuckWatch, nudgeFor, stuckMainT
 
 test('five failed calls in a row is one failing hit; a success re-arms it', () => {
   const w = new StuckWatch()
-  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) assert.equal(w.end('a1', 'Bash', 'npm test', true), null)
-  assert.deepEqual(w.end('a1', 'Bash', 'npm test', true), { pattern: 'failing', count: 5, tool: 'Bash', subject: 'npm test' })
-  assert.equal(w.end('a1', 'Bash', 'npm test', true), null)
-  w.end('a1', 'Bash', 'npm test', false)
-  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) w.end('a1', 'Bash', 'x', true)
-  assert.equal(w.end('a1', 'Bash', 'x', true)?.pattern, 'failing')
+  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) assert.equal(w.end('a1', 'Bash', 'bash', 'npm test', true), null)
+  assert.deepEqual(w.end('a1', 'Bash', 'bash', 'npm test', true), { pattern: 'failing', count: 5, tool: 'Bash', subject: 'npm test' })
+  assert.equal(w.end('a1', 'Bash', 'bash', 'npm test', true), null)
+  w.end('a1', 'Bash', 'bash', 'npm test', false)
+  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) w.end('a1', 'Bash', 'bash', 'x', true)
+  assert.equal(w.end('a1', 'Bash', 'bash', 'x', true)?.pattern, 'failing')
 })
 
-test('an edit start re-arms failing and starts the count again', () => {
+test('an edit start alone re-arms nothing: refused edits count as failures in the run', () => {
   const w = new StuckWatch()
-  for (let i = 0; i < STUCK_NUDGE_AFTER; i++) w.end('a1', 'Bash', 'x', true)
+  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) {
+    assert.equal(w.start('a1', 'Edit', 'edit', 'src/a.ts'), null)
+    assert.equal(w.end('a1', 'Edit', 'edit', 'src/a.ts', true), null)
+  }
   w.start('a1', 'Edit', 'edit', 'src/a.ts')
-  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) assert.equal(w.end('a1', 'Bash', 'x', true), null)
-  assert.equal(w.end('a1', 'Bash', 'x', true)?.count, 5)
+  assert.deepEqual(w.end('a1', 'Edit', 'edit', 'src/a.ts', true), { pattern: 'failing', count: 5, tool: 'Edit', subject: 'src/a.ts' })
+})
+
+test('an edit that goes ahead re-arms failing and starts the count again', () => {
+  const w = new StuckWatch()
+  for (let i = 0; i < STUCK_NUDGE_AFTER; i++) w.end('a1', 'Bash', 'bash', 'x', true)
+  w.start('a1', 'Edit', 'edit', 'src/a.ts')
+  w.end('a1', 'Edit', 'edit', 'src/a.ts', false)
+  for (let i = 1; i < STUCK_NUDGE_AFTER; i++) assert.equal(w.end('a1', 'Bash', 'bash', 'x', true), null)
+  assert.equal(w.end('a1', 'Bash', 'bash', 'x', true)?.count, 5)
 })
 
 test('four starts of the same tool on the same subject is one repeating hit', () => {
@@ -27,13 +38,22 @@ test('four starts of the same tool on the same subject is one repeating hit', ()
   assert.equal(w.start('a1', 'Bash', 'bash', 'npm test'), null)
 })
 
-test('another subject or tool, or an edit, breaks the run and re-arms it', () => {
+test('another subject or tool, or an edit that goes ahead, breaks the run and re-arms it', () => {
   const w = new StuckWatch()
   for (let i = 0; i < 3; i++) w.start('a1', 'Read', 'read', 'a.ts')
   w.start('a1', 'Grep', 'search', 'a.ts')
   for (let i = 0; i < 3; i++) assert.equal(w.start('a1', 'Read', 'read', 'a.ts'), null)
   w.start('a1', 'Edit', 'edit', 'a.ts')
+  w.end('a1', 'Edit', 'edit', 'a.ts', false)
   for (let i = 0; i < 3; i++) assert.equal(w.start('a1', 'Read', 'read', 'a.ts'), null)
+  assert.equal(w.start('a1', 'Read', 'read', 'a.ts')?.pattern, 'repeating')
+})
+
+test('a refused edit does not break a repeat run', () => {
+  const w = new StuckWatch()
+  for (let i = 0; i < 3; i++) w.start('a1', 'Read', 'read', 'a.ts')
+  w.start('a1', 'Edit', 'edit', 'a.ts')
+  w.end('a1', 'Edit', 'edit', 'a.ts', true)
   assert.equal(w.start('a1', 'Read', 'read', 'a.ts')?.pattern, 'repeating')
 })
 
@@ -48,10 +68,10 @@ test('agent and other kinds, and empty subjects, never repeat', () => {
 
 test('agents are tracked apart, and forget drops one', () => {
   const w = new StuckWatch()
-  for (let i = 0; i < 4; i++) w.end('a1', 'Bash', 'x', true)
-  assert.equal(w.end('a2', 'Bash', 'x', true), null)
+  for (let i = 0; i < 4; i++) w.end('a1', 'Bash', 'bash', 'x', true)
+  assert.equal(w.end('a2', 'Bash', 'bash', 'x', true), null)
   w.forget('a1')
-  assert.equal(w.end('a1', 'Bash', 'x', true), null)
+  assert.equal(w.end('a1', 'Bash', 'bash', 'x', true), null)
 })
 
 test('the words', () => {
