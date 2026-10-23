@@ -23,3 +23,8 @@ test('falls back to the id when the agent list cannot be read', KIT, async () =>
   expect(await agentLabel($, 'a1')).toBe('a1')
   expect(await agentLabel($, null)).toBe('main')
 })
+
+test('control characters in a name never reach a message', KIT, async () => {
+  const $ = engine(async () => [{ id: 'a1', name: 'a\u001b[31mb', description: '', type: 'coder' }])
+  expect(await agentLabel($, 'a1')).toBe('a [31mb')
+})

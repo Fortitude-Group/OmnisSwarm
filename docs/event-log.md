@@ -63,7 +63,7 @@ same user could edit `.omnis-swarm` directly.
 | `report.written` | mcp | `path` (the report file, relative to the project), `agents` (subagents), `minutes`, `costUsd`. Written by `omnis_report` and `omnis_swarm_end` |
 
 `omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
-knows which swarm it is folding. `omnis_replay` and `omnis_export` are internal tools like
+knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_report` are internal tools like
 `omnis_record` and `omnis_feed`: the mod refuses them when the model calls them.
 
 ## Reading rules
