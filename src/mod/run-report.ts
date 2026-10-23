@@ -22,15 +22,22 @@ const run = { live: new Set<string>(), ranSinceReport: false, timer: null as Tim
 
 /** The server's reply text and whether it is an error, or null when the call failed. */
 async function askReport($: EngineInterface): Promise<{ text: string; isError: boolean } | null> {
+  // Cleared before the call, so a spawn while it is in flight is kept; put back when no report was written.
+  const had = run.ranSinceReport
+  run.ranSinceReport = false
   try {
     const server = await connectServer($)
-    if (server === null) return null
+    if (server === null) {
+      run.ranSinceReport ||= had
+      return null
+    }
     const result = await $.mcp.call(server, REPORT_TOOL, {})
     const block = result.content[0]
     const text = block !== undefined && block.type === 'text' && typeof block.text === 'string' ? block.text.slice(0, 300) : ''
-    if (!result.isError) run.ranSinceReport = false
+    if (result.isError === true) run.ranSinceReport ||= had
     return { text, isError: result.isError === true }
   } catch {
+    run.ranSinceReport ||= had
     return null
   }
 }
