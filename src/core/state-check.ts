@@ -1,5 +1,6 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
-import { AGENT_OUTCOMES, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { AGENT_OUTCOMES, GATE_RESULTS, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { GATE_HISTORY, MAX_OWNS, MAX_OWN_LEN, MAX_WORKTREE } from './fold-tasks.ts'
 import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
 
 const MAX_DEPENDS = 20
@@ -63,7 +64,7 @@ const AGENT_KEYS = [
 ]
 
 /** Keys an agent gains only once something happens to it. */
-const OPTIONAL_AGENT_KEYS = ['guard', 'route', 'stuckBy']
+const OPTIONAL_AGENT_KEYS = ['guard', 'route', 'stuckBy', 'fenceBlocks']
 
 const agent = (x: unknown): boolean =>
   exact(x, isPlain(x) ? [...AGENT_KEYS, ...OPTIONAL_AGENT_KEYS.filter(k => Object.hasOwn(x, k))] : AGENT_KEYS) &&
@@ -77,7 +78,8 @@ const agent = (x: unknown): boolean =>
   list(x.files, MAX_FILES, f => str(f, 80)) && num(x.messagesIn) && num(x.messagesOut) && num(x.lastActivity) &&
   (!Object.hasOwn(x, 'guard') || guardRec(x.guard)) &&
   (!Object.hasOwn(x, 'route') || routeRec(x.route)) &&
-  (!Object.hasOwn(x, 'stuckBy') || stuckRec(x.stuckBy))
+  (!Object.hasOwn(x, 'stuckBy') || stuckRec(x.stuckBy)) &&
+  (!Object.hasOwn(x, 'fenceBlocks') || num(x.fenceBlocks))
 
 const session = (x: unknown): x is Rec =>
   exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&
@@ -90,10 +92,15 @@ const link = (x: unknown): boolean =>
 const memory = (x: unknown): boolean =>
   exact(x, ['writer', 'at', 'bytes', 'preview']) && str(x.writer, 130) && num(x.at) && num(x.bytes) && str(x.preview, 80)
 
+const gateRec = (x: unknown): boolean =>
+  exact(x, ['result', 'at', 'runs', 'history']) && isOneOf(GATE_RESULTS, x.result) && num(x.at) && num(x.runs) &&
+  list(x.history, GATE_HISTORY, r => isOneOf(GATE_RESULTS, r))
+
 const task = (x: unknown): boolean =>
-  exact(x, ['id', 'title', 'state', 'assignee', 'dependsOn', 'createdAt', 'updatedAt', 'note']) &&
+  exact(x, ['id', 'title', 'state', 'assignee', 'dependsOn', 'createdAt', 'updatedAt', 'note', 'owns', 'worktree', 'gate']) &&
   str(x.id, 32) && str(x.title, 120) && isOneOf(TASK_STATES, x.state) && nstr(x.assignee, 64) &&
-  list(x.dependsOn, MAX_DEPENDS, d => str(d, 80)) && num(x.createdAt) && num(x.updatedAt) && nstr(x.note, 200)
+  list(x.dependsOn, MAX_DEPENDS, d => str(d, 80)) && num(x.createdAt) && num(x.updatedAt) && nstr(x.note, 200) &&
+  list(x.owns, MAX_OWNS, o => str(o, MAX_OWN_LEN)) && nstr(x.worktree, MAX_WORKTREE) && (x.gate === null || gateRec(x.gate))
 
 const feedItem = (x: unknown): boolean => {
   if (!isPlain(x)) return false
