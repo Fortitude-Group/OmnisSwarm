@@ -258,3 +258,13 @@ test('device-form and UNC spellings are refused for a fenced agent with the usua
   }
   expect((await editAs($, 'a2', '//./p/src/x.ts')).decision).toBe('allow')
 })
+
+test('an 8.3 short-name spelling is refused with the usual text, and fold from the server folds a POSIX root', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  seen.fences.a1 = { fenced: true, tasks: ['t1'], owns: ['**'], roots: ROOTS }
+  const got = await editAs($, 'a1', '/w/OMNISS~1/src/x.ts')
+  expect(got).toEqual({ decision: 'deny', reason: '/w/OMNISS~1/src/x.ts is outside the files your task owns (t1: **). Ask main to widen the task, or leave it to the agent that owns it.' })
+  seen.fences.a2 = { fenced: true, tasks: ['t2'], owns: ['src/**'], roots: ['/P'], fold: true }
+  expect((await editAs($, 'a2', '/p/SRC/x.ts')).decision).toBe('allow')
+  expect((await editAs($, 'a2', '/p/docs/x.md')).decision).toBe('deny')
+})

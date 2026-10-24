@@ -24,9 +24,9 @@ export const fenceWarn = (agent: string, path: string, tasks: readonly string[])
 
 /**
  * omnis_fence's answer. `roots` holds every root in every spelling, the project's first. `home`, when present, is the
- * roots the agent may edit under (every fencing task names a worktree).
+ * roots the agent may edit under (every fencing task names a worktree). `fold`: the server's file system ignores case.
  */
-export type Fence = { fenced: false } | { fenced: true; tasks: string[]; owns: string[]; roots: string[]; home?: string[] }
+export type Fence = { fenced: false } | { fenced: true; tasks: string[]; owns: string[]; roots: string[]; home?: string[]; fold?: boolean }
 
 const strings = (x: unknown): x is string[] => Array.isArray(x) && x.every(s => typeof s === 'string')
 
@@ -42,21 +42,26 @@ export function parseFence(text: string): Fence | null {
   const o = x as Record<string, unknown>
   if (o.fenced === false) return { fenced: false }
   if (o.fenced !== true || !strings(o.tasks) || !strings(o.owns) || !strings(o.roots)) return null
-  if (o.home !== undefined && !strings(o.home)) return null
-  return { fenced: true, tasks: [...o.tasks], owns: [...o.owns], roots: [...o.roots], ...(o.home !== undefined && { home: [...o.home] }) }
+  if ((o.home !== undefined && !strings(o.home)) || (o.fold !== undefined && typeof o.fold !== 'boolean')) return null
+  return {
+    fenced: true, tasks: [...o.tasks], owns: [...o.owns], roots: [...o.roots],
+    ...(o.home !== undefined && { home: [...o.home] }), ...(o.fold !== undefined && { fold: o.fold }),
+  }
 }
 
 const DRIVE = /^[A-Za-z]:\//
 const ABSOLUTE = /^([A-Za-z]:\/|\/)/
 /** \\.\ and \\?\ (any slashes): device and long-path spellings, never a scratch file. */
 const DEVICE = /^[\\/]{2}[?.][\\/]/
+/** A Windows 8.3 short name (OMNISS~1, LONGFI~1.TS): another spelling of a long name the roots can't know (review RL1). */
+const SHORT_NAME = /^[^/]{1,6}~[0-9]+(\.[^/]{1,3})?$/
 
-/** A root as a key and prefix, folding case for drive letters and UNC shares. */
+/** A root as a key and prefix, folding case for drive letters, UNC shares, and every root when `always`. */
 type Root = { base: string; prefix: string; fold: boolean }
-function rootOf(raw: string): Root | null {
+function rootOf(raw: string, always: boolean): Root | null {
   const key = normalisePath(raw, '/')?.key
   if (key === undefined || !ABSOLUTE.test(key)) return null
-  const fold = DRIVE.test(key) || key.startsWith('//')
+  const fold = always || DRIVE.test(key) || key.startsWith('//')
   const base = fold ? key.toLowerCase() : key
   return { base, prefix: base.endsWith('/') ? base : `${base}/`, fold }
 }
@@ -68,23 +73,26 @@ const under = (r: Root, key: string): boolean => {
 /**
  * Whether the edit of `key` (a normalisePath key) is inside the fence. `raw` is the path as the tool got it and `cwd` the
  * session's folder, which counts as a spelling of the project root unless it already sits under a root.
- * - Device-form paths, and paths over PATH_MAX characters or SEGMENTS_MAX segments, are outside.
+ * - Device-form paths, paths with an 8.3 short-name segment, and paths over PATH_MAX characters or SEGMENTS_MAX segments,
+ *   are outside.
  * - The path is measured from the longest root it sits under. Under no root it passes, unless it is a UNC path.
  * - With home roots, a path under any other root is outside.
- * - Matching folds case when that root has a drive letter or is a UNC share.
+ * - Matching folds case when that root has a drive letter or is a UNC share, or when the answer says `fold`.
  */
 export function fenceAllows(fence: Fence, key: string, at: { raw?: unknown; cwd?: string | null } = {}): boolean {
   if (!fence.fenced) return true
   if (typeof at.raw === 'string' && DEVICE.test(at.raw.trim())) return false
-  if (key.length > PATH_MAX || key.split('/').length > SEGMENTS_MAX) return false
+  const segments = key.split('/')
+  if (key.length > PATH_MAX || segments.length > SEGMENTS_MAX || segments.some(p => SHORT_NAME.test(p))) return false
+  const always = fence.fold === true
   const roots: Array<Root & { home: boolean }> = []
-  const homes = (fence.home ?? []).map(rootOf).filter((r): r is Root => r !== null)
+  const homes = (fence.home ?? []).map(h => rootOf(h, always)).filter((r): r is Root => r !== null)
   const isHome = (r: Root): boolean => fence.home === undefined || homes.some(h => h.base === r.base)
   for (const raw of fence.roots) {
-    const r = rootOf(raw)
+    const r = rootOf(raw, always)
     if (r !== null) roots.push({ ...r, home: isHome(r) })
   }
-  const cwd = typeof at.cwd === 'string' ? rootOf(at.cwd) : null
+  const cwd = typeof at.cwd === 'string' ? rootOf(at.cwd, always) : null
   const project = roots[0]
   if (cwd !== null && project !== undefined && !roots.some(r => under(r, cwd.base))) roots.push({ ...cwd, home: project.home })
   let best: (Root & { home: boolean }) | null = null

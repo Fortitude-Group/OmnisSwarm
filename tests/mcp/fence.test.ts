@@ -12,6 +12,7 @@ import { InputError } from '../../src/mcp/validate.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
 const real = (p: string): string => realpathSync.native(p)
+const FOLD = process.platform === 'win32' || process.platform === 'darwin'
 
 function setup(root = tmpRoot()) {
   const session = new Session(root)
@@ -45,21 +46,33 @@ test('an agent with a pending or active task that owns paths is fenced to the un
   tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/a/**', 'docs/'] })
   tool('omnis_task_create', { title: 'two', assignee: 'coder-1', owns: ['src/a/**', 'tests/a.test.ts'] })
   tool('omnis_task_update', { id: 't2', state: 'active' })
-  assert.deepEqual(ask('a1'), { fenced: true, tasks: ['t1', 't2'], owns: ['src/a/**', 'docs/', 'tests/a.test.ts'], roots: [real(root)] })
+  assert.deepEqual(ask('a1'), { fenced: true, tasks: ['t1', 't2'], owns: ['src/a/**', 'docs/', 'tests/a.test.ts'], roots: [real(root)], fold: FOLD })
 })
 
-test('done and failed tasks, tasks with no owns and other agents\' tasks do not fence', () => {
+test('done and failed tasks still fence, so a state change can not lift a fence; empty owns and other agents\' tasks add nothing', () => {
   const { tool, ask } = swarm()
   tool('omnis_task_create', { title: 'free', assignee: 'coder-1' })
   tool('omnis_task_create', { title: 'theirs', assignee: 'coder-2', owns: ['src/b/**'] })
+  assert.deepEqual(ask('a1'), { fenced: false })
   tool('omnis_task_create', { title: 'closed', assignee: 'coder-1', owns: ['src/c/**'] })
   tool('omnis_task_update', { id: 't3', state: 'done' })
   tool('omnis_task_create', { title: 'broken', assignee: 'coder-1', owns: ['src/d/**'] })
   tool('omnis_task_update', { id: 't4', state: 'failed' })
-  assert.deepEqual(ask('a1'), { fenced: false })
-  assert.deepEqual(ask('a2'), { fenced: true, tasks: ['t2'], owns: ['src/b/**'], roots: (ask('a2').roots as string[]) })
+  const a1 = ask('a1')
+  assert.deepEqual([a1.fenced, a1.tasks, a1.owns], [true, ['t3', 't4'], ['src/c/**', 'src/d/**']])
+  // The toggle the review found: failed, edit, back to active. The fence never lifts.
+  tool('omnis_task_update', { id: 't4', state: 'active' })
+  assert.deepEqual(ask('a1').tasks, ['t3', 't4'])
+  const a2 = ask('a2')
+  assert.deepEqual([a2.fenced, a2.tasks, a2.owns], [true, ['t2'], ['src/b/**']])
   tool('omnis_task_update', { id: 't2', state: 'active', owns: [] })
   assert.deepEqual(ask('a2'), { fenced: false })
+})
+
+test('fold is true where the server\'s file system ignores case by default (Windows, macOS)', () => {
+  const { tool, ask } = swarm()
+  tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/**'] })
+  assert.equal(ask('a1').fold, FOLD)
 })
 
 test('the lead, an unknown agent and a session with no swarm are never fenced', () => {

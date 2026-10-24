@@ -6,7 +6,7 @@ import {
 } from '../../src/mod/fence.ts'
 import { normalisePath } from '../../src/mod/holds.ts'
 
-const fenced = (owns: string[], roots: string[], tasks = ['t1']): Fence => ({ fenced: true, tasks, owns, roots })
+const fenced = (owns: string[], roots: string[], tasks = ['t1']): Extract<Fence, { fenced: true }> => ({ fenced: true, tasks, owns, roots })
 const key = (raw: string, cwd: string) => normalisePath(raw, cwd)!.key
 
 test('the setting is block unless it says warn or off', () => {
@@ -159,4 +159,26 @@ test('the cache remembers each agent\'s last fenced answer past expiry and clear
   cache.set('a1', { fenced: false }, 2, cache.generation)
   assert.equal(cache.last('a1'), undefined)
   assert.equal(cache.last('a2'), undefined)
+})
+
+test('a path with an 8.3 short-name segment is refused for a fenced agent, not for an unfenced one', () => {
+  const f = fenced(['**'], ['C:/projects/personal/OmnisSwarm'])
+  for (const raw of ['C:/projects/personal/OMNISS~1/src/x.ts', 'C:/PROJEC~1/personal/OmnisSwarm/docs/a.md', 'C:/projects/personal/OmnisSwarm/src/LONGFI~1.TS', 'C:/x/AB~12/y.ts']) {
+    assert.equal(allows(f, raw, 'C:/projects/personal/OmnisSwarm'), false, raw)
+    assert.equal(allows({ fenced: false }, raw, 'C:/projects/personal/OmnisSwarm'), true, raw)
+  }
+  // Names that only look a little like short names are matched as usual.
+  for (const raw of ['C:/projects/personal/OmnisSwarm/src/a~b.ts', 'C:/projects/personal/OmnisSwarm/src/backup~', 'C:/projects/personal/OmnisSwarm/src/TOOLONGX~1/x.ts']) {
+    assert.equal(allows(f, raw, 'C:/projects/personal/OmnisSwarm'), true, raw)
+  }
+})
+
+test('fold: true folds case for POSIX roots too (macOS)', () => {
+  const f: Fence = { ...fenced(['src/**'], ['/Users/x/repo']), fold: true }
+  assert.equal(allows(f, '/users/x/REPO/src/x.ts', '/Users/x/repo'), true)
+  assert.equal(allows(f, '/users/x/REPO/SRC/x.ts', '/Users/x/repo'), true)
+  assert.equal(allows(f, '/users/x/REPO/docs/x.md', '/Users/x/repo'), false)
+  assert.equal(allows(fenced(['src/**'], ['/Users/x/repo']), '/users/x/REPO/docs/x.md', '/Users/x/repo'), true)
+  assert.deepEqual(parseFence('{"fenced":true,"tasks":["t1"],"owns":["src/**"],"roots":["/r"],"fold":true}'), { ...fenced(['src/**'], ['/r']), fold: true })
+  assert.equal(parseFence('{"fenced":true,"tasks":["t1"],"owns":["src/**"],"roots":["/r"],"fold":"yes"}'), null)
 })
