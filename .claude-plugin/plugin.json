@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
@@ -33,13 +33,35 @@
     },
     "budgetAgentMinutes": { "type": "number", "title": "Agent time-box (minutes)", "description": "An agent running this long is asked to wrap up; it is warned at two thirds of it. 1 to 1440.", "default": 30 },
     "budgetAgentUsd": { "type": "number", "title": "Agent budget (USD, approximate)", "description": "An agent whose estimated spend reaches this is asked to wrap up; it is warned at three fifths. Above 0, at most 1000.", "default": 5 },
+    "verifyGate": {
+      "type": "string",
+      "title": "Verification gate",
+      "description": "block (the default): a task can't be marked done while its build or tests fail. warn: it closes anyway and the reply carries the failure. off: no gate.",
+      "default": "block",
+      "options": ["block", "warn", "off"]
+    },
+    "gateCommand": { "type": "string", "title": "Gate command", "description": "The command the gate runs. Leave empty to have it found from the project (scripts/build-test, npm run check, npm test, dotnet test).", "default": "" },
+    "gateMinutes": { "type": "number", "title": "Gate time limit (minutes)", "description": "A gate running longer is stopped and counts as a failure. 1 to 60.", "default": 10 },
+    "scopeFence": {
+      "type": "string",
+      "title": "Scope fence",
+      "description": "block (the default): an agent can only edit the files its task owns. warn: the edit goes ahead and the lead is told. off: no check.",
+      "default": "block",
+      "options": ["block", "warn", "off"]
+    },
     "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Above 0, at most 1000.", "default": 20 }
   },
   "mcpServers": {
     "omnis-swarm": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/start.mjs"],
-      "env": { "OMNIS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}" }
+      "env": {
+        "OMNIS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
+        "OMNIS_VERIFY_GATE": "${user_config.verifyGate}",
+        "OMNIS_GATE_COMMAND": "${user_config.gateCommand}",
+        "OMNIS_GATE_MINUTES": "${user_config.gateMinutes}"
+      },
+      "timeout": 3900000
     }
   }
 }

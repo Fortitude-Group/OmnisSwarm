@@ -98,7 +98,7 @@ Run report: a `Gates` line per task that ran one (`t3 ✓ 42 s`, `t4 ✕ exit 1 
 
 ### 3.2 Who is fenced
 
-A **subagent** whose name is the assignee of at least one task in state `pending` or `active` with a non-empty `owns`. Its fence is the union of those tasks' patterns. The lead is never fenced. An agent with no such task isn't fenced (fail open).
+A **subagent** whose name is the assignee of at least one task with a non-empty `owns`, in any state. Its fence is the union of those tasks' patterns. Counting done and failed tasks too stops a subagent from lifting its own fence by moving its task to `failed` and back (security finding RM1). Main frees an agent by clearing a task's `owns` or reassigning it. The lead is never fenced. An agent with no such task isn't fenced (fail open).
 
 ### 3.3 The check
 
