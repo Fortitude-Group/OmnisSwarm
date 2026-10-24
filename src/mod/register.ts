@@ -2,6 +2,7 @@
 import type { Register } from 'claude-code'
 import { guardObserver, registerBudgetGuard } from './budget-guard.ts'
 import { registerClashGuard } from './clash-guard.ts'
+import { registerFenceGuard } from './fence-guard.ts'
 import { registerGuard } from './guard.ts'
 import { registerPane } from './pane.ts'
 import { registerRecorder } from './recorder.ts'
@@ -12,6 +13,7 @@ export const register: Register = (on, options) => {
   registerGuard(on)
   registerRecorder(on, guardObserver)
   registerBudgetGuard(on, options)
+  registerFenceGuard(on, options)
   registerClashGuard(on, options)
   registerStuckGuard(on)
   registerPane(on, options)

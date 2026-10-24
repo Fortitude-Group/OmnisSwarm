@@ -373,6 +373,9 @@ const withWorktree = () => {
   const wt = tmpRoot()
   mkdirSync(join(s.root, '.git', 'worktrees', 'w1'), { recursive: true })
   writeFileSync(join(s.root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
+  // git's two-way link: a HEAD in the entry, and the worktree's .git file pointing back at it.
+  writeFileSync(join(s.root, '.git', 'worktrees', 'w1', 'HEAD'), 'ref: refs/heads/w1\n')
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(s.root, '.git', 'worktrees', 'w1')}\n`)
   return { ...s, wt, real: realpathSync.native(wt) }
 }
 
