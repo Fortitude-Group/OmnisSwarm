@@ -55,7 +55,8 @@ function statusText(state: SwarmState, nowMs: number): string {
 
 /** Token-shaped runs are blanked before a value preview reaches the log (the pattern lives in redact.ts, shared with the gate). */
 export { SECRETISH }
-const preview = (value: string): string => clip(redactSecrets(value), 80)
+/** Only the start can show (80 characters), so only the start is redacted: a huge value costs no more than 1 KB. */
+const preview = (value: string): string => clip(redactSecrets(value.slice(0, 1024)), 80)
 
 export const MAX_TASKS = 500
 const MAX_OWNS = 20

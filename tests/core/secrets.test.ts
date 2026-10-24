@@ -25,6 +25,18 @@ test('ordinary text is left alone', () => {
   }
 })
 
+test('long hyphenated runs redact in linear time (no backtracking blow-up)', () => {
+  for (const unit of ['a-token', 'a-password', 'x-api-key', 'a-secret-']) {
+    const text = unit.repeat(Math.ceil(65_536 / unit.length))
+    const started = performance.now()
+    redactSecrets(text)
+    redact(text)
+    assert.ok(performance.now() - started < 1000, `${unit} x 64 KB took ${Math.round(performance.now() - started)} ms`)
+  }
+  assert.match(redactSecrets('DB_PASSWORD: hunter2'), /DB_PASSWORD: \[redacted\]/)
+  assert.match(redactSecrets('my-api-key=abc'), /my-api-key=\[redacted\]/)
+})
+
 test('redacting twice changes nothing more', () => {
   const once = redactSecrets('https://rob:Hunter2pass@h/x password=S3cretPass! Authorization: Bearer abc.def')
   assert.equal(redactSecrets(once), once)

@@ -6,8 +6,11 @@ export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-
 const URL_USERINFO = /(\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s/@:]+:)[^\s/@]+@/gi
 /** Authorization: Bearer|Basic SECRET. */
 const AUTH_HEADER = /(\bauthorization\s*[=:]\s*(?:bearer|basic)\s+)[^\s"',;]+/gi
-/** A secret-sounding key, then = or :, then its value. Only names that sound secret, so exit=1 and count=3 stay. */
-const SECRET_PAIR = /(\b[\w-]*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey)[\w-]*\s*[=:]\s*)[^\s&"',;]+/gi
+/**
+ * A secret-sounding key, then = or :, then its value. Only names that sound secret, so exit=1 and count=3 stay. The
+ * name around the keyword is bounded ({0,40}): unbounded, a long hyphenated run backtracks for seconds to hours.
+ */
+const SECRET_PAIR = /(\b[\w-]{0,40}(?:password|passwd|pwd|secret|token|api[_-]?key|apikey)[\w-]{0,40}\s*[=:]\s*)[^\s&"',;]+/gi
 
 /** Everything but the catch-all long run: for text that holds real paths, where 32 plain characters in a row are not a secret. */
 export const redactKnown = (text: string): string =>
