@@ -33,6 +33,8 @@ export type GateCall = {
   mode: GateMode
   /** The gate command setting; empty means detect. */
   command: string
+  /** The digest of the gate the task was created with, when it had one (pins.ts). */
+  pinned: string | undefined
   minutes: number
   limitMs: number
   progressMs: number
@@ -46,6 +48,7 @@ export type GateOutcome = { closes: boolean; text: string; isError?: true }
 
 export const NO_CHECK_TEXT = "The gate needs OmnisSwarm's mod to check permission first, and no check arrived. Make sure mods are on, or mark the task done with skipGate and a note."
 export const CHANGED_WHY = 'the gate changed after it was approved'
+export const PINNED_WHY = 'the gate changed since the task was created'
 export const differsWhy = (file: string): string => `the gate script in this worktree differs from the project's (${file})`
 
 /** Log names already handed to a running gate, so two runs of one task never share a file. */
@@ -115,6 +118,17 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
     return { closes: true, text: `Task ${id} is now done. Gate skipped.` }
   }
   const { dir, command, digest, detected } = gateTarget(g.root, g.task.worktree, g.worktree, g.command)
+  const shown = command === null ? 'no gate found' : clip(redact(command), SHOWN_COMMAND)
+  /** A gate refused before it ran: result error, nothing in the log. `always`: refused even when verifyGate is warn. */
+  const refused = (whyText: string, always: boolean): GateOutcome => {
+    record({ result: 'error', ms: 0, ...(command !== null && { command: clip(redact(command), STORED_COMMAND) }) })
+    if (g.mode === 'warn' && !always) {
+      return { closes: true, text: `Task ${id} is now done, but its gate failed (${whyText}, 0 s): ${shown}. verifyGate is warn, so it closed anyway.` }
+    }
+    return { closes: false, isError: true, text: `Gate failed for ${id} (${whyText}, 0 s): ${shown}. The task stays ${g.task.state}.` }
+  }
+  // Checked before "no gate", so removing the gate is caught as well as editing it.
+  if (g.pinned !== undefined && digest !== g.pinned) return refused(PINNED_WHY, true)
   if (command === null) {
     record({ result: 'none', ms: 0 })
     return { closes: true, text: `Task ${id} is now done. No gate found in ${dir}, so nothing was run.` }
@@ -122,15 +136,6 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
   // Nothing runs without the mod's permission check for this call, and only what that check saw.
   const approval = takeApproval(g.root, g.swarm, id, g.now().getTime())
   if (approval === null) return { closes: false, isError: true, text: NO_CHECK_TEXT }
-  const shown = clip(redact(command), SHOWN_COMMAND)
-  /** A gate refused before it ran: result error, nothing in the log. `always`: refused even when verifyGate is warn. */
-  const refused = (whyText: string, always: boolean): GateOutcome => {
-    record({ result: 'error', ms: 0, command: clip(redact(command), STORED_COMMAND) })
-    if (g.mode === 'warn' && !always) {
-      return { closes: true, text: `Task ${id} is now done, but its gate failed (${whyText}, 0 s): ${shown}. verifyGate is warn, so it closed anyway.` }
-    }
-    return { closes: false, isError: true, text: `Gate failed for ${id} (${whyText}, 0 s): ${shown}. The task stays ${g.task.state}.` }
-  }
   if (approval.dir !== dir || approval.command !== command || approval.digest !== digest) return refused(CHANGED_WHY, true)
   const differs = differsFromRoot(g.root, dir, detected)
   if (differs !== null) return refused(differsWhy(differs), false)

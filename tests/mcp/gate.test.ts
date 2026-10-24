@@ -8,7 +8,7 @@ import type { CallContext, ToolResult } from '../../src/mcp/protocol.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createTools, type GateOptions } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
-import { CHANGED_WHY, NO_CHECK_TEXT, differsWhy, gapOf } from '../../src/mcp/gate/gate.ts'
+import { CHANGED_WHY, NO_CHECK_TEXT, PINNED_WHY, differsWhy, gapOf } from '../../src/mcp/gate/gate.ts'
 import { createGatePlanTools } from '../../src/mcp/tools/gate-plan.ts'
 import { emptyState } from '../../src/core/fold.ts'
 import { ev, tmpRoot } from '../helpers.ts'
@@ -358,10 +358,68 @@ async function withScript(env: Record<string, string>, rootScript: string, wtScr
   writeFileSync(join(root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
   writeFileSync(join(root, '.git', 'worktrees', 'w1', 'HEAD'), 'ref: refs/heads/w1\n')
   writeFileSync(join(wt, '.git'), `gitdir: ${join(root, '.git', 'worktrees', 'w1')}\n`)
+  const s = await setup(env, {}, root) // t1 is created before any gate exists, so nothing is pinned for it
   writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { check: rootScript } }))
   writeFileSync(join(wt, 'package.json'), JSON.stringify({ scripts: { check: wtScript } }))
-  return { s: await setup(env, {}, root), wt }
+  return { s, wt }
 }
+
+/** A task t2 created once the project has a gate, so its gate is pinned then. */
+async function pinned(env: Record<string, string>, script: string, worktree?: string, rootDir?: string) {
+  const s = await setup(env, {}, rootDir)
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: script } }))
+  if (worktree !== undefined) writeFileSync(join(worktree, 'package.json'), JSON.stringify({ scripts: { check: script } }))
+  await s.run('omnis_task_create', { title: 'pinned', ...(worktree !== undefined && { worktree }) })
+  await s.run('omnis_task_update', { id: 't2', state: 'active' })
+  return s
+}
+
+test('a gate changed since its task was created is refused, in block and warn alike', async () => {
+  assert.equal(PINNED_WHY, 'the gate changed since the task was created')
+  for (const mode of ['block', 'warn']) {
+    const s = await pinned({ OMNIS_VERIFY_GATE: mode }, "node -e \"console.log('real')\"")
+    writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 0' } }))
+    const r = await s.done({ id: 't2' })
+    assert.deepEqual(r, { text: `Gate failed for t2 (${PINNED_WHY}, 0 s): npm run check. The task stays active.`, isError: true }, mode)
+    assert.deepEqual(s.gates(), [{ task: 't2', result: 'error', ms: 0, command: 'npm run check', mode }], mode)
+    assert.equal(s.closed(), false, mode)
+  }
+})
+
+test('a gate removed since its task was created is refused, not closed as no gate', async () => {
+  const s = await pinned({}, 'node -e 0')
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: {} }))
+  const r = await s.bare({ id: 't2' })
+  assert.deepEqual(r, { text: `Gate failed for t2 (${PINNED_WHY}, 0 s): no gate found. The task stays active.`, isError: true })
+  assert.deepEqual(s.gates(), [{ task: 't2', result: 'error', ms: 0, mode: 'block' }])
+  assert.equal(s.closed(), false)
+})
+
+test('a gate unchanged since its task was created runs', async () => {
+  const s = await pinned({}, 'node -e 0')
+  const r = await s.done({ id: 't2' })
+  assert.equal(secs(r.text), 'Task t2 is now done. Gate passed in N s (npm run check).')
+})
+
+test('skipGate still closes a task whose gate changed since it was created', async () => {
+  const s = await pinned({}, 'node -e 0')
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 1' } }))
+  const r = await s.done({ id: 't2', skipGate: true, note: 'lead closes it' })
+  assert.equal(r.text, 'Task t2 is now done. Gate skipped.')
+})
+
+test('the pin is taken in the worktree the task was created with, so editing both copies is refused', async () => {
+  const root = tmpRoot()
+  const wt = tmpRoot()
+  mkdirSync(join(root, '.git', 'worktrees', 'w1'), { recursive: true })
+  writeFileSync(join(root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
+  writeFileSync(join(root, '.git', 'worktrees', 'w1', 'HEAD'), 'ref: refs/heads/w1\n')
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(root, '.git', 'worktrees', 'w1')}\n`)
+  const s = await pinned({}, "node -e \"console.log('real')\"", wt, root)
+  for (const dir of [root, wt]) writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 0' } }))
+  const r = await s.done({ id: 't2' })
+  assert.deepEqual(r, { text: `Gate failed for t2 (${PINNED_WHY}, 0 s): npm run check. The task stays active.`, isError: true })
+})
 
 test('a worktree whose gate script differs from the project root is not run: block refuses', async () => {
   const { s, wt } = await withScript({}, "node -e \"console.log('real')\"", 'node -e 0')
