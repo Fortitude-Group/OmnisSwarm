@@ -7,6 +7,7 @@ import { Session } from '../../src/mcp/session.ts'
 import { createRecordTools } from '../../src/mcp/tools/record.ts'
 import { swarmLogPath } from '../../src/core/log.ts'
 import { tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const init = (root: string) => createTools({ root, session: new Session(root) }).find(t => t.name === 'omnis_swarm_init')!
 
@@ -34,7 +35,7 @@ test('naming an implicit session swarm with a budget writes swarm.started then b
   const sid = 'abcdef12-3456-7890-abcd-ef1234567890'
   record!.handler({ sessionId: sid, ts: '2026-10-21T10:00:01.234Z', type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: false } })
   const tool = createTools({ root, session, now: clock }).find(t => t.name === 'omnis_swarm_init')!
-  const text = tool.handler({ name: 'auth', topology: 'mesh', budget: { agentUsd: 2 } }).text
+  const text = syncResult(tool.handler({ name: 'auth', topology: 'mesh', budget: { agentUsd: 2 } })).text
   const id = /session swarm (\S+)\./.exec(text)![1]!
   const lines = readFileSync(swarmLogPath(root, id), 'utf8').trim().split(/\r?\n/).map(l => JSON.parse(l))
   const types = lines.map(l => l.type)
