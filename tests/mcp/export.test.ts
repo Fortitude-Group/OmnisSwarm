@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { makeEvent } from '../../src/core/events.ts'
 import { appendEvent, swarmLogPath } from '../../src/core/log.ts'
 import { createExportTools, readAllEvents, renderGif, MAX_FRAMES } from '../../src/mcp/tools/export.ts'
 import { Session } from '../../src/mcp/session.ts'
@@ -62,4 +63,18 @@ test('a log past the event cap is refused as too long, not cut off', () => {
   for (const e of quietEvents()) appendEvent(root, e)
   assert.throws(() => readAllEvents(swarmLogPath(root, FIVE_SWARM), 3), { name: 'InputError', message: /too long to export/ })
   assert.equal(readAllEvents(swarmLogPath(root, FIVE_SWARM), 7).length, 7)
+})
+
+test('an export of a log with error text shows none of it', async () => {
+  const root = tmpRoot()
+  for (const e of fiveAgentEvents()) appendEvent(root, e)
+  appendEvent(root, makeEvent({
+    type: 'agent.tool', swarm: FIVE_SWARM, src: 'recorder', agent: 'a1', now: new Date(Date.parse(fiveAgentEvents().at(-1)!.ts) + 1000),
+    data: { phase: 'end', tool: 'Bash', kind: 'bash', subject: 'npm test', isError: true, error: 'SECRET-ERROR-TEXT' },
+  }))
+  const tool = createExportTools({ root, session: new Session(root), now: () => NOW })[0]!
+  const out = await tool.handler({ swarm: FIVE_SWARM, style: 'robot' })
+  assert.doesNotMatch(out.text as string, /SECRET-ERROR-TEXT/)
+  const dir = join(root, '.omnis-swarm', 'exports')
+  for (const f of readdirSync(dir)) assert.equal(Buffer.from(readFileSync(join(dir, f))).includes('SECRET-ERROR-TEXT'), false)
 })

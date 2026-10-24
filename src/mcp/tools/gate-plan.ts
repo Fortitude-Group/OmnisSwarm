@@ -5,15 +5,23 @@
  * plan, which the gate then needs. Both use the gate's own settings and resolution (gateTarget), not a copy.
  */
 import { APPROVE_TOOL, GATE_PLAN_TOOL } from '../../core/recording.ts'
+import { clip } from '../../core/events.ts'
 import { approveGate } from '../gate/approvals.ts'
 import { settingsFor } from '../gate/detect.ts'
+import { SHOWN_COMMAND } from '../gate/gate.ts'
+import { redact } from '../redact.ts'
 import { gateTarget } from '../gate/target.ts'
 import type { ToolDef } from '../protocol.ts'
 import { TASK_ID, type ToolContext } from '../tools.ts'
 import { InputError, optString, reqString } from '../validate.ts'
 import { resolveWorktree } from '../worktrees.ts'
 
-export type GatePlan = { run: false } | { run: true; id: string; dir: string; command: string; digest: string }
+/**
+ * What the gate would do. `changed: true` means the gate differs from the one the task was created with, so the call is
+ * refused (gate.ts says the same): the guard needs no Bash query, and builds the refusal text from `state` (the task's
+ * state) and `command` (the command as a reply shows it, clipped and redacted, or "no gate found").
+ */
+export type GatePlan = { run: false } | { run: false; changed: true; state: string; command: string } | { run: true; id: string; dir: string; command: string; digest: string }
 
 const DIGEST = /^[0-9a-f]{64}$/
 export const NO_MOD_TEXT = "The gate needs OmnisSwarm's mod, and it isn't running in this session. Turn mods on, or mark the task done with skipGate and a note."
@@ -51,6 +59,10 @@ export function createGatePlanTools(ctx: ToolContext): ToolDef[] {
       const tasks = swarm === null ? {} : session.state(swarm).state.tasks
       const stored = Object.hasOwn(tasks, id) ? tasks[id]!.worktree : null
       const { dir, command, digest } = gateTarget(root, stored, worktree, settings.command)
+      const pin = Object.hasOwn(tasks, id) ? tasks[id]!.gatePin : null
+      if (pin !== null && digest !== pin) {
+        return answer({ run: false, changed: true, state: tasks[id]!.state, command: command === null ? 'no gate found' : clip(redact(command), SHOWN_COMMAND) })
+      }
       return answer(command === null || digest === null ? { run: false } : { run: true, id, dir, command, digest })
     },
   }

@@ -386,6 +386,19 @@ test('a gate changed since its task was created is refused, in block and warn al
   }
 })
 
+test('the pin survives a server restart: a new server over the same project still refuses a changed gate', async () => {
+  const s = await pinned({}, "node -e \"console.log('real')\"")
+  const pins = s.events().filter(e => e.type === 'task.created').map(e => (e.data as { gatePin?: string }).gatePin)
+  assert.equal(pins[0], undefined, 't1 was created before any gate existed')
+  assert.match(pins[1]!, /^[0-9a-f]{64}$/)
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 0' } }))
+  const again = createTools({ root: s.root, now: () => NOW, session: new Session(s.root), gate: { env: {} } })
+  const update = again.find(t => t.name === 'omnis_task_update')!
+  const r = await update.handler({ id: 't2', state: 'done' })
+  assert.deepEqual(r, { text: `Gate failed for t2 (${PINNED_WHY}, 0 s): npm run check. The task stays active.`, isError: true })
+  assert.equal(s.closed(), false)
+})
+
 test('a gate removed since its task was created is refused, not closed as no gate', async () => {
   const s = await pinned({}, 'node -e 0')
   writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: {} }))

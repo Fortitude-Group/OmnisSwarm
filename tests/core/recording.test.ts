@@ -41,7 +41,7 @@ test('the internal tool pattern matches our two tools by full name and nothing p
   assert.ok(INTERNAL_TOOL.test(FEED))
   assert.ok(INTERNAL_TOOL.test('mcp__omnis-swarm__omnis_record'))
   assert.ok(INTERNAL_TOOL.test('mcp__other__omnis_record'))
-  for (const name of ['omnis_replay', 'omnis_export', 'omnis_fence', 'omnis_gate_plan', 'omnis_gate_approve']) {
+  for (const name of ['omnis_replay', 'omnis_export', 'omnis_fence', 'omnis_gate_plan', 'omnis_gate_approve', 'omnis_handoff']) {
     assert.ok(INTERNAL_TOOL.test(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`), name)
     assert.ok(INTERNAL_TOOL.test(`mcp__omnis-swarm__${name}`), name)
     assert.equal(guardVerdict(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`, 'engine', 'omnis-swarm'), 'deny', name)

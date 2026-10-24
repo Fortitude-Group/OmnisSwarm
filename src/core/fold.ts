@@ -1,8 +1,9 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
   AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
+import { foldAgentTool } from './fold-agents.ts'
 import { foldTasks } from './fold-tasks.ts'
 import { costOf, sameModel, type Usage } from './prices.ts'
 
@@ -40,6 +41,10 @@ export type AgentGuard = { timeWarn: number | null; timeAct: number | null; cost
  * last subject. n: nudges so far. Kept after it re-arms, so the run report can list it.
  */
 export type AgentStuck = { on: boolean; p: StuckPattern; s: string; n: number }
+/** One ended tool call, as the handoff note lists it. */
+export type TrailEntry = { tool: string; subject: string; ok: boolean }
+/** One failed tool call and why. `text` is '' when the recorder gave no error. */
+export type ErrEntry = { tool: string; subject: string; text: string; at: number }
 export type EditEntry = { agent: string; at: number; blocked?: true }
 
 export type AgentState = {
@@ -78,6 +83,10 @@ export type AgentState = {
   stuckBy?: AgentStuck
   /** Absent until the scope fence first refuses (or warns about) one of the agent's edits. */
   fenceBlocks?: number
+  /** Absent until a call ends: the last 8 that did, oldest first. */
+  trail?: TrailEntry[]
+  /** Absent until a call fails: the last 3 that did, oldest first. */
+  errs?: ErrEntry[]
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -91,6 +100,12 @@ export type TaskEntry = {
   worktree: string | null
   /** The latest gate result and how many gates have run (or been skipped). history: the last 5 results, oldest first. */
   gate: { result: GateResult; at: number; runs: number; history: GateResult[] } | null
+  /** The gate's digest when the task was created (64 lowercase hex), or null. */
+  gatePin: string | null
+  /** How many handoff notes have been written for the task; absent until the first. */
+  handoffs?: number
+  /** The latest handoff note's agent (its name, or id when unknown) and reason; absent until the first. */
+  handedOn?: { from: string; why: HandoffWhy }
 }
 export type FeedItem = { at: number; kind: 'agent' | 'message' | 'memory' | 'task'; agent: string; text: string; to?: string }
 export type SwarmInfo = {
@@ -148,7 +163,7 @@ export const text = (x: unknown, max: number): string =>
   typeof x === 'string'
     ? Array.from(x.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()).slice(0, max).join('').trimEnd()
     : ''
-const trim = <T>(list: T[], max: number): void => {
+export const trim = <T>(list: T[], max: number): void => {
   while (list.length > max) list.shift()
 }
 
@@ -188,7 +203,7 @@ function resolve(state: SwarmState, rawName: string, at: number): string {
 }
 
 /** An agent.started or a tool start from an agent that had finished begins another run. Late usage does not. */
-function revive(a: AgentState, at: number): void {
+export function revive(a: AgentState, at: number): void {
   if (a.outcome === null && a.finishedAt === null) return
   a.outcome = null
   a.reason = null
@@ -212,7 +227,7 @@ export function feed(state: SwarmState, item: FeedItem): void {
 }
 
 /** A failed edit wrote nothing: the agent's latest entry for it goes, unless the clash guard marked it refused. */
-function dropFailedEdit(state: SwarmState, agent: string, subject: string): void {
+export function dropFailedEdit(state: SwarmState, agent: string, subject: string): void {
   const list = Object.hasOwn(state.edits, subject) ? state.edits[subject]! : []
   const i = list.findLastIndex(x => x.agent === agent)
   if (i < 0 || list[i]!.blocked === true) return
@@ -304,39 +319,9 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       a.lastActivity = at
       break
     }
-    case 'agent.tool': {
-      const d = e.data
-      const a = agentOf(state, who, at)
-      if (d.phase === 'start') revive(a, at)
-      const kind: ToolKind = isOneOf(TOOL_KINDS, d.kind) ? d.kind : 'other'
-      const subject = text(d.subject, 80)
-      if (d.phase === 'start') {
-        a.tools[kind]++
-        a.openTools++
-        if ((kind === 'read' || kind === 'edit') && subject !== '' && !a.files.includes(subject) && a.files.length < MAX_FILES) {
-          a.files.push(subject)
-        }
-        if (kind === 'edit' && subject !== '' && isSafeKey(subject)) {
-          const list = Object.hasOwn(state.edits, subject) ? state.edits[subject]! : (state.edits[subject] = [])
-          list.push({ agent: a.id, at })
-          trim(list, MAX_EDITS)
-        }
-        // An edit start re-arms nothing by itself: only an edit that goes ahead (its end, below) does.
-        if (a.stuckBy?.on === true && kind !== 'edit' && a.stuckBy.p === 'repeating' && subject !== a.stuckBy.s) a.stuckBy.on = false
-      } else {
-        a.openTools = Math.max(0, a.openTools - 1)
-        if (d.isError === true) {
-          a.errors++
-          a.errorsInRow++
-          if (kind === 'edit') dropFailedEdit(state, a.id, subject)
-        } else {
-          a.errorsInRow = 0
-          if (a.stuckBy !== undefined && (a.stuckBy.p === 'failing' || kind === 'edit')) a.stuckBy.on = false
-        }
-      }
-      a.lastActivity = at
+    case 'agent.tool':
+      foldAgentTool(state, e, at, who)
       break
-    }
     case 'message.sent': {
       const from = agentOf(state, who, at)
       const to = resolve(state, text(e.data.to, 64) || 'unknown', at)
@@ -365,6 +350,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     }
     case 'task.created':
     case 'task.updated':
+    case 'task.handoff':
     case 'gate.ran':
     case 'fence.blocked':
       foldTasks(state, e, at, who)

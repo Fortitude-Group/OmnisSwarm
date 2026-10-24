@@ -212,6 +212,29 @@ test('a subagent can not change what a task owns, under any server alias; main c
   }
 })
 
+test('a subagent can not change what a task depends on or hand a task on; main can', KIT, async ($, on) => {
+  await boot($, on)
+  const depends = 'Only main can change what a task depends on. Ask main instead.'
+  const handoff = "Only main can hand a task on. Report what's blocking you to main instead."
+  for (const tool of [TASK_UPDATE, 'mcp__omnis-swarm__omnis_task_update']) {
+    for (const input of [{ dependsOn: ['t2'] }, { dependsOn: [] }, { dependsOn: null }]) {
+      expect(await taskAs($, tool, 'a1', { id: 't1', state: 'active', ...input })).toEqual({ decision: 'deny', reason: depends })
+      expect((await taskAs($, tool, undefined, { id: 't1', state: 'active', ...input })).decision).toBe('allow')
+    }
+    // dependsOn next to an ownership key keeps the owns text.
+    expect(await taskAs($, tool, 'a1', { id: 't1', state: 'active', dependsOn: [], owns: ['**'] })).toEqual({ decision: 'deny', reason: OWNS_REFUSED })
+    expect(await taskAs($, tool, 'a1', { id: 't1', state: 'pending', handoff: true })).toEqual({ decision: 'deny', reason: handoff })
+    expect((await taskAs($, tool, undefined, { id: 't1', state: 'pending', handoff: true })).decision).toBe('allow')
+    expect((await taskAs($, tool, 'a1', { id: 't1', state: 'active', handoff: false })).decision).toBe('allow')
+  }
+})
+
+test('the dependsOn and handoff refusals hold with the fence off', { ...KIT, options: { scopeFence: 'off' } }, async ($, on) => {
+  await boot($, on)
+  expect((await taskAs($, TASK_UPDATE, 'a1', { id: 't1', state: 'active', dependsOn: [] })).decision).toBe('deny')
+  expect((await taskAs($, TASK_UPDATE, 'a1', { id: 't1', state: 'pending', handoff: true })).decision).toBe('deny')
+})
+
 test('the owns refusal holds with the fence off', { ...KIT, options: { scopeFence: 'off' } }, async ($, on) => {
   await boot($, on)
   expect((await taskAs($, TASK_UPDATE, 'a1', { id: 't1', owns: ['**'] })).decision).toBe('deny')

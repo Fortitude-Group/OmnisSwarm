@@ -2,14 +2,14 @@
  * The scope fence (spec section 3): a subagent whose task owns paths may edit only those. Its edits elsewhere are refused
  * (block), let through with a word to the lead (warn), or not checked (off). The lead is never fenced. Registered before
  * the clash guard, so a fenced-out edit is refused before it can take a hold. Also refuses a subagent's skipGate (spec
- * 2.6) and any subagent change to what a task owns, so an agent can't widen its own fence. A failure here, or a server
+ * 2.6) any subagent change to what a task owns or depends on (so an agent can't widen its own fence) and a subagent's handoff. A failure here, or a server
  * slower than 2 s, fails open, except that an agent last known to be fenced keeps its last fence.
  */
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
 import { FENCE_TOOL } from '../core/recording.ts'
 import { agentLabel } from './agent-name.ts'
 import {
-  FENCE_ASK_MS, FenceCache, FenceTold, OWNS_REFUSAL, SKIP_GATE_REFUSAL, fenceAllows, fenceRefusal, fenceSettingFrom, fenceWarn, parseFence,
+  DEPENDS_REFUSAL, FENCE_ASK_MS, FenceCache, FenceTold, HANDOFF_REFUSAL, OWNS_REFUSAL, SKIP_GATE_REFUSAL, fenceAllows, fenceRefusal, fenceSettingFrom, fenceWarn, parseFence,
   type Fence, type FenceSetting,
 } from './fence.ts'
 import { normalisePath } from './holds.ts'
@@ -22,6 +22,7 @@ const TASK_TOOLS = /^mcp__.+__omnis_task_(create|update)$/
 const TASK_UPDATE = /^mcp__.+__omnis_task_update$/
 /** omnis_task_update arguments only main may pass: each changes whose fence a task's owns make. */
 const OWNERSHIP_KEYS = ['owns', 'assignee', 'worktree']
+const has = (input: Fields, key: string): boolean => Object.hasOwn(input, key)
 const MAX_TASKS = 20
 
 /** Module state; a hot reload starts over, which only costs one more question to the server. */
@@ -78,7 +79,9 @@ export function registerFenceGuard(on: On, options: PluginOptions): void {
     const input = (typeof e.input === 'object' && e.input !== null ? e.input : {}) as Fields
     if (TASK_UPDATE.test(e.tool)) {
       if (input.skipGate === true) return { decision: 'deny' as const, reason: SKIP_GATE_REFUSAL }
-      if (OWNERSHIP_KEYS.some(k => Object.hasOwn(input, k))) return { decision: 'deny' as const, reason: OWNS_REFUSAL }
+      if (input.handoff === true) return { decision: 'deny' as const, reason: HANDOFF_REFUSAL }
+      if (OWNERSHIP_KEYS.some(k => has(input, k))) return { decision: 'deny' as const, reason: OWNS_REFUSAL }
+      if (has(input, 'dependsOn')) return { decision: 'deny' as const, reason: DEPENDS_REFUSAL }
     } else if (input.owns !== undefined && input.owns !== null && !(Array.isArray(input.owns) && input.owns.length === 0)) {
       return { decision: 'deny' as const, reason: OWNS_REFUSAL }
     }

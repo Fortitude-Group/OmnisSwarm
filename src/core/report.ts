@@ -1,6 +1,7 @@
 /** The run report (spec section 4.2): plain markdown from the folded state. Pure. */
 import { LEAD, limitText, type AgentState, type SwarmState } from './fold.ts'
 import { TASK_STATES } from './events.ts'
+import { strandedBy } from './ready.ts'
 import { fileClashes, totalTokens } from './stats.ts'
 
 const MAX_FILES = 5
@@ -54,6 +55,7 @@ function problems(s: SwarmState): string[] {
   for (const a of shown(s)) {
     if (a.stuckBy !== undefined) out.push(`- ${md(a.name)} looked stuck ${times(a.stuckBy.n)} and was asked to step back (last: ${md(a.stuckBy.p)}, ${a.stuckBy.s ? md(a.stuckBy.s) : 'no subject'}).`)
   }
+  for (const t of Object.values(s.tasks)) if (t.handedOn !== undefined) out.push(`- ${md(t.id)} was handed on from ${md(t.handedOn.from)} (${t.handedOn.why}${(t.handoffs ?? 1) > 1 ? `, ${t.handoffs} times` : ''}).`)
   for (const t of Object.values(s.tasks)) {
     const r = t.gate?.result
     if (r === 'failed' || r === 'timeout' || r === 'error') out.push(`- Gate failed for ${md(t.id)} (${r === 'timeout' ? 'timed out' : r === 'error' ? 'could not start' : 'failed'}).`)
@@ -83,7 +85,12 @@ function tasks(s: SwarmState): string[] {
   const all = Object.values(s.tasks)
   if (all.length === 0) return []
   const counts = TASK_STATES.map(k => `${all.filter(t => t.state === k).length} ${k}`).join(', ')
-  return [`${counts}.`, ...all.filter(t => t.state === 'failed').map(t => `- Failed: ${md(t.id)} ${md(t.title)}`)]
+  const never = all.map(t => ({ t, by: strandedBy(s, t.id) })).filter(x => x.by.length > 0)
+  return [
+    `${counts}.`,
+    ...all.filter(t => t.state === 'failed').map(t => `- Failed: ${md(t.id)} ${md(t.title)}`),
+    ...never.map(({ t, by }) => `- Never started: ${md(t.id)}, waiting on failed ${by.map(md).join(', ')}.`),
+  ]
 }
 
 /**

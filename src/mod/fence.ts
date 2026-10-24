@@ -16,6 +16,8 @@ export const fenceSettingFrom = (x: unknown): FenceSetting => (x === 'warn' || x
 
 export const SKIP_GATE_REFUSAL = 'Only main can skip the gate. Report the problem to main instead.'
 export const OWNS_REFUSAL = 'Only main can change what a task owns. Ask main instead.'
+export const DEPENDS_REFUSAL = 'Only main can change what a task depends on. Ask main instead.'
+export const HANDOFF_REFUSAL = "Only main can hand a task on. Report what's blocking you to main instead."
 
 export const fenceRefusal = (path: string, tasks: readonly string[], owns: readonly string[]): string =>
   `${path} is outside the files your task owns (${tasks.join(', ')}: ${clip(owns.join(', '), PATTERNS_MAX)}). Ask main to widen the task, or leave it to the agent that owns it.`

@@ -1,9 +1,9 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
-import { AGENT_OUTCOMES, GATE_RESULTS, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
-import { GATE_HISTORY, MAX_OWNS, MAX_OWN_LEN, MAX_WORKTREE } from './fold-tasks.ts'
+import { AGENT_OUTCOMES, GATE_RESULTS, HANDOFF_WHY, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { ERRS_KEEP, TRAIL_KEEP } from './fold-agents.ts'
+import { GATE_HISTORY, MAX_DEPENDS, MAX_OWNS, MAX_OWN_LEN, MAX_WORKTREE } from './fold-tasks.ts'
 import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
 
-const MAX_DEPENDS = 20
 const MAX_SPEND = 200_000
 const MAX_KEY = 256
 const CONTROL = /[\p{Cc}\p{Cf}]/u
@@ -49,6 +49,8 @@ const swarmGuard = (x: unknown): boolean => exact(x, ['warn', 'block']) && Objec
 
 const stuckRec = (x: unknown): boolean =>
   exact(x, ['on', 'p', 's', 'n']) && typeof x.on === 'boolean' && isOneOf(STUCK_PATTERNS, x.p) && str(x.s, 80) && num(x.n)
+const trailRec = (x: unknown): boolean => exact(x, ['tool', 'subject', 'ok']) && str(x.tool, 80) && str(x.subject, 80) && typeof x.ok === 'boolean'
+const errRec = (x: unknown): boolean => exact(x, ['tool', 'subject', 'text', 'at']) && str(x.tool, 80) && str(x.subject, 80) && str(x.text, 160) && num(x.at)
 const editRec = (e: unknown): boolean => {
   if (!isPlain(e)) return false
   return exact(e, Object.hasOwn(e, 'blocked') ? ['agent', 'at', 'blocked'] : ['agent', 'at']) &&
@@ -64,7 +66,7 @@ const AGENT_KEYS = [
 ]
 
 /** Keys an agent gains only once something happens to it. */
-const OPTIONAL_AGENT_KEYS = ['guard', 'route', 'stuckBy', 'fenceBlocks']
+const OPTIONAL_AGENT_KEYS = ['guard', 'route', 'stuckBy', 'fenceBlocks', 'trail', 'errs']
 
 const agent = (x: unknown): boolean =>
   exact(x, isPlain(x) ? [...AGENT_KEYS, ...OPTIONAL_AGENT_KEYS.filter(k => Object.hasOwn(x, k))] : AGENT_KEYS) &&
@@ -79,7 +81,9 @@ const agent = (x: unknown): boolean =>
   (!Object.hasOwn(x, 'guard') || guardRec(x.guard)) &&
   (!Object.hasOwn(x, 'route') || routeRec(x.route)) &&
   (!Object.hasOwn(x, 'stuckBy') || stuckRec(x.stuckBy)) &&
-  (!Object.hasOwn(x, 'fenceBlocks') || num(x.fenceBlocks))
+  (!Object.hasOwn(x, 'fenceBlocks') || num(x.fenceBlocks)) &&
+  (!Object.hasOwn(x, 'trail') || list(x.trail, TRAIL_KEEP, trailRec)) &&
+  (!Object.hasOwn(x, 'errs') || list(x.errs, ERRS_KEEP, errRec))
 
 const session = (x: unknown): x is Rec =>
   exact(x, ['contextTokens', 'contextWindow', 'contextPercent', 'costUsd', 'at']) && Object.values(x).every(nnum) &&
@@ -96,11 +100,18 @@ const gateRec = (x: unknown): boolean =>
   exact(x, ['result', 'at', 'runs', 'history']) && isOneOf(GATE_RESULTS, x.result) && num(x.at) && num(x.runs) &&
   list(x.history, GATE_HISTORY, r => isOneOf(GATE_RESULTS, r))
 
+const TASK_KEYS = ['id', 'title', 'state', 'assignee', 'dependsOn', 'createdAt', 'updatedAt', 'note', 'owns', 'worktree', 'gate', 'gatePin']
+
+const handedOn = (x: unknown): boolean => exact(x, ['from', 'why']) && str(x.from, 64) && isOneOf(HANDOFF_WHY, x.why)
+
 const task = (x: unknown): boolean =>
-  exact(x, ['id', 'title', 'state', 'assignee', 'dependsOn', 'createdAt', 'updatedAt', 'note', 'owns', 'worktree', 'gate']) &&
+  exact(x, isPlain(x) ? [...TASK_KEYS, ...['handoffs', 'handedOn'].filter(k => Object.hasOwn(x, k))] : TASK_KEYS) &&
   str(x.id, 32) && str(x.title, 120) && isOneOf(TASK_STATES, x.state) && nstr(x.assignee, 64) &&
   list(x.dependsOn, MAX_DEPENDS, d => str(d, 80)) && num(x.createdAt) && num(x.updatedAt) && nstr(x.note, 200) &&
-  list(x.owns, MAX_OWNS, o => str(o, MAX_OWN_LEN)) && nstr(x.worktree, MAX_WORKTREE) && (x.gate === null || gateRec(x.gate))
+  list(x.owns, MAX_OWNS, o => str(o, MAX_OWN_LEN)) && nstr(x.worktree, MAX_WORKTREE) && (x.gate === null || gateRec(x.gate)) &&
+  (x.gatePin === null || (typeof x.gatePin === 'string' && /^[0-9a-f]{64}$/.test(x.gatePin))) &&
+  (!Object.hasOwn(x, 'handoffs') || num(x.handoffs)) &&
+  (!Object.hasOwn(x, 'handedOn') || handedOn(x.handedOn))
 
 const feedItem = (x: unknown): boolean => {
   if (!isPlain(x)) return false

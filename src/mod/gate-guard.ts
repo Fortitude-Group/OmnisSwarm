@@ -8,6 +8,7 @@
  * Unlike the other guards this fails closed.
  */
 import type { EngineInterface, On, ToolCheckResult } from 'claude-code'
+import { PINNED_WHY, refusedText } from '../core/gate-text.ts'
 import { APPROVE_TOOL, GATE_PLAN_TOOL } from '../core/recording.ts'
 import { connectServer } from './server.ts'
 
@@ -21,7 +22,7 @@ export const deniedText = (command: string): string => `The gate command is not 
 export const askText = (command: string, dir: string): string => `OmnisSwarm will run the verification gate: ${command} in ${dir}`
 export const FAILED_TEXT = 'Could not check permission for the gate. Try again, or mark it done with skipGate and a note.'
 
-type Plan = { run: false } | { run: true; id: string; dir: string; command: string; digest: string }
+type Plan = { run: false; changed: false } | { run: false; changed: true; state: string; command: string } | { run: true; id: string; dir: string; command: string; digest: string }
 type Fields = Record<string, unknown>
 
 const refuse = (reason: string): ToolCheckResult => ({ decision: 'deny', reason })
@@ -37,7 +38,10 @@ function parsePlan(text: string): Plan | null {
   }
   if (typeof x !== 'object' || x === null) return null
   const p = x as Fields
-  if (p.run === false) return { run: false }
+  if (p.run === false) {
+    if (p.changed === true) return nonEmpty(p.state) && nonEmpty(p.command) ? { run: false, changed: true, state: p.state, command: p.command } : null
+    return { run: false, changed: false }
+  }
   if (p.run === true && nonEmpty(p.id) && nonEmpty(p.dir) && nonEmpty(p.command) && typeof p.digest === 'string' && DIGEST.test(p.digest)) {
     return { run: true, id: p.id, dir: p.dir, command: p.command, digest: p.digest }
   }
@@ -73,7 +77,11 @@ export function registerGateGuard(on: On): void {
     const reply = await callServer($, GATE_PLAN_TOOL, { id: input.id, ...(input.worktree !== undefined && { worktree: input.worktree }) })
     const plan = reply === null ? null : parsePlan(reply)
     if (plan === null) return refuse(FAILED_TEXT)
-    if (!plan.run) return next(e)
+    if (!plan.run) {
+      // The gate changed since the task was created: the server would refuse, so refuse here before a Bash query can prompt.
+      if (plan.changed) return refuse(refusedText(typeof input.id === 'string' ? input.id : '', PINNED_WHY, plan.command, plan.state))
+      return next(e)
+    }
     const verdict = await $.tool.check({ tool: 'Bash', input: { command: plan.command, description: gateDescription(plan.dir) } })
     if (verdict.decision === 'deny') return refuse(deniedText(plan.command))
     // A query runs no PreToolUse hook and carries no agent, and a sandbox or a mode can allow a Bash call the gate

@@ -343,3 +343,39 @@ test('report.written is the server\'s own event: omnis_record refuses it', () =>
   const { call } = setup()
   assert.throws(() => call({ sessionId: SID, ts: TS, type: 'report.written', data: { path: 'x', agents: 1, minutes: 1, costUsd: 1 } }), InputError)
 })
+
+test('agent.tool end: error is kept, cleaned, redacted and clipped to 160', () => {
+  const { call, events } = setup()
+  const END = { ...TOOL, phase: 'end', isError: true }
+  const send = (error: unknown) => call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...END, error } })
+  send('tests/a.test.ts:41\u001b[31m   expected 3,\n got 2')
+  send(`token ghp_${'A'.repeat(30)} leaked`)
+  send('é'.repeat(300))
+  send('\u0000\u0007  ')
+  const sent = events(SWARM).filter(e => e.type === 'agent.tool').map(e => e.data as { error?: string })
+  assert.equal(sent[0]!.error, 'tests/a.test.ts:41 [31m expected 3, got 2')
+  assert.equal(sent[1]!.error, 'token [redacted] leaked')
+  assert.equal(Array.from(sent[2]!.error!).length, 160)
+  assert.ok(sent[2]!.error!.endsWith('…'))
+  assert.equal(Object.hasOwn(sent[3]!, 'error'), false)
+})
+
+test('agent.tool error is refused unless it is text on a failed end', () => {
+  const { call, events } = setup()
+  const send = (data: Record<string, unknown>) => call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...TOOL, ...data } })
+  assert.throws(() => send({ phase: 'end', isError: false, error: 'x' }), InputError)
+  assert.throws(() => send({ phase: 'start', isError: true, error: 'x' }), InputError)
+  assert.throws(() => send({ phase: 'end', isError: true, error: 5 }), InputError)
+  assert.throws(() => send({ phase: 'end', isError: true, error: { a: 1 } }), InputError)
+  assert.equal(events(SWARM).length, 0)
+})
+
+test('agent.tool end: a token split by a newline or control character is still blanked', () => {
+  const { call, events } = setup()
+  const END = { ...TOOL, phase: 'end', isError: true }
+  call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...END, error: `leak ghp_${'A'.repeat(12)}\n${'B'.repeat(12)} done` } })
+  call({ sessionId: SID, ts: TS, type: 'agent.tool', agent: 'lead', data: { ...END, error: 'failed password=S3cretPass! at https://rob:Hunter2pass@dev.azure.com/org' } })
+  const sent = events(SWARM).filter(e => e.type === 'agent.tool').map(e => (e.data as { error: string }).error)
+  assert.doesNotMatch(sent[0]!, /ghp_|AAAA|BBBB/)
+  assert.equal(sent[1], 'failed password=[redacted] at https://rob:[redacted]@dev.azure.com/org')
+})

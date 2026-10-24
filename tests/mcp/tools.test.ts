@@ -448,3 +448,64 @@ test('the schemas offer owns, worktree and skipGate', () => {
   assert.equal(props('omnis_task_update').skipGate?.type, 'boolean')
   assert.equal(props('omnis_task_create').skipGate, undefined)
 })
+
+test('task_update dependsOn replaces the list, clears it, and is written on the event', async () => {
+  const { call, update, events } = setup()
+  call('omnis_swarm_init', { name: 'Deps', topology: 'mesh' })
+  for (const title of ['a', 'b', 'c']) call('omnis_task_create', { title })
+  await update({ id: 't3', state: 'pending', dependsOn: ['t1', 't2', 't1'] })
+  await update({ id: 't3', state: 'pending', dependsOn: [] })
+  await update({ id: 't3', state: 'active' })
+  const updates = events('deps').filter(e => e.type === 'task.updated').map(e => e.data)
+  assert.deepEqual(updates, [
+    { id: 't3', state: 'pending', dependsOn: ['t1', 't2'] },
+    { id: 't3', state: 'pending', dependsOn: [] },
+    { id: 't3', state: 'active' },
+  ])
+})
+
+test('task_update dependsOn refuses an unknown task and a loop, and writes nothing', async () => {
+  const { call, update, events } = setup()
+  call('omnis_swarm_init', { name: 'Loop', topology: 'mesh' })
+  call('omnis_task_create', { title: 'a' })
+  call('omnis_task_create', { title: 'b', dependsOn: ['t1'] })
+  call('omnis_task_create', { title: 'c', dependsOn: ['t2'] })
+  const before = events('loop').length
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t9'] }), /^InputError: dependsOn: no task t9 in swarm loop\.$/)
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t1'] }), /^InputError: dependsOn would make a loop: t1 → t1\.$/)
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t2'] }), /^InputError: dependsOn would make a loop: t1 → t2 → t1\.$/)
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t3'] }), /^InputError: dependsOn would make a loop: t1 → t3 → t2 → t1\.$/)
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: 't2' }), InputError)
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['x1'] }), InputError)
+  assert.equal(events('loop').length, before)
+  await update({ id: 't3', state: 'pending', dependsOn: ['t1'] })
+})
+
+test('a loop longer than 8 ids is shown cut with an ellipsis', async () => {
+  const { call, update } = setup()
+  call('omnis_swarm_init', { name: 'Long', topology: 'mesh' })
+  call('omnis_task_create', { title: 't' })
+  for (let i = 2; i <= 12; i++) call('omnis_task_create', { title: 't', dependsOn: [`t${i - 1}`] })
+  await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t12'] }), /^InputError: dependsOn would make a loop: t1 → t12 → t11 → t10 → t9 → t8 → t7 → t6 → …\.$/)
+})
+
+test('task_update handoff is a boolean, is refused with done, and is refused for a task with no worked agent', async () => {
+  const { call, update, events } = setup()
+  call('omnis_swarm_init', { name: 'Hand', topology: 'mesh' })
+  call('omnis_task_create', { title: 'a', assignee: 'dev' })
+  await assert.rejects(update({ id: 't1', state: 'done', handoff: true }), /^InputError: A done task has nothing to hand on\.$/)
+  await assert.rejects(update({ id: 't1', state: 'pending', handoff: 'yes' }), InputError)
+  assert.equal(events('hand').some(e => e.type === 'task.updated'), false)
+  assert.match((await update({ id: 't1', state: 'done', handoff: false })).text, /^Task t1 is now done\.$/)
+  call('omnis_task_create', { title: 'b' })
+  await assert.rejects(update({ id: 't2', state: 'pending', handoff: true }), /^InputError: t2 has no agent's work to hand on\.$/)
+  assert.deepEqual(events('hand').filter(e => e.type === 'task.updated').at(-1)!.data, { id: 't1', state: 'done' })
+})
+
+test('the update schema offers dependsOn and handoff', () => {
+  const { tools } = setup()
+  const props = tools.find(t => t.name === 'omnis_task_update')!.inputSchema.properties as Record<string, Record<string, unknown>>
+  assert.equal(props.dependsOn?.type, 'array')
+  assert.equal(props.dependsOn?.maxItems, 20)
+  assert.equal(props.handoff?.type, 'boolean')
+})

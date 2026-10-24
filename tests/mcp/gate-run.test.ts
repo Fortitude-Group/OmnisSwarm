@@ -32,12 +32,32 @@ const setup = (over: Partial<RunOptions> = {}): RunOptions => {
   mkdirSync(join(dir, 'logs'))
   return { command: node('0'), cwd: dir, logFile: join(dir, 'logs', 'g.log'), limitMs: 20_000, ...over }
 }
+/** Long enough for a loaded machine to start node twice before the limit stops the command. */
+const TREE_LIMIT_MS = 5000
 /** Starts a grandchild that sleeps 30 s, prints its PID, then sleeps itself. */
 const SPAWNS_GRANDCHILD = node("const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{stdio:'ignore'});console.log('GRANDCHILD '+c.pid);setTimeout(()=>{},30000)")
 const grandchildPid = (log: string): number => {
   const m = /GRANDCHILD (\d+)/.exec(readFileSync(log, 'utf8'))
   assert.ok(m, 'the grandchild printed its pid')
   return Number(m[1])
+}
+
+/**
+ * Waits until the command has printed its grandchild's pid. A fixed sleep is not enough: under load (other test runs
+ * on the same machine) node can take longer than that to start and spawn, and the pid is then not in the log yet.
+ */
+async function started(log: string, ms = 20_000): Promise<number> {
+  const until = Date.now() + ms
+  while (Date.now() < until) {
+    try {
+      const m = /GRANDCHILD (\d+)/.exec(readFileSync(log, 'utf8'))
+      if (m) return Number(m[1])
+    } catch {
+      // The log is not there yet.
+    }
+    await sleep(50)
+  }
+  throw new Error('the command never printed its grandchild pid')
 }
 
 test('exit 0 passes, and output goes to the log', async () => {
@@ -66,12 +86,12 @@ test('stdin is not open to the gate', async () => {
 
 test('past the time limit the whole tree is killed, grandchild included', async () => {
   const kills: number[] = []
-  const opts = setup({ command: SPAWNS_GRANDCHILD, limitMs: 1500, onKill: pid => kills.push(pid) })
+  const opts = setup({ command: SPAWNS_GRANDCHILD, limitMs: TREE_LIMIT_MS, onKill: pid => kills.push(pid) })
   const out = await runGate(opts)
   assert.equal(kills.length, 1, 'killed once, while it ran')
   assert.equal(out.result, 'timeout')
   assert.equal(out.exit, undefined)
-  assert.ok(out.ms >= 1400 && out.ms < 15_000, `took ${out.ms} ms`)
+  assert.ok(out.ms >= TREE_LIMIT_MS - 100 && out.ms < TREE_LIMIT_MS + 15_000, `took ${out.ms} ms`)
   assert.ok(await gone(grandchildPid(opts.logFile)), 'the grandchild is gone')
 })
 
@@ -79,7 +99,7 @@ test('an abort kills the tree and answers cancelled', async () => {
   const controller = new AbortController()
   const opts = setup({ command: SPAWNS_GRANDCHILD, signal: controller.signal })
   const running = runGate(opts)
-  await sleep(1200)
+  await started(opts.logFile)
   controller.abort()
   const out = await running
   assert.equal(out.result, 'cancelled')
@@ -163,7 +183,7 @@ test('a background child holding the output open does not hold the gate past its
     // On Windows its PID may already be another process's, so nothing is killed after the exit. Elsewhere the
     // process group is killed (its id can't be reused while a member lives), but only if the output was still held.
     if (process.platform === 'win32') assert.deepEqual(kills, [], 'no kill once the command had exited')
-    else assert.ok(kills.length <= 1)
+    else assert.equal(kills.length, 1, 'the process group is killed once, as the output was still held')
   } finally {
     if (alive(pid)) process.kill(pid) // ours: started by this test's command
   }
@@ -172,7 +192,7 @@ test('a background child holding the output open does not hold the gate past its
 test('killAllGates kills every running tree at once', async () => {
   const opts = setup({ command: SPAWNS_GRANDCHILD })
   const running = runGate(opts)
-  await sleep(1200)
+  await started(opts.logFile)
   killAllGates()
   const out = await running
   assert.notEqual(out.result, 'passed')
@@ -185,7 +205,7 @@ test('SIGTERM, SIGINT and SIGHUP kill running gates, then exit', async () => {
   installShutdown(fake, code => exits.push(code))
   const opts = setup({ command: SPAWNS_GRANDCHILD })
   const running = runGate(opts)
-  await sleep(1200)
+  await started(opts.logFile)
   fake.emit('SIGTERM')
   await running
   assert.ok(await gone(grandchildPid(opts.logFile)), 'the grandchild is gone')
