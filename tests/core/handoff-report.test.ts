@@ -22,7 +22,7 @@ test('the report lists a handed-on task under Problems with the agent and why', 
 test('a task handed on twice shows the last one, once', () => {
   const md = report([...base(), handoff('stuck', 5), handoff('lead', 6)])
   assert.equal(md.split('\n').filter(l => l.includes('was handed on')).length, 1)
-  assert.match(md, /- t3 was handed on from dev-2 \(lead\)\./)
+  assert.match(md, /- t3 was handed on from dev-2 \(lead, 2 times\)\./)
 })
 
 test('an agent the fold does not know is named by its id; a swarm with no handoff has no such line', () => {
