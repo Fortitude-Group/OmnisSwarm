@@ -26,7 +26,7 @@ Or in one go:
 /plugin install omnis-swarm --marketplace Fortitude-Group/OmnisSwarm
 ```
 
-The version is pinned (0.2.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
+The version is pinned (0.3.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
 
 ```
 claude plugin update omnis-swarm@omnis-swarm
@@ -52,6 +52,8 @@ Three limits, each with a warning before it acts:
 | Agent budget | $5 | three fifths ($3) | The same. |
 | Swarm budget | $20 | half ($10) | The lead can't start new agents until you raise it with `/omnis budget <usd>`. |
 
+On a subscription (Pro, Max and so on) the dollar limits make no sense: you've paid already, and what actually runs out is your 5-hour window. So once Claude Code reports that window, the two dollar limits switch off. You still see the costs, the time-box still applies, and `/omnis budget` shows the window's use instead of a budget. The `billing` setting overrides the guesswork either way.
+
 Warnings show up as toasts. The dollar figures are estimates (hence the ≈ in front of them). They're worked out from token counts and the price table in `src/core/prices.ts`, not read off your bill. Once Claude Code reports its own session cost, the swarm total uses that, counted from when the swarm began.
 
 ## The clash guard
@@ -70,9 +72,10 @@ Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyym
 
 ## Settings
 
-Five of them, all in `userConfig`:
+Six of them, all in `userConfig`:
 
 - `panel`: `command` (the default) opens the pane only when you ask, with `/omnis pane` or `/omnis-swarm:watch`. `auto` also opens it when a swarm starts. `off` never opens it.
+- `billing`: `auto` (the default) works it out: a subscription once Claude Code reports your 5-hour or 7-day usage window, pay-as-you-go otherwise. `subscription` turns the dollar limits off. `api` keeps every limit on.
 - `budgetAgentMinutes`: the agent time-box, 1 to 1440 minutes. Default 30.
 - `budgetAgentUsd`: the agent budget in dollars, above 0 and at most 1000. Default 5.
 - `budgetSwarmUsd`: the swarm budget in dollars, above 0 and at most 1000. Default 20.

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { foldAll, fold, LEAD } from '../../src/core/fold.ts'
 import {
-  DEFAULT_LIMITS, budgetText, blockReason, effective, evaluate, isBlocked, limitsFrom, nudgeText, parseBudget, parseUsd, swarmCost, toastText, warnLevel,
+  DEFAULT_LIMITS, billingFrom, budgetText, planReading, blockReason, effective, evaluate, isBlocked, limitsFrom, nudgeText, parseBudget, parseUsd, swarmCost, toastText, warnLevel,
 } from '../../src/core/budget.ts'
 import { at, ev } from '../helpers.ts'
 
@@ -115,4 +115,39 @@ test('the words', () => {
   assert.equal(nudgeText(DEFAULT_LIMITS), "You're past your time-box (30 min / $5). Wrap up what you have, report to main, and stop.")
   assert.equal(blockReason(DEFAULT_LIMITS), 'Swarm budget $20 reached. Raise it with /omnis budget <usd> or finish with the agents you have.')
   assert.equal(budgetText(DEFAULT_LIMITS, 4.123), 'Budget: each agent 30 min / $5 (warns at 20 min / $3); swarm $20 (warns at $10). Swarm so far ≈$4.12. New agents: allowed.')
+})
+
+test('billing comes from the options, anything unknown meaning auto', () => {
+  assert.equal(billingFrom({}), 'auto')
+  assert.equal(billingFrom({ billing: 'subscription' }), 'subscription')
+  assert.equal(billingFrom({ billing: 'api' }), 'api')
+  assert.equal(billingFrom({ billing: 'API' }), 'auto')
+  assert.equal(billingFrom({ billing: 3 }), 'auto')
+})
+
+test('a 5-hour or 7-day window is a subscription reading, a gateway spend limit or nothing is not', () => {
+  assert.deepEqual(planReading([{ kind: 'five_hour', percentUsed: 34.5 }, { kind: 'seven_day', percentUsed: 12 }]), { fiveHour: 34.5 })
+  assert.deepEqual(planReading([{ kind: 'seven_day', percentUsed: 12 }]), { fiveHour: null })
+  assert.deepEqual(planReading([{ kind: 'five_hour', percentUsed: 140 }]), { fiveHour: 100 })
+  assert.deepEqual(planReading([{ kind: 'five_hour', percentUsed: 'x' }]), { fiveHour: null })
+  assert.equal(planReading([{ kind: 'spend_limit', percentUsed: 50 }]), null)
+  assert.equal(planReading([]), null)
+  assert.equal(planReading(undefined), null)
+  assert.equal(planReading([null, 'five_hour', { kind: 7 }]), null)
+})
+
+test('with dollars off only the time-box is checked: no agent cost stages, no swarm warn or block', () => {
+  const state = foldAll('s1', [started, ev('agent.usage', { model: 'claude-opus-5-5', input: 0, output: 450_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, { agent: 'a1', atSec: 1 })])
+  const off = evaluate(state, DEFAULT_LIMITS, 50, min(31), false)
+  assert.deepEqual(off.map(a => [a.kind, 'limit' in a ? a.limit : null]), [['warn', 'time'], ['nudge', 'time']])
+  const on = evaluate(state, DEFAULT_LIMITS, 50, min(31))
+  assert.ok(on.some(a => a.kind === 'block') && on.some(a => a.kind === 'nudge' && a.limit === 'agentCost'))
+})
+
+test('the subscription words: no dollar budget in the nudge or the budget line', () => {
+  assert.equal(nudgeText(DEFAULT_LIMITS, false), "You're past your time-box (30 min). Wrap up what you have, report to main, and stop.")
+  assert.equal(budgetText(DEFAULT_LIMITS, 12.5, { fiveHour: 34 }),
+    'Budget: on a subscription, so no dollar limits (costs are shown for reference). Each agent 30 min (warns at 20 min). Swarm so far ≈$12.50. 5-hour window 34% used. New agents: allowed.')
+  assert.equal(budgetText(DEFAULT_LIMITS, 0, { fiveHour: null }),
+    'Budget: on a subscription, so no dollar limits (costs are shown for reference). Each agent 30 min (warns at 20 min). Swarm so far ≈$0.00. New agents: allowed.')
 })

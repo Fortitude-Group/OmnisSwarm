@@ -5,8 +5,8 @@
  */
 import type { EngineInterface, On, PluginOptions, Timer } from 'claude-code'
 import {
-  blockReason, effective, evaluate, isBlocked, limitsFrom, mainText, nudgeText, parseBudget, swarmCost, toastText, warnLevel,
-  type BudgetPatch, type GuardAction, type Limits,
+  billingFrom, blockReason, effective, evaluate, isBlocked, limitsFrom, mainText, nudgeText, parseBudget, planReading, swarmCost, toastText, warnLevel,
+  type BillingMode, type BudgetPatch, type GuardAction, type Limits,
 } from '../core/budget.ts'
 import { makeEvent, type SwarmEvent } from '../core/events.ts'
 import { emptyState, fold, LEAD, type SwarmState } from '../core/fold.ts'
@@ -33,6 +33,11 @@ type GuardHost = {
 
 type Guard = {
   defaults: Limits
+  /** The billing setting, and whether this session has reported a subscription's usage window (sticky once seen). */
+  billing: BillingMode
+  planSeen: boolean
+  /** The 5-hour window's use from the latest subscription reading, when it had one. */
+  fiveHour: number | null
   host: GuardHost | null
   state: SwarmState | null
   /** The session cost when this swarm began, and the latest one seen. */
@@ -54,8 +59,8 @@ type Guard = {
   again: boolean
 }
 
-const freshGuard = (defaults: Limits): Guard => ({
-  defaults, host: null, state: null, baseUsd: null, sessionUsd: null, nextBudget: null, nextRecord: false, timer: null, offset: Promise.resolve(0), checking: false, again: false,
+const freshGuard = (defaults: Limits, billing: BillingMode = 'auto'): Guard => ({
+  defaults, billing, planSeen: false, fiveHour: null, host: null, state: null, baseUsd: null, sessionUsd: null, nextBudget: null, nextRecord: false, timer: null, offset: Promise.resolve(0), checking: false, again: false,
 })
 /** Module state; a hot reload starts it over (and may warn once more about an agent it had already warned about). */
 let g: Guard = freshGuard(limitsFrom({}))
@@ -78,6 +83,8 @@ function hostOf($: EngineInterface): GuardHost {
 }
 
 const limits = (): Limits => (g.state === null ? g.defaults : effective(g.defaults, g.state))
+/** The dollar limits apply on pay-as-you-go only: billing api, or auto before any subscription reading. */
+const dollars = (): boolean => g.billing === 'api' || (g.billing === 'auto' && !g.planSeen)
 const cost = (): number => (g.state === null ? 0 : swarmCost(g.state, g.baseUsd))
 const nameOf = (id: string): string => g.state?.agents[id]?.name ?? id
 
@@ -144,7 +151,7 @@ async function nudge(host: GuardHost, a: Extract<GuardAction, { kind: 'nudge' }>
   let delivered = false
   let reason: string | undefined
   try {
-    const sent = await host.sendTo(a.agent, nudgeText(lim))
+    const sent = await host.sendTo(a.agent, nudgeText(lim, dollars()))
     delivered = sent.isDelivered
     reason = sent.isDelivered ? undefined : String(sent.reason ?? '').slice(0, 80)
   } catch (err) {
@@ -173,7 +180,7 @@ async function checkOnce(): Promise<void> {
     const now = (await host.now()) - (await g.offset)
     if (g.host !== host || g.state === null) return
     const lim = limits()
-    const actions = evaluate(g.state, lim, cost(), now)
+    const actions = evaluate(g.state, lim, cost(), now, dollars())
     const ts = new Date(Date.now()).toISOString()
     for (const a of actions) apply(bodyOf(a), ts)
     for (const a of actions) {
@@ -226,15 +233,25 @@ export const guardObserver: RecordObserver = {
     apply(body, ts)
     if (body.type === 'agent.usage' || body.type === 'session.measure' || body.type === 'agent.started' || body.type === 'agent.finished') void check()
   },
+  measured: rateLimits => {
+    const plan = planReading(rateLimits)
+    if (plan === null) return
+    g.planSeen = true
+    if (plan.fiveHour !== null) g.fiveHour = plan.fiveHour
+  },
 }
 
-export function guardView(): { limits: Limits; swarmUsd: number; swarm: string | null; pendingUsd: number | null } {
-  return { limits: limits(), swarmUsd: cost(), swarm: g.state?.swarm.id ?? null, pendingUsd: g.state === null ? (g.nextBudget?.swarmUsd ?? null) : null }
+/** `plan` is set when the dollar limits are off (a subscription). */
+export function guardView(): { limits: Limits; swarmUsd: number; swarm: string | null; pendingUsd: number | null; plan?: { fiveHour: number | null } } {
+  return {
+    limits: limits(), swarmUsd: cost(), swarm: g.state?.swarm.id ?? null, pendingUsd: g.state === null ? (g.nextBudget?.swarmUsd ?? null) : null,
+    ...(!dollars() && { plan: { fiveHour: g.fiveHour } }),
+  }
 }
 
-/** The header's budget figures; null unless the guard's swarm is the one the pane shows. */
+/** The header's budget figures; null unless the guard's swarm is the one the pane shows, or on a subscription (plain cost then). */
 export function viewBudget(shownSwarm: string | null): ViewBudget | null {
-  if (g.state === null || g.state.swarm.id !== shownSwarm) return null
+  if (g.state === null || g.state.swarm.id !== shownSwarm || !dollars()) return null
   const lim = limits()
   const swarmUsd = cost()
   return { swarmUsd, limit: lim.swarmUsd, warn: warnLevel(lim, 'swarmUsd'), blocked: isBlocked(lim, swarmUsd) }
@@ -274,11 +291,11 @@ const failed = (result: { isError?: boolean; deny?: unknown }): boolean => resul
 
 export function registerBudgetGuard(on: On, options: PluginOptions): void {
   g.timer?.cancel()
-  g = freshGuard(limitsFrom(options))
+  g = freshGuard(limitsFrom(options), billingFrom(options))
 
-  // Matched: guard.ts holds the one unmatched tool.check. Only the lead's real Agent calls are refused.
+  // Matched: guard.ts holds the one unmatched tool.check. Only the lead's real Agent calls are refused, and never on a subscription.
   on('tool.check', { tool: 'Agent' }, ($, e, next) =>
-    e.agentId === undefined && e.tool_use_id !== undefined && g.state !== null && isBlocked(limits(), cost())
+    e.agentId === undefined && e.tool_use_id !== undefined && g.state !== null && dollars() && isBlocked(limits(), cost())
       ? { decision: 'deny' as const, reason: blockReason(limits()) }
       : next(e),
   ).catch((_$, e, next) => next(e))

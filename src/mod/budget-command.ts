@@ -19,12 +19,14 @@ const usdText = (n: number): string => `$${Number.isInteger(n) ? n : n.toFixed(2
 export async function budgetCommand(_$: EngineInterface, words: readonly string[]): Promise<string | null> {
   if (words.length === 1) {
     const v = guardView()
-    return budgetText(v.limits, v.swarmUsd) + (v.pendingUsd === null ? '' : ` Next swarm's budget: ${usdText(v.pendingUsd)}.`)
+    return budgetText(v.limits, v.swarmUsd, v.plan) + (v.pendingUsd === null || v.plan !== undefined ? '' : ` Next swarm's budget: ${usdText(v.pendingUsd)}.`)
   }
   const usd = words.length === 2 ? parseUsd(words[1]!) : null
   if (usd === null) return USAGE
   const set = await setSwarmBudget(usd)
   if (set === null) return 'The budget guard is not running yet; try again once the session has started.'
+  // Kept either way, so it applies if the billing setting changes to api.
+  if (guardView().plan !== undefined) return `Saved ${usdText(usd)} as the swarm budget, but you're on a subscription, so dollar limits are off. Set billing to api in /config to enforce it.`
   if (set === 'next') return `No swarm is running. The swarm budget will be ${usdText(usd)} for the next swarm.`
   const v = guardView()
   return `Swarm budget set to ${usdText(usd)}. New agents: ${isBlocked(v.limits, v.swarmUsd) ? 'blocked' : 'allowed'}.`
