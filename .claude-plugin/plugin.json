@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
@@ -23,6 +23,13 @@
       "description": "block (the default): an agent can't edit a file another live agent is editing. warn: the edit goes ahead and the lead is told. off: no check.",
       "default": "block",
       "options": ["block", "warn", "off"]
+    },
+    "billing": {
+      "type": "string",
+      "title": "Billing",
+      "description": "auto (the default): treated as a subscription once Claude Code reports your 5-hour or 7-day usage window, else pay-as-you-go. subscription: no dollar limits, costs still shown, the time-box stays. api: pay-as-you-go, every limit applies.",
+      "default": "auto",
+      "options": ["auto", "subscription", "api"]
     },
     "budgetAgentMinutes": { "type": "number", "title": "Agent time-box (minutes)", "description": "An agent running this long is asked to wrap up; it is warned at two thirds of it. 1 to 1440.", "default": 30 },
     "budgetAgentUsd": { "type": "number", "title": "Agent budget (USD, approximate)", "description": "An agent whose estimated spend reaches this is asked to wrap up; it is warned at three fifths. Above 0, at most 1000.", "default": 5 },

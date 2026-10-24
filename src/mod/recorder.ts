@@ -22,6 +22,8 @@ import {
 export type RecordObserver = {
   /** omnis_record accepted `body` (stamped `ts`) into `swarm`. */
   recorded: (body: RecordBody, ts: string, swarm: string) => void
+  /** Each session.measure's rate-limit windows, as the engine reported them (untrusted shape). */
+  measured?: (rateLimits: unknown) => void
 }
 
 const MAX_SEEN = 1000
@@ -255,6 +257,7 @@ export function registerRecorder(on: On, given?: RecordObserver): void {
 
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
+    safely($, () => observer?.measured?.((e as { rateLimits?: unknown }).rateLimits))
     safely($, () => void record($, sessionMeasure(e)))
     return result
   })

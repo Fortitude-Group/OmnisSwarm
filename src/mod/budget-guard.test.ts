@@ -317,3 +317,50 @@ test('/omnis budget with no swarm running waits for the next swarm, shows it, an
   expect((await leadSpawn($, 't1')).decision).toBe('allow')
   expect(await omnis($, 'budget')).toContain('swarm $30 (warns at $15). Swarm so far ≈$25.00.')
 })
+
+/** A measurement as a subscription reports it: its 5-hour and 7-day windows come with the cost. */
+const planMeasure = ($: Engine, usd: number, fiveHour = 34) =>
+  $.session.measure({ context: { window: 1 }, cost: { usd }, rateLimits: [{ kind: 'five_hour', percentUsed: fiveHour }, { kind: 'seven_day', percentUsed: 8 }], changed: ['cost', 'rateLimits'] } as never)
+
+test('on a subscription the dollar limits are off: no swarm warning or block, costs still shown, the time-box still nudges', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await planMeasure($, 21)
+  await clock.settle()
+  await planMeasure($, 60, 41.5)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked' || r.type === 'guard.warned')).toEqual([])
+  expect((await leadSpawn($, 't1')).decision).toBe('allow')
+  expect(await omnis($, 'budget')).toBe(
+    'Budget: on a subscription, so no dollar limits (costs are shown for reference). Each agent 30 min (warns at 20 min). Swarm so far ≈$60.00. 5-hour window 41.5% used. New agents: allowed.')
+  expect(await omnis($, 'budget 30')).toBe("Saved $30 as the swarm budget, but you're on a subscription, so dollar limits are off. Set billing to api in /config to enforce it.")
+  await clock.advance(31 * 60_000)
+  await clock.settle()
+  expect(seen.sends).toEqual([{ to: 'a1', text: "You're past your time-box (30 min). Wrap up what you have, report to main, and stop." }])
+})
+
+test('an agent on a subscription spending past $5 is not nudged for it', LOADED, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await planMeasure($, 1)
+  await clock.settle()
+  await step($, 300_000, seen)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.warned' || r.type === 'guard.nudged')).toEqual([])
+  expect(seen.sends).toEqual([])
+})
+
+test('billing api keeps the dollar limits on even when a subscription window is reported', { ...LOADED, options: { billing: 'api' } }, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await planMeasure($, 21)
+  await clock.settle()
+  expect(dataOf(seen, 'guard.blocked')).toEqual({ value: 21, threshold: 20 })
+  expect((await leadSpawn($, 't1')).decision).toBe('deny')
+})
+
+test('billing subscription turns the dollar limits off before any window is reported', { ...LOADED, options: { billing: 'subscription' } }, async ($, on) => {
+  const { clock, seen } = await boot($, on)
+  await measure($, 21)
+  await clock.settle()
+  expect(seen.records.filter(r => r.type === 'guard.blocked')).toEqual([])
+  expect((await leadSpawn($, 't1')).decision).toBe('allow')
+  expect(await omnis($, 'budget')).toContain('on a subscription, so no dollar limits')
+})

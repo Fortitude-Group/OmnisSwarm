@@ -16,6 +16,28 @@ export const WARN_AT: Limits = { agentMinutes: 2 / 3, agentUsd: 3 / 5, swarmUsd:
 /** The plugin.json userConfig field for each limit. */
 export const OPTION_KEYS: Record<BudgetKey, string> = { agentMinutes: 'budgetAgentMinutes', agentUsd: 'budgetAgentUsd', swarmUsd: 'budgetSwarmUsd' }
 
+/**
+ * The `billing` userConfig field. auto: a subscription once Claude Code reports one of its usage windows, else
+ * pay-as-you-go. On a subscription the dollar limits are off (costs are still shown); the time-box stays.
+ */
+export const BILLING_MODES = ['auto', 'subscription', 'api'] as const
+export type BillingMode = (typeof BILLING_MODES)[number]
+export const billingFrom = (options: Readonly<Record<string, unknown>>): BillingMode =>
+  (BILLING_MODES as readonly unknown[]).includes(options['billing']) ? (options['billing'] as BillingMode) : 'auto'
+
+/** A subscription's usage windows. A gateway's `spend_limit` is pay-as-you-go, so it doesn't count. */
+const PLAN_WINDOWS = new Set(['five_hour', 'seven_day'])
+
+/** The 5-hour window's use (0 to 100) when `rateLimits` is a subscription reading, else null. */
+export function planReading(rateLimits: unknown): { fiveHour: number | null } | null {
+  if (!Array.isArray(rateLimits)) return null
+  const windows = rateLimits.filter((r): r is { kind: string; percentUsed?: unknown } =>
+    typeof r === 'object' && r !== null && PLAN_WINDOWS.has((r as { kind?: unknown }).kind as string))
+  if (windows.length === 0) return null
+  const five = windows.find(w => w.kind === 'five_hour')?.percentUsed
+  return { fiveHour: typeof five === 'number' && Number.isFinite(five) ? Math.max(0, Math.min(100, five)) : null }
+}
+
 const round2 = (n: number): number => Math.round(n * 100) / 100
 const valid = (key: BudgetKey, x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x > 0 && x <= BUDGET_MAX[key]
 
@@ -79,7 +101,8 @@ const NO_GUARD = { timeWarn: null, timeAct: null, costWarn: null, costAct: null 
 
 const timed = (a: AgentState): boolean => a.id !== LEAD && !a.placeholder && a.finishedAt === null
 
-export function evaluate(state: SwarmState, limits: Limits, swarmUsd: number, now: number): GuardAction[] {
+/** `dollars` false (a subscription): only the time-box is checked. */
+export function evaluate(state: SwarmState, limits: Limits, swarmUsd: number, now: number, dollars = true): GuardAction[] {
   const out: GuardAction[] = []
   for (const a of Object.values(state.agents)) {
     if (!timed(a)) continue
@@ -89,11 +112,13 @@ export function evaluate(state: SwarmState, limits: Limits, swarmUsd: number, no
       { limit: 'agentCost' as const, value: round2(a.costUsd), key: 'agentUsd' as const, warned: g.costWarn, acted: g.costAct },
     ]
     for (const c of checks) {
+      if (!dollars && c.limit === 'agentCost') continue
       const warn = warnLevel(limits, c.key)
       if (fires(c.value, warn, c.warned)) out.push({ kind: 'warn', agent: a.id, limit: c.limit, value: c.value, threshold: warn })
       if (fires(c.value, limits[c.key], c.acted)) out.push({ kind: 'nudge', agent: a.id, limit: c.limit, value: c.value, threshold: limits[c.key] })
     }
   }
+  if (!dollars) return out
   const warn = warnLevel(limits, 'swarmUsd')
   if (fires(swarmUsd, warn, state.guard.warn)) out.push({ kind: 'swarm-warn', value: swarmUsd, threshold: warn })
   if (fires(swarmUsd, limits.swarmUsd, state.guard.block)) out.push({ kind: 'block', value: swarmUsd, threshold: limits.swarmUsd })
@@ -121,8 +146,8 @@ export function toastText(a: GuardAction, name: string, limits: Limits): string 
   }
 }
 
-export const nudgeText = (limits: Limits): string =>
-  `You're past your time-box (${limits.agentMinutes} min / ${limitText('agentCost', limits.agentUsd)}). Wrap up what you have, report to main, and stop.`
+export const nudgeText = (limits: Limits, dollars = true): string =>
+  `You're past your time-box (${limits.agentMinutes} min${dollars ? ` / ${limitText('agentCost', limits.agentUsd)}` : ''}). Wrap up what you have, report to main, and stop.`
 
 export function mainText(name: string, a: GuardAction, limits: Limits, delivered: boolean, reason?: string): string {
   const limit = a.kind === 'nudge' ? `${limitText(a.limit, a.threshold)} ${a.limit === 'time' ? 'time-box' : 'budget'}` : `${limitText('swarmCost', limits.swarmUsd)} budget`
@@ -133,8 +158,14 @@ export function mainText(name: string, a: GuardAction, limits: Limits, delivered
 export const blockReason = (limits: Limits): string =>
   `Swarm budget ${limitText('swarmCost', limits.swarmUsd)} reached. Raise it with /omnis budget <usd> or finish with the agents you have.`
 
-export function budgetText(limits: Limits, swarmUsd: number): string {
+/** `plan` set: a subscription, so only the time-box is a limit; `fiveHour` is the 5-hour window's use when known. */
+export function budgetText(limits: Limits, swarmUsd: number, plan?: { fiveHour: number | null }): string {
   const usd = (n: number) => limitText('agentCost', n)
+  if (plan !== undefined) {
+    const window = plan.fiveHour === null ? '' : ` 5-hour window ${plan.fiveHour}% used.`
+    return `Budget: on a subscription, so no dollar limits (costs are shown for reference). Each agent ${limits.agentMinutes} min ` +
+      `(warns at ${warnLevel(limits, 'agentMinutes')} min). Swarm so far ≈$${swarmUsd.toFixed(2)}.${window} New agents: allowed.`
+  }
   return `Budget: each agent ${limits.agentMinutes} min / ${usd(limits.agentUsd)} (warns at ${warnLevel(limits, 'agentMinutes')} min / ${usd(warnLevel(limits, 'agentUsd'))}); ` +
     `swarm ${usd(limits.swarmUsd)} (warns at ${usd(warnLevel(limits, 'swarmUsd'))}). Swarm so far ≈$${swarmUsd.toFixed(2)}. ` +
     `New agents: ${isBlocked(limits, swarmUsd) ? 'blocked' : 'allowed'}.`
