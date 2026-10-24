@@ -4,10 +4,10 @@ import { parseBudget, type BudgetPatch } from '../core/budget.ts'
 import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/log.ts'
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { uniqueSwarmId } from '../core/swarm.ts'
-import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
+import { LEAD, MEMORY_KEY, type SwarmState, type TaskEntry } from '../core/fold.ts'
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
-import { cyclePath } from '../core/ready.ts'
+import { cyclePath, newlyReady, readyTasks, strandedBy, waitsOn } from '../core/ready.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
@@ -45,10 +45,34 @@ function statusText(state: SwarmState, nowMs: number): string {
     lines.push(`- ${a.name} [${a.role}] ${a.status} · ${int(a.tokens.total)} tokens · ${usd(a.costUsd)}${a.stuck ? ' · stuck' : ''}`)
   }
   lines.push(`Tasks: ${TASK_STATES.map(k => `${t.tasks[k]} ${k}`).join(', ')}`)
+  lines.push(...readyLines(state))
   lines.push(`Memory: ${Object.keys(state.memory).length} keys`)
   if (t.clashes > 0) lines.push(`File clashes: ${t.clashes}`)
   return lines.join('\n')
 }
+
+const numberOf = (id: string): number => Number(id.replace(/\D+/g, ''))
+const idOrder = (a: TaskEntry, b: TaskEntry): number => numberOf(a.id) - numberOf(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+/** At most `max` items joined with commas, then `and <n> more`. */
+const capped = (items: string[], max: number): string =>
+  items.length <= max ? items.join(', ') : `${items.slice(0, max).join(', ')}, and ${items.length - max} more`
+const withWho = (t: TaskEntry): string => `${t.id} (${t.assignee ?? 'no assignee'})`
+
+/** The status lines for ready and waiting tasks (spec 2.3), each left out when empty, at most 10 tasks each. */
+function readyLines(state: SwarmState): string[] {
+  const out: string[] = []
+  const ready = readyTasks(state)
+  if (ready.length > 0) out.push(`Ready: ${capped(ready.map(withWho), 10)}`)
+  const waiting = Object.values(state.tasks).filter(t => t.state === 'pending' && waitsOn(state, t.id).length > 0).sort(idOrder)
+  if (waiting.length > 0) {
+    const text = (t: TaskEntry): string => `${t.id} on ${waitsOn(state, t.id).map(d => (d.state === 'failed' ? `${d.id} (failed)` : d.id)).join(' ')}`
+    out.push(`Waiting: ${capped(waiting.map(text), 10)}`)
+  }
+  return out
+}
+
+/** The task's id, clipped title and assignee, as the "Now ready" line lists it. */
+const readyItem = (t: TaskEntry): string => `${t.id} ${clip(t.title, 40)} (${t.assignee ?? 'no assignee'})`
 
 /** Token-shaped runs are blanked before a value preview reaches the log (the pattern lives in redact.ts, shared with the gate). */
 export { SECRETISH }
@@ -342,6 +366,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       const loop = dependsOn === undefined ? null : cyclePath(tasks, id, dependsOn)
       if (loop !== null) throw new InputError(`dependsOn would make a loop: ${loopText(loop)}.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
+      const waits = taskState === 'active' ? waitsOn(session.state(swarm).state, id) : []
       const settings = settingsFor(gateOptions.env)
       if (taskState === 'done' && settings.mode !== 'off') {
         const task = tasks[id]!
@@ -356,11 +381,24 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         if (!out.closes) return { text: out.text, isError: true }
         reply = { text: out.text }
       }
+      // The state advances in place, so what newlyReady compares against is copied before this call's event.
+      const before: SwarmState['tasks'] | null = taskState === 'done' ? Object.fromEntries(Object.entries(tasks).map(([k, t]) => [k, { ...t }])) : null
       emit(makeEvent({
         type: 'task.updated', swarm, src: 'mcp', now: clock(),
         data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(dependsOn !== undefined && { dependsOn }) },
       }))
-      return reply
+      const after = session.state(swarm).state
+      const extra: string[] = []
+      if (before !== null) {
+        const now = newlyReady(before, after.tasks)
+        if (now.length > 0) extra.push(`Now ready: ${capped(now.map(readyItem), 8)}.`)
+      } else if (taskState === 'failed') {
+        const stranded = Object.values(after.tasks).filter(t => strandedBy(after, t.id).includes(id)).sort(idOrder)
+        if (stranded.length > 0) extra.push(`Now stranded: ${stranded.map(t => t.id).join(', ')} (they depend on ${id}).`)
+      } else if (waits.length > 0) {
+        extra.push(`Note: ${id} still waits on ${waits.map(w => `${w.id} (${w.state})`).join(', ')}.`)
+      }
+      return extra.length === 0 ? reply : { ...reply, text: [reply.text, ...extra].join('\n') }
     },
   }
 
