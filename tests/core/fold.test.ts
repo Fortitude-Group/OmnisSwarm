@@ -105,7 +105,7 @@ test('memory writes and tasks are recorded', () => {
     ev('task.updated', { id: 't9', state: 'done' }, { atSec: 4, src: 'mcp' }),
   ])
   assert.deepEqual(s.memory['design/auth'], { writer: 'a1', at: at(1), bytes: 42, preview: 'use the repo pattern' })
-  assert.deepEqual(s.tasks.t1, { id: 't1', title: 'Write auth', state: 'active', assignee: 'coder', dependsOn: [], createdAt: at(2), updatedAt: at(3), note: 'started' })
+  assert.deepEqual(s.tasks.t1, { id: 't1', title: 'Write auth', state: 'active', assignee: 'coder', dependsOn: [], createdAt: at(2), updatedAt: at(3), note: 'started', owns: [], worktree: null, gate: null })
   assert.equal(s.tasks.t9, undefined)
 })
 

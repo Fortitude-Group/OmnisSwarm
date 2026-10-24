@@ -1,8 +1,9 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
-  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GuardLimit, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
+  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
+import { foldTasks } from './fold-tasks.ts'
 import { costOf, sameModel, type Usage } from './prices.ts'
 
 export const LEAD = 'lead'
@@ -75,6 +76,8 @@ export type AgentState = {
   route?: AgentRoute
   /** Absent until the stuck guard first nudges the agent. */
   stuckBy?: AgentStuck
+  /** Absent until the scope fence first refuses (or warns about) one of the agent's edits. */
+  fenceBlocks?: number
 }
 
 export type LinkState = { from: string; to: string; count: number; lastAt: number; recent: string[] }
@@ -82,6 +85,12 @@ export type MemoryEntry = { writer: string; at: number; bytes: number; preview: 
 export type TaskEntry = {
   id: string; title: string; state: TaskState; assignee: string | null; dependsOn: string[]
   createdAt: number; updatedAt: number; note: string | null
+  /** Path patterns the assignee may edit; empty means the task is not fenced. */
+  owns: string[]
+  /** The resolved folder the task's work is done in, or null for the project root. */
+  worktree: string | null
+  /** The latest gate result and how many gates have run (or been skipped). history: the last 5 results, oldest first. */
+  gate: { result: GateResult; at: number; runs: number; history: GateResult[] } | null
 }
 export type FeedItem = { at: number; kind: 'agent' | 'message' | 'memory' | 'task'; agent: string; text: string; to?: string }
 export type SwarmInfo = {
@@ -135,7 +144,7 @@ const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x)
  * Makes text safe to draw in a terminal: control and format/bidi characters become spaces, whitespace
  * runs collapse to one space, and the cut is by code point so a surrogate pair is never split.
  */
-const text = (x: unknown, max: number): string =>
+export const text = (x: unknown, max: number): string =>
   typeof x === 'string'
     ? Array.from(x.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim()).slice(0, max).join('').trimEnd()
     : ''
@@ -151,7 +160,7 @@ function foldRoute(a: AgentState, requested: string, usage: Usage, usd: number |
   a.route = { q: requested, d: Math.round(d * 1e6) / 1e6 }
 }
 
-function agentOf(state: SwarmState, id: string, at: number, name?: string): AgentState {
+export function agentOf(state: SwarmState, id: string, at: number, name?: string): AgentState {
   const found = Object.hasOwn(state.agents, id) ? state.agents[id] : undefined
   if (found !== undefined) return found
   const created: AgentState = {
@@ -197,7 +206,7 @@ const usdText = (usd: number): string => `≈$${usd.toFixed(2)}`
 export const limitText = (limit: GuardLimit, n: number): string =>
   limit === 'time' ? `${n} min` : `$${Number.isInteger(n) ? n : n.toFixed(2)}`
 
-function feed(state: SwarmState, item: FeedItem): void {
+export function feed(state: SwarmState, item: FeedItem): void {
   state.feed.push(item)
   trim(state.feed, MAX_FEED)
 }
@@ -354,20 +363,12 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       feed(state, { at, kind: 'memory', agent: who, text: `memory.put ${key}` })
       break
     }
-    case 'task.created': {
-      const d = e.data
-      const id = text(d.id, 32)
-      if (!isSafeKey(id)) break
-      state.tasks[id] = {
-        id, title: text(d.title, 120), state: 'pending', assignee: text(d.assignee, 64) || null,
-        dependsOn: Array.isArray(d.dependsOn)
-          ? d.dependsOn.map(x => text(x, 32)).filter(x => x !== '' && isSafeKey(x)).slice(0, 20)
-          : [],
-        createdAt: at, updatedAt: at, note: null,
-      }
-      feed(state, { at, kind: 'task', agent: who, text: `task ${id} created: ${state.tasks[id]!.title}` })
+    case 'task.created':
+    case 'task.updated':
+    case 'gate.ran':
+    case 'fence.blocked':
+      foldTasks(state, e, at, who)
       break
-    }
     case 'session.measure': {
       const d = e.data
       const known = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? num(x) : null)
@@ -457,18 +458,6 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'report.written': {
       const path = text(e.data.path, 120)
       if (path !== '') state.lastReport = { path, at }
-      break
-    }
-    case 'task.updated': {
-      const d = e.data
-      const id = text(d.id, 32)
-      const task = isSafeKey(id) && Object.hasOwn(state.tasks, id) ? state.tasks[id] : undefined
-      if (task === undefined) break
-      if (isOneOf(TASK_STATES, d.state)) task.state = d.state
-      if (typeof d.assignee === 'string') task.assignee = text(d.assignee, 64) || null
-      if (typeof d.note === 'string') task.note = text(d.note, 200)
-      task.updatedAt = at
-      feed(state, { at, kind: 'task', agent: who, text: `task ${id} → ${task.state}` })
       break
     }
   }

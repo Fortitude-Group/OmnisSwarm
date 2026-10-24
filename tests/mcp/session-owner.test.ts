@@ -6,6 +6,7 @@ import { sessionKey, swarmOwner, uniqueSwarmId } from '../../src/core/swarm.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createTools } from '../../src/mcp/tools.ts'
 import { ev, tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const NOW = new Date('2026-10-21T10:00:00.000Z')
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
@@ -14,7 +15,7 @@ const OTHER = '99999999-0000-0000-0000-000000000000'
 
 const toolsFor = (root: string, session: Session) => {
   const tools = createTools({ root, now: () => NOW, session })
-  return (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  return (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
 }
 
 test('noteSession keeps the first valid id', () => {

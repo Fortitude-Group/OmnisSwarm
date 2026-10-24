@@ -11,6 +11,7 @@ import { createRecordTools } from '../../src/mcp/tools/record.ts'
 import { createTools } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
 import { tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const SWARM = `session-${sessionKey(SID).slice(0, 8)}`
@@ -25,7 +26,7 @@ const setup = () => {
   const [record] = createRecordTools({ root, session, now: NOW })
   const tools = createTools({ root, session, now: () => new Date('2026-10-21T10:00:05.000Z') })
   const call = (args: Record<string, unknown>) => record!.handler(args)
-  const tool = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  const tool = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
   const events = (id: string) => readEvents(swarmLogPath(root, id)).events
   return { root, session, record: record!, call, tool, events }
 }
@@ -308,6 +309,34 @@ test('clash.blocked and agent.stuck are recorded with an agent, and refused with
     { type: 'agent.stuck', agent: 'a2', data: { pattern: 'failing', count: -1, subject: 'x', delivered: true } },
   ]
   for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
+})
+
+test('fence.blocked is recorded with an agent, a path, task ids and a mode, and refused otherwise', () => {
+  const { call, events } = setup()
+  call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' } })
+  call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/y.ts', tasks: [], mode: 'block', extra: 'dropped' } })
+  assert.deepEqual(events(SWARM).slice(-2).map(e => [e.type, e.agent, e.data]), [
+    ['fence.blocked', 'a2', { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' }],
+    ['fence.blocked', 'a2', { path: 'src/y.ts', tasks: [], mode: 'block' }],
+  ])
+  const bad = [
+    { type: 'fence.blocked', data: { path: 'src/x.ts', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: '', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x'.repeat(81), tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x\ny', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: ['t1'], mode: 'off' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: 't1', mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: ['x1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: [1], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: Array.from({ length: 21 }, (_, i) => `t${i + 1}`), mode: 'block' } },
+  ]
+  for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
+})
+
+test("gate.ran is the server's own event: omnis_record refuses it", () => {
+  const { call } = setup()
+  assert.throws(() => call({ sessionId: SID, ts: TS, type: 'gate.ran', data: { task: 't1', result: 'passed', ms: 1, mode: 'block' } }), InputError)
 })
 
 test('report.written is the server\'s own event: omnis_record refuses it', () => {

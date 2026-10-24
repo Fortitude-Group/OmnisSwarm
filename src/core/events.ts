@@ -30,6 +30,14 @@ export type StuckPattern = (typeof STUCK_PATTERNS)[number]
 /** How a clash was handled: refused, or let through with a warning to the lead. */
 export const CLASH_MODES = ['block', 'warn'] as const
 export type ClashMode = (typeof CLASH_MODES)[number]
+/** How a verification gate result was handled: a failure refused the close, or let it through with a warning. */
+export const GATE_MODES = ['block', 'warn'] as const
+export type GateMode = (typeof GATE_MODES)[number]
+export const GATE_RESULTS = ['passed', 'failed', 'timeout', 'error', 'none', 'skipped'] as const
+export type GateResult = (typeof GATE_RESULTS)[number]
+/** How an out-of-scope edit was handled: refused, or let through with a warning to the lead. */
+export const FENCE_MODES = ['block', 'warn'] as const
+export type FenceMode = (typeof FENCE_MODES)[number]
 
 export type EventData = {
   'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean; session?: string }
@@ -41,8 +49,10 @@ export type EventData = {
   'agent.tool': { phase: 'start' | 'end'; tool: string; kind: ToolKind; subject: string; isError: boolean }
   'message.sent': { to: string; summary: string }
   'memory.put': { key: string; bytes: number; preview: string }
-  'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[] }
-  'task.updated': { id: string; state: TaskState; assignee?: string; note?: string }
+  /** owns: path patterns the task's agent may edit. worktree: the resolved folder the work is done in. */
+  'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[]; owns?: string[]; worktree?: string }
+  /** owns replaces the list (an empty list clears it). */
+  'task.updated': { id: string; state: TaskState; assignee?: string; note?: string; owns?: string[]; worktree?: string }
   'session.measure': { contextTokens?: number; contextWindow: number; contextPercent?: number; costUsd?: number }
   'budget.set': { agentMinutes?: number; agentUsd?: number; swarmUsd?: number }
   'guard.warned': { limit: GuardLimit; value: number; threshold: number }
@@ -52,6 +62,10 @@ export type EventData = {
   'clash.blocked': { path: string; holder: string; mode: ClashMode }
   /** agent: the stuck agent. subject: the last tool call's subject. */
   'agent.stuck': { pattern: StuckPattern; count: number; subject: string; delivered: boolean; reason?: string }
+  /** The verification gate ran (or was skipped) for a task. log: relative to the project. gap: source files changed with no test file. */
+  'gate.ran': { task: string; result: GateResult; ms: number; command?: string; exit?: number; log?: string; gap?: number; mode: GateMode }
+  /** agent: the refused (or warned) agent. path: the recorder's subject for the call. tasks: the ids of the tasks whose files it owns. */
+  'fence.blocked': { path: string; tasks: string[]; mode: FenceMode }
   /** path: the report file, relative to the project. */
   'report.written': { path: string; agents: number; minutes: number; costUsd: number }
 }
@@ -61,7 +75,7 @@ export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
   'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked',
-  'clash.blocked', 'agent.stuck', 'report.written',
+  'clash.blocked', 'agent.stuck', 'report.written', 'gate.ran', 'fence.blocked',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {

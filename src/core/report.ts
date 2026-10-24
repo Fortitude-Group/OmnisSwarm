@@ -54,6 +54,12 @@ function problems(s: SwarmState): string[] {
   for (const a of shown(s)) {
     if (a.stuckBy !== undefined) out.push(`- ${md(a.name)} looked stuck ${times(a.stuckBy.n)} and was asked to step back (last: ${md(a.stuckBy.p)}, ${a.stuckBy.s ? md(a.stuckBy.s) : 'no subject'}).`)
   }
+  for (const t of Object.values(s.tasks)) {
+    const r = t.gate?.result
+    if (r === 'failed' || r === 'timeout' || r === 'error') out.push(`- Gate failed for ${md(t.id)} (${r === 'timeout' ? 'timed out' : r === 'error' ? 'could not start' : 'failed'}).`)
+    else if (r === 'skipped') out.push(`- Gate skipped for ${md(t.id)}.`)
+  }
+  for (const a of shown(s)) if (a.fenceBlocks) out.push(`- ${md(a.name)} was fenced out of ${a.fenceBlocks} edit${a.fenceBlocks === 1 ? '' : 's'}.`)
   for (const a of shown(s)) if (a.outcome === 'failed') out.push(`- ${md(a.name)} failed${a.reason === null ? '' : `: ${md(a.reason)}`}.`)
   return out
 }
@@ -64,6 +70,13 @@ function routing(s: SwarmState): string[] {
   const lines = routed.map(a => `- ${md(a.name)}: asked for ${md(a.route!.q)}, answered by ${a.model === null ? 'an unknown model' : md(a.model)}, saved ${usd(a.route!.d)}.`)
   lines.push(`- Total saved: ${usd(routed.reduce((t, a) => t + a.route!.d, 0))}.`)
   return lines
+}
+
+const GATE_WORDS: Record<string, string> = { passed: '✓', failed: '✕ failed', timeout: '✕ timed out', error: '✕ error', skipped: 'skipped', none: 'no gate' }
+
+/** One line per task that ran a gate: its last five results, oldest first. The fold keeps no seconds, so none are shown. */
+function gates(s: SwarmState): string[] {
+  return Object.values(s.tasks).filter(t => t.gate !== null && t.gate.runs > 0).map(t => `- ${md(t.id)} ${t.gate!.history.map(r => GATE_WORDS[r] ?? r).join(' then ')}`)
 }
 
 function tasks(s: SwarmState): string[] {
@@ -109,7 +122,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
     const name = a.id === LEAD ? 'main' : a.name
     lines.push(`| ${md(name)} | ${md(a.role)} | ${outcome(a)} | ${minutes(runMs(a, s.swarm.endedAt ?? nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${filesEdited(s, a.id)} |`)
   }
-  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)]] as const) {
+  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)], ['Gates', gates(s)]] as const) {
     if (body.length > 0) lines.push('', `## ${title}`, '', ...body)
   }
   return `${lines.join('\n')}\n`

@@ -35,7 +35,8 @@ export function normalisePath(raw: unknown, cwd: string): FilePath | null {
   if (typeof raw !== 'string' || raw.trim() === '') return null
   const base = squash(cwd.replace(/\\/g, '/'))
   const fold = DRIVE.test(base)
-  let p = raw.trim().replace(/\\/g, '/').replace(/^\/\/\?\//, '')
+  // \\?\UNC\host\share is \\host\share; \\?\C:\ and \\.\C:\ are C:\.
+  let p = raw.trim().replace(/\\/g, '/').replace(/^\/\/\?\/UNC\//i, '//').replace(/^\/\/[?.]\//, '')
   // Git Bash writes C:/x as /c/x; only a drive-letter cwd tells us that is what it means.
   if (fold) p = p.replace(/^\/([A-Za-z])(?=\/|$)/, '$1:')
   const full = squash(ABSOLUTE.test(p) ? p : `${base}/${p}`)
