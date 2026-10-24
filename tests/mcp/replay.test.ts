@@ -98,3 +98,17 @@ test('a symlinked log answers none', t => {
   }
   assert.equal(parseReplayReply(tool(root).handler({ swarm: 'link', since: 0 }).text)?.kind, 'none')
 })
+
+test('a replay payload never carries an agent.tool error', () => {
+  const root = tmpRoot()
+  const now = new Date(Date.UTC(2026, 9, 22, 10, 0, 0))
+  const tool_ = { phase: 'end' as const, tool: 'Bash', kind: 'bash' as const, subject: 'npm test', isError: true }
+  appendEvent(root, makeEvent({ type: 'agent.tool', swarm: 'alpha', src: 'recorder', agent: 'a1', data: { ...tool_, error: 'secret reason text' }, now }))
+  appendEvent(root, makeEvent({ type: 'agent.tool', swarm: 'alpha', src: 'recorder', agent: 'a1', data: { ...tool_, phase: 'start', isError: false }, now: new Date(now.getTime() + 1000) }))
+  const text = tool(root).handler({ swarm: 'alpha', since: 0 }).text as string
+  assert.doesNotMatch(text, /secret reason text|"error"/)
+  const reply = parseReplayReply(text)
+  assert.ok(reply !== null && reply.kind === 'replay')
+  assert.equal(reply.events.length, 2)
+  assert.equal((reply.events[0]!.data as { isError: boolean }).isError, true)
+})

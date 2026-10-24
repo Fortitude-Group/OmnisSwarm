@@ -71,7 +71,7 @@ test('active tasks come first, then pending by id, and a note is stored for each
   await tool('omnis_task_update', { id: 't2', state: 'active' })
   assert.deepEqual(ask({ agent: 'a1', why: 'finished' }), { notes: ['handoff/t2', 'handoff/t1'] })
   const memory = readMemory(root, 'auth')
-  assert.match(memory['handoff/t2']!.value, /^Handoff for t2: the active one\nFrom coder-1\./)
+  assert.match(memory['handoff/t2']!.value, /^Handoff for t2: the active one\nRecorded by OmnisSwarm[^\n]*\nFrom coder-1\./)
   assert.equal(memory['handoff/t2']!.writer, 'omnis')
   assert.equal(memory['handoff/t3'], undefined)
   const s = state()
@@ -130,7 +130,7 @@ test('handoff: true writes the note from the assignee before the call, and the s
   const reply = await text(tool('omnis_task_update', { id: 't1', state: 'pending', assignee: 'coder-2', handoff: true, note: 'coder-1 stuck on the parser' }))
   assert.equal(reply, 'Task t1 is now pending.\nHandoff note saved as handoff/t1.')
   const note = readMemory(root, 'auth')['handoff/t1']!.value
-  assert.match(note, /^Handoff for t1: Build the parser\nFrom coder-1\. \d+ min, 1 tool call, 0 failed\.\nRead, not edited: src\/a\.ts$/)
+  assert.match(note, /^Handoff for t1: Build the parser\nRecorded by OmnisSwarm[^\n]*\nFrom coder-1\. \d+ min, 1 tool call, 0 failed\.\nRead, not edited: src\/a\.ts$/)
   assert.doesNotMatch(note, /Note on the task/, 'the note on this call is applied after the note is written')
   assert.equal(state().tasks.t1!.assignee, 'coder-2')
   const events = readEvents(swarmLogPath(root, 'auth')).events.filter(e => e.type === 'task.handoff')

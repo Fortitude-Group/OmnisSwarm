@@ -10,7 +10,7 @@ import { appendEvent } from '../../core/log.ts'
 import { HANDOFF_TOOL } from '../../core/recording.ts'
 import { MemoryLimitError, putMemory } from '../memory-store.ts'
 import type { ToolDef } from '../protocol.ts'
-import { SECRETISH } from '../redact.ts'
+import { redactSecrets } from '../../core/secrets.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, reqEnum, reqString } from '../validate.ts'
 
@@ -48,7 +48,7 @@ export function saveNote(
     if (!appendEvent(ctx.root, event)) throw new Error('Could not write to the swarm log in .omnis-swarm/')
   }
   const bytes = new TextEncoder().encode(note).length
-  write(makeEvent({ type: 'memory.put', swarm, src: 'mcp', data: { key, bytes, preview: clip(note.replace(SECRETISH, '[redacted]'), 80) }, now }))
+  write(makeEvent({ type: 'memory.put', swarm, src: 'mcp', data: { key, bytes, preview: clip(redactSecrets(note), 80) }, now }))
   write(makeEvent({ type: 'task.handoff', swarm, src: 'mcp', data: { task: taskId, agent: agentId, why }, now }))
   return 'saved'
 }

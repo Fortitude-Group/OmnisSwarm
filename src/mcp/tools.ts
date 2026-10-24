@@ -15,6 +15,7 @@ import { pinGate, pinnedGate } from './gate/pins.ts'
 import { gateTarget } from './gate/target.ts'
 import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
 import { SECRETISH } from './redact.ts'
+import { redactSecrets } from '../core/secrets.ts'
 import type { Session } from './session.ts'
 import { handoffReply, saveNote, workedAgent } from './tools/handoff.ts'
 import { writeReport } from './tools/report.ts'
@@ -54,7 +55,7 @@ function statusText(state: SwarmState, nowMs: number): string {
 
 /** Token-shaped runs are blanked before a value preview reaches the log (the pattern lives in redact.ts, shared with the gate). */
 export { SECRETISH }
-const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
+const preview = (value: string): string => clip(redactSecrets(value), 80)
 
 export const MAX_TASKS = 500
 const MAX_OWNS = 20

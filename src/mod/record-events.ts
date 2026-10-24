@@ -55,6 +55,7 @@ export function cleanPath(x: unknown, max: number): string {
 export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
 const URL_CREDS = /\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@:]+:[^\s/@]+@/gi
 const KEY_VALUE = /(token|key|secret|password|passwd|pwd)=[^\s&"']+/gi
+const AUTH_HEADER = /(\bauthorization\s*[=:]\s*(?:bearer|basic)\s+)[^\s"',;]+/gi
 const DASH_P = /(\s-p)\S+/g
 const REDACT_ROOM = 4096
 
@@ -63,6 +64,7 @@ export function redact(x: unknown): string {
   return x
     .slice(0, REDACT_ROOM)
     .replace(URL_CREDS, '$1[redacted]@')
+    .replace(AUTH_HEADER, '$1[redacted]')
     .replace(KEY_VALUE, '$1=[redacted]')
     .replace(DASH_P, '$1[redacted]')
     .replace(SECRETISH, '[redacted]')

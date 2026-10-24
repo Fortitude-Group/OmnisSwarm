@@ -31,3 +31,11 @@ New tests: tests/core/handoff.test.ts (golden layout, empty sections, caps, size
 ## Not covered / for main
 - Spec section 6 says a test checks that `omnis_export` and `omnis_replay` do not show `error`. No task owns that in the plan and I did not write it. What I found: the pane and GIF renderers never read `errs`, `trail` or `error` (grep over src/render and src/mod/pane*), but `omnis_replay` does hand the raw events, `error` included, to the pane to fold. Please say whether "show" means the pane output or the replay payload.
 - For the security reviewer: error text from tool results (untrusted) reaches the log, `errs`, and the "Last errors" lines of the note that the next agent reads. It is cleaned, redacted and clipped to 160, but it is still model-influenced text inside a note another model will read. The note adds no "treat as data" header, since the spec's layout has none.
+
+## Round 2
+- `handedOn` kept as built. The report line has no ` (<n> times)` suffix yet (I stopped at the time-box before adding it).
+- M1: new `src/core/secrets.ts` (mod-safe) with `redactSecrets` and `redactKnown`: URL userinfo (`https://rob:[redacted]@host`), `Authorization: Bearer|Basic`, and secret-named keys (`password`, `passwd`, `pwd`, `secret`, `token`, `api_key`/`api-key`/`apikey`, with `=` or `:`). `src/mcp/redact.ts` re-exports; memory previews use it. The recorder's own copy gained the Authorization rule. Tests in tests/core/secrets.test.ts, including negatives (`exit=1`, `count=3`, plain URLs).
+- L1: `handoffNote` redacts its output with `redactKnown`, which skips the catch-all "32 plain characters" rule so real long paths are not blanked in a note. Decision for you to confirm.
+- L4: record.ts redacts the error twice, once with control characters spaced and once removed; when the removed reading blanks anything it wins (words run together, the safe side). Test with a token split by a newline.
+- Concern 5: the provenance line follows `Handoff for` in every note; golden test updated.
+- Concern 6: `omnis_replay` strips `error` from agent.tool events (test); export test checks neither the reply nor the GIF bytes contain the error text.
