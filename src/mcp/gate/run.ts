@@ -34,23 +34,37 @@ export type RunOutcome = {
   /** The last 40 lines of output, at most 4,000 characters, token-shaped runs blanked. */
   tail: string
 }
-export type RunOptions = { command: string; cwd: string; logFile: string; limitMs: number; signal?: AbortSignal }
+export type RunOptions = {
+  command: string; cwd: string; logFile: string; limitMs: number; signal?: AbortSignal
+  /** Told the PID of each tree kill, before it happens (tests). */
+  onKill?: (pid: number) => void
+}
 
 const WINDOWS = process.platform === 'win32'
 const busy = new Set<string>()
-const live = new Set<ChildProcess>()
+/**
+ * Gates whose command is still running. A child leaves at its exit: from then on its PID may belong to another
+ * process (Windows reuses them), so nothing is ever killed by it again.
+ */
+const live = new Map<ChildProcess, ((pid: number) => void) | undefined>()
 const dirKey = (dir: string): string => (WINDOWS ? resolve(dir).toLowerCase() : resolve(dir))
 /** The gate's own settings: a gate command that starts this server (or its tests) must not start the gate again. */
 const GATE_KEYS = new Set(['OMNIS_VERIFY_GATE', 'OMNIS_GATE_COMMAND', 'OMNIS_GATE_MINUTES'])
-/** The server's environment without the gate settings. Names compare without case, as Windows does. */
-export const childEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv =>
-  Object.fromEntries(Object.entries(env).filter(([k]) => !GATE_KEYS.has(k.toUpperCase())))
+/**
+ * The server's environment for the gate command: the gate settings dropped (names compare without case, as Windows
+ * does) and OMNIS_VERIFY_GATE set to off, so a server started inside the gate has its gate off rather than at block.
+ */
+export const childEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => ({
+  ...Object.fromEntries(Object.entries(env).filter(([k]) => !GATE_KEYS.has(k.toUpperCase()))),
+  OMNIS_VERIFY_GATE: 'off',
+})
 const taskkill = (): string => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe')
 
-/** Kills the tree of `child` by its PID: taskkill /T on Windows, the process group elsewhere. */
+/** Kills the tree of `child` by its PID while it still runs: taskkill /T on Windows, the process group elsewhere. */
 function killTree(child: ChildProcess): Promise<void> {
   const pid = child.pid
-  if (pid === undefined) return Promise.resolve()
+  if (pid === undefined || !live.has(child)) return Promise.resolve()
+  live.get(child)?.(pid)
   if (!WINDOWS) {
     try {
       process.kill(-pid, 'SIGKILL')
@@ -66,23 +80,42 @@ function killTree(child: ChildProcess): Promise<void> {
   })
 }
 
+/** Kills every gate tree still running, synchronously: for the server's exit, a shutdown signal or the end of stdin. */
+export function killAllGates(): void {
+  for (const [child, onKill] of live) {
+    const pid = child.pid
+    if (pid === undefined) continue
+    onKill?.(pid)
+    try {
+      if (WINDOWS) spawnSync(taskkill(), ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 })
+      else process.kill(-pid, 'SIGKILL')
+    } catch {
+      // Best effort on the way out.
+    }
+  }
+}
+
+const SIGNALS = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const
+/**
+ * For server.ts: on SIGTERM, SIGINT or SIGHUP, kill every gate tree, then exit with 128 + the signal's number (a
+ * listener takes the place of Node's own exit on these). A hard kill (SIGKILL, or TerminateProcess on Windows) can't
+ * be caught, so it can leave a gate running.
+ */
+export function installShutdown(proc: { on: (event: string, fn: () => void) => unknown }, exit: (code: number) => void): void {
+  for (const [signal, code] of Object.entries(SIGNALS)) {
+    proc.on(signal, () => {
+      killAllGates()
+      exit(code)
+    })
+  }
+}
+
 let exitHooked = false
 /** When the server exits, every gate still running goes with it. Only synchronous work is possible here. */
 function hookExit(): void {
   if (exitHooked) return
   exitHooked = true
-  process.on('exit', () => {
-    for (const child of live) {
-      const pid = child.pid
-      if (pid === undefined) continue
-      try {
-        if (WINDOWS) spawnSync(taskkill(), ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 })
-        else process.kill(-pid, 'SIGKILL')
-      } catch {
-        // Best effort on the way out.
-      }
-    }
-  })
+  process.on('exit', killAllGates)
 }
 
 /** Takes a slot for `dir`, or refuses with the spec's text. */
@@ -142,6 +175,8 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
     let settled = false
     let grace: NodeJS.Timeout | undefined
     let child: ChildProcess | undefined
+    /** The command exited but something it started kept the output open: noted in the log, left alone. */
+    let heldOpen = false
 
     const take = (chunk: Buffer) => {
       total += chunk.length
@@ -166,6 +201,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
       clearTimeout(grace)
       opts.signal?.removeEventListener('abort', onAbort)
       if (child !== undefined) live.delete(child)
+      if (heldOpen) take(Buffer.from('\n[omnis: the command exited, but a process it started still held its output; that process was left running]\n'))
       const end = Buffer.concat(recent)
       const kept = end.subarray(Math.max(0, end.length - TAIL_KEEP))
       const after = total - written
@@ -190,11 +226,15 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
       if (exit !== null) return resolveRun({ result: 'failed', exit, ms, tail })
       return resolveRun({ result: 'failed', ...(signal !== null && { signal }), ms, tail })
     }
-    /** Output still open after the exit or the kill: something outside the tree holds it. Carry on without it. */
+    /**
+     * Output still open after the exit or the kill: something outside the tree holds it. Carry on without it. The tree
+     * is killed again only if the command itself is still running; after its exit its PID may be another process's.
+     */
     const waitForClose = () => {
       clearTimeout(grace)
       grace = setTimeout(() => {
-        if (child !== undefined) void killTree(child)
+        if (child !== undefined && live.has(child)) void killTree(child)
+        else heldOpen = stopped === null
         child?.stdout?.destroy()
         child?.stderr?.destroy()
         settle()
@@ -224,7 +264,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
       settle()
       return
     }
-    live.add(child)
+    live.set(child, opts.onKill)
     hookExit()
     opts.signal?.addEventListener('abort', onAbort, { once: true })
     child.stdout?.on('data', take)
@@ -236,6 +276,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
       settle()
     })
     child.once('exit', (code, sig) => {
+      if (child !== undefined) live.delete(child)
       exit = code
       signal = sig
       waitForClose()

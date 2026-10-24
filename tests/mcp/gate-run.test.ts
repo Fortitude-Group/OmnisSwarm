@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { LOG_CAP, TAIL_CHARS, TAIL_LINES, runGate, type RunOptions } from '../../src/mcp/gate/run.ts'
+import { EventEmitter } from 'node:events'
+import { LOG_CAP, TAIL_CHARS, TAIL_LINES, installShutdown, killAllGates, runGate, type RunOptions } from '../../src/mcp/gate/run.ts'
 import { InputError } from '../../src/mcp/validate.ts'
 import { tmpRoot } from '../helpers.ts'
 
@@ -64,8 +65,10 @@ test('stdin is not open to the gate', async () => {
 })
 
 test('past the time limit the whole tree is killed, grandchild included', async () => {
-  const opts = setup({ command: SPAWNS_GRANDCHILD, limitMs: 1500 })
+  const kills: number[] = []
+  const opts = setup({ command: SPAWNS_GRANDCHILD, limitMs: 1500, onKill: pid => kills.push(pid) })
   const out = await runGate(opts)
+  assert.equal(kills.length, 1, 'killed once, while it ran')
   assert.equal(out.result, 'timeout')
   assert.equal(out.exit, undefined)
   assert.ok(out.ms >= 1400 && out.ms < 15_000, `took ${out.ms} ms`)
@@ -149,16 +152,44 @@ test('a fourth gate anywhere is refused while three run', async () => {
   for (const r of runs) assert.equal((await r).result, 'passed')
 })
 
-test('a background child holding the output open does not hold the gate past its exit', async () => {
-  const opts = setup({ command: node("const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{stdio:'inherit'});console.log('GRANDCHILD '+c.pid);c.unref()"), limitMs: 20_000 })
+test('a background child holding the output open does not hold the gate past its exit, and nothing is killed after the exit', async () => {
+  const kills: number[] = []
+  const opts = setup({ command: node("const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{stdio:'inherit'});console.log('GRANDCHILD '+c.pid);c.unref()"), limitMs: 20_000, onKill: pid => kills.push(pid) })
   const out = await runGate(opts)
   const pid = grandchildPid(opts.logFile)
   try {
     assert.equal(out.result, 'passed')
     assert.ok(out.ms < 10_000, `took ${out.ms} ms`)
+    // Its PID may already be another process's: killing by it after the exit could hit anything.
+    assert.deepEqual(kills, [], 'no kill once the command had exited')
   } finally {
     if (alive(pid)) process.kill(pid) // ours: started by this test's command
   }
+})
+
+test('killAllGates kills every running tree at once', async () => {
+  const opts = setup({ command: SPAWNS_GRANDCHILD })
+  const running = runGate(opts)
+  await sleep(1200)
+  killAllGates()
+  const out = await running
+  assert.notEqual(out.result, 'passed')
+  assert.ok(await gone(grandchildPid(opts.logFile)), 'the grandchild is gone')
+})
+
+test('SIGTERM, SIGINT and SIGHUP kill running gates, then exit', async () => {
+  const fake = new EventEmitter()
+  const exits: number[] = []
+  installShutdown(fake, code => exits.push(code))
+  const opts = setup({ command: SPAWNS_GRANDCHILD })
+  const running = runGate(opts)
+  await sleep(1200)
+  fake.emit('SIGTERM')
+  await running
+  assert.ok(await gone(grandchildPid(opts.logFile)), 'the grandchild is gone')
+  fake.emit('SIGINT')
+  fake.emit('SIGHUP')
+  assert.deepEqual(exits, [143, 130, 129])
 })
 
 test('the gate settings are not passed on to the gate command', async () => {
@@ -171,7 +202,8 @@ test('the gate settings are not passed on to the gate command', async () => {
   try {
     const opts = setup({ command: node("console.log(['OMNIS_VERIFY_GATE','OMNIS_GATE_COMMAND','OMNIS_GATE_MINUTES','OMNIS_GATE_TEST_KEPT'].map(k=>k+'='+(process.env[k]??'unset')).join(' '))") })
     const out = await runGate(opts)
-    assert.equal(out.tail, 'OMNIS_VERIFY_GATE=unset OMNIS_GATE_COMMAND=unset OMNIS_GATE_MINUTES=unset OMNIS_GATE_TEST_KEPT=kept')
+    // off, not unset: a server started inside the gate would read unset as block.
+    assert.equal(out.tail, 'OMNIS_VERIFY_GATE=off OMNIS_GATE_COMMAND=unset OMNIS_GATE_MINUTES=unset OMNIS_GATE_TEST_KEPT=kept')
   } finally {
     keys.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i] })
     delete process.env.OMNIS_GATE_TEST_KEPT
