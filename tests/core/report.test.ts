@@ -130,3 +130,40 @@ hierarchical · started 2026-10-21 11:00 · ended 2026-10-21 11:23 · 23 min · 
 0 pending, 0 active, 1 done, 1 failed.
 - Failed: t2 Fix the flaky login test
 `
+
+const gate = (task: string, result: string, atSec: number) => ev('gate.ran', { task, result, ms: 1000, mode: 'block' } as never, { atSec })
+const gateSwarm = (...extra: SwarmEvent[]) => foldAll('g', [
+  ev('swarm.started', { name: 'g', topology: 'mesh', implicit: false }, { atSec: 0 }),
+  ev('agent.started', { name: 'coder|1', role: 'coder', description: '', parent: LEAD }, { agent: 'a1', atSec: 1 }),
+  ev('task.created', { id: 't1', title: 'One' }, { atSec: 2 }),
+  ev('task.created', { id: 't2', title: 'Two' }, { atSec: 2 }),
+  ev('task.created', { id: 't3', title: 'Three' }, { atSec: 2 }),
+  ...extra,
+])
+
+test('Gates lists each task that ran a gate, results in order, after Tasks', () => {
+  const md = reportMarkdown(gateSwarm(gate('t1', 'failed', 5), gate('t1', 'passed', 6), gate('t2', 'skipped', 7), gate('t2', 'none', 8)), at(60), 0)
+  assert.match(md, /## Tasks[\s\S]*## Gates\n\n- t1 ✕ failed then ✓\n- t2 skipped then no gate\n/)
+  assert.doesNotMatch(md, /- t3/)
+})
+
+test('Gates is left out when no task ran a gate', () => {
+  assert.doesNotMatch(reportMarkdown(gateSwarm(), at(60), 0), /## Gates/)
+})
+
+test('Problems names failed, timed out, errored and skipped latest gates only', () => {
+  const md = reportMarkdown(gateSwarm(gate('t1', 'failed', 5), gate('t1', 'passed', 6), gate('t2', 'timeout', 7), gate('t3', 'error', 8), gate('t3', 'skipped', 9)), at(60), 0)
+  assert.doesNotMatch(md, /Gate failed for t1/)
+  assert.match(md, /- Gate failed for t2 \(timed out\)\./)
+  assert.match(md, /- Gate skipped for t3\./)
+  const e = reportMarkdown(gateSwarm(gate('t3', 'error', 8), gate('t1', 'failed', 9)), at(60), 0)
+  assert.match(e, /- Gate failed for t3 \(could not start\)\./)
+  assert.match(e, /- Gate failed for t1 \(failed\)\./)
+})
+
+test('Problems counts fenced edits per agent and escapes the name', () => {
+  const one = reportMarkdown(gateSwarm(ev('fence.blocked', { path: 'x.ts', tasks: ['t1'], mode: 'block' }, { agent: 'a1', atSec: 5 })), at(60), 0)
+  assert.match(one, /- coder\\|1 was fenced out of 1 edit\./)
+  const two = reportMarkdown(gateSwarm(ev('fence.blocked', { path: 'x.ts', tasks: ['t1'], mode: 'block' }, { agent: 'a1', atSec: 5 }), ev('fence.blocked', { path: 'y.ts', tasks: ['t1'], mode: 'warn' }, { agent: 'a1', atSec: 90 })), at(120), 0)
+  assert.match(two, /was fenced out of 2 edits\./)
+})
