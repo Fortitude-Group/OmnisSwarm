@@ -3,7 +3,7 @@
  * refuses the model (INTERNAL_TOOL). Read-only: it never appends events or changes which swarm the session owns.
  */
 import { lstatSync } from 'node:fs'
-import { isValidSwarmId } from '../../core/events.ts'
+import { isValidSwarmId, type SwarmEvent } from '../../core/events.ts'
 import { fitEvents } from '../../core/feed-reply.ts'
 import { readEvents, sortEvents, swarmLogPath } from '../../core/log.ts'
 import { REPLAY_TOOL } from '../../core/recording.ts'
@@ -16,6 +16,13 @@ import { InputError, optString } from '../validate.ts'
 
 const SWARM_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const FAILED = 'Could not read the swarm files in .omnis-swarm/ (see the server log).'
+
+/** The pane doesn't use an agent.tool end's error text, so it never leaves the server in a replay. */
+function withoutError(e: SwarmEvent): SwarmEvent {
+  if (e.type !== 'agent.tool' || !Object.hasOwn(e.data, 'error')) return e
+  const { error: _error, ...data } = e.data as Record<string, unknown>
+  return { ...e, data } as SwarmEvent
+}
 
 function since(args: Args): number {
   const v = args.since
@@ -57,7 +64,7 @@ export function createReplayTools(ctx: ToolContext): ToolDef[] {
         const fit = Math.min(fitEvents(read.events, id), 500)
         const cut = fit === read.events.length ? { offset: read.offset, bad: read.bad } : offsetAfter(file, from, fit)
         const done = cut.offset >= lstatSync(file).size
-        return answer({ v: 1, kind: 'replay', swarm: id, offset: cut.offset, done, events: sortEvents(read.events.slice(0, fit)), bad: cut.bad })
+        return answer({ v: 1, kind: 'replay', swarm: id, offset: cut.offset, done, events: sortEvents(read.events.slice(0, fit)).map(withoutError), bad: cut.bad })
       } catch (err) {
         process.stderr.write(`omnis: omnis_replay failed: ${err instanceof Error ? err.message : String(err)}\n`)
         throw new Error(FAILED)

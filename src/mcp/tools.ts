@@ -14,7 +14,9 @@ import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
 import { gateTarget } from './gate/target.ts'
 import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
 import { SECRETISH } from './redact.ts'
+import { redactSecrets } from '../core/secrets.ts'
 import type { Session } from './session.ts'
+import { handoffReply, saveNote, workedAgent } from './tools/handoff.ts'
 import { writeReport } from './tools/report.ts'
 import { resolveWorktree } from './worktrees.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
@@ -76,7 +78,8 @@ const readyItem = (t: TaskEntry): string => `${t.id} ${clip(t.title, 40)} (${t.a
 
 /** Token-shaped runs are blanked before a value preview reaches the log (the pattern lives in redact.ts, shared with the gate). */
 export { SECRETISH }
-const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
+/** Only the start can show (80 characters), so only the start is redacted: a huge value costs no more than 1 KB. */
+const preview = (value: string): string => clip(redactSecrets(value.slice(0, 1024)), 80)
 
 export const MAX_TASKS = 500
 const MAX_OWNS = 20
@@ -365,6 +368,9 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       for (const d of dependsOn ?? []) if (!Object.hasOwn(tasks, d)) throw new InputError(`dependsOn: no task ${clip(d, 80)} in swarm ${swarm}.`)
       const loop = dependsOn === undefined ? null : cyclePath(tasks, id, dependsOn)
       if (loop !== null) throw new InputError(`dependsOn would make a loop: ${loopText(loop)}.`)
+      // The agent whose work is handed on is the assignee before this call.
+      const handFrom = args.handoff === true ? workedAgent(session.state(swarm).state, tasks[id]!.assignee) : null
+      if (args.handoff === true && handFrom === null) throw new InputError(`${id} has no agent's work to hand on.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
       const waits = taskState === 'active' ? waitsOn(session.state(swarm).state, id) : []
       const settings = settingsFor(gateOptions.env)
@@ -381,6 +387,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         if (!out.closes) return { text: out.text, isError: true }
         reply = { text: out.text }
       }
+      const handed = handFrom === null ? null : saveNote(ctx, swarm, session.state(swarm).state, id, handFrom, 'lead', clock())
       // The state advances in place, so what newlyReady compares against is copied before this call's event.
       const before: SwarmState['tasks'] | null = taskState === 'done' ? Object.fromEntries(Object.entries(tasks).map(([k, t]) => [k, { ...t }])) : null
       emit(makeEvent({
@@ -398,7 +405,8 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       } else if (waits.length > 0) {
         extra.push(`Note: ${id} still waits on ${waits.map(w => `${w.id} (${w.state})`).join(', ')}.`)
       }
-      return extra.length === 0 ? reply : { ...reply, text: [reply.text, ...extra].join('\n') }
+      const text = `${reply.text}${handed === null ? '' : handoffReply(handed, id)}`
+      return extra.length === 0 && handed === null ? reply : { ...reply, text: [text, ...extra].join('\n') }
     },
   }
 

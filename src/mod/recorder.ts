@@ -12,7 +12,7 @@ import { guardStarted } from './budget-guard.ts'
 import { Outbox } from './outbox.ts'
 import { connectServer } from './server.ts'
 import {
-  agentFinished, agentStarted, agentUsage, messageSent, protocolMessage, sessionMeasure, toolEvent, whoOf, type Fields,
+  agentFinished, agentStarted, agentUsage, failureText, messageSent, protocolMessage, sessionMeasure, toolEvent, whoOf, type Fields,
 } from './record-events.ts'
 
 /**
@@ -125,13 +125,13 @@ function safely($: EngineInterface, work: () => void): void {
  * made in the hook would share its scope with the hook's other closures and keep the tool's input and result alive.
  */
 function endBodies(
-  $: EngineInterface, tool: string, args: Fields, result: { isError?: boolean; deny?: unknown }, who: string,
+  $: EngineInterface, tool: string, args: Fields, result: { isError?: boolean; deny?: unknown; result?: unknown; text?: unknown }, who: string,
 ): { end: RecordBody | null; message: RecordBody | null } {
   try {
     const failed = result.isError === true || result.deny !== undefined
     // Plain-text SendMessage is recorded from session.send; protocol payloads raise none, so they come from here.
     const message = tool === 'SendMessage' && !failed ? protocolMessage(args, who) : null
-    return { end: toolEvent('end', tool, args, who, failed), message }
+    return { end: toolEvent('end', tool, args, who, failed, failed ? failureText(result) : ''), message }
   } catch {
     rec.outbox.lose()
     saveDropped($)

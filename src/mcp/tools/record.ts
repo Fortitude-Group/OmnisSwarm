@@ -80,7 +80,14 @@ function errorText(d: Args, phase: string, isError: boolean): string | undefined
   if (d.error === undefined) return undefined
   if (typeof d.error !== 'string') throw new InputError('data.error must be text')
   if (phase !== 'end' || !isError) throw new InputError('data.error is only allowed on a failed tool end')
-  const flat = redact(d.error.replace(CONTROL_RUN, ' ').replace(/\s+/g, ' ').trim())
+  // Redacted once with control characters spaced and once with them removed, so a token split by a newline still matches.
+  // When either finds something to blank, the reading with them removed wins: its words run together, which is the safe side.
+  const count = (s: string): number => s.split('[redacted]').length
+  // Only the first 160 characters are kept, so only the first 4 KB is cleaned: a huge error costs no more than that.
+  const raw = d.error.slice(0, 4096)
+  const spaced = redact(raw.replace(CONTROL_RUN, ' ').replace(/\s+/g, ' ').trim())
+  const glued = redact(raw.replace(CONTROL_RUN, '')).replace(/\s+/g, ' ').trim()
+  const flat = count(glued) > 1 ? glued : spaced
   const points = Array.from(flat)
   const cut = points.length <= MAX_ERROR ? flat : `${points.slice(0, MAX_ERROR - 1).join('')}…`
   return cut === '' ? undefined : cut

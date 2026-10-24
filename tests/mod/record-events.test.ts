@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   agentFinished, agentStarted, agentUsage, cleanPath, cleanText, messageSent, protocolMessage, redact,
-  sessionMeasure, toolEvent, toolKind, toolSubject, whoOf,
+  failureText, sessionMeasure, toolEvent, toolKind, toolSubject, whoOf,
 } from '../../src/mod/record-events.ts'
 
 test('cleanText strips control and format characters, collapses whitespace and cuts with an ellipsis', () => {
@@ -119,6 +119,36 @@ test('toolEvent', () => {
     type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'ls', isError: false },
   })
   assert.equal(toolEvent('end', 'Bash', {}, 'lead', true).data.isError, true)
+})
+
+test('toolEvent carries an error only on a failed end', () => {
+  assert.equal(toolEvent('end', 'Bash', {}, 'lead', true, 'boom').data.error, 'boom')
+  assert.equal(Object.hasOwn(toolEvent('end', 'Bash', {}, 'lead', false, 'boom').data, 'error'), false)
+  assert.equal(Object.hasOwn(toolEvent('start', 'Bash', {}, 'lead', true, 'boom').data, 'error'), false)
+  assert.equal(Object.hasOwn(toolEvent('end', 'Bash', {}, 'lead', true, '').data, 'error'), false)
+  assert.equal(Object.hasOwn(toolEvent('end', 'Bash', {}, 'lead', true).data, 'error'), false)
+})
+
+test('failureText: the deny reason, else the first text block, else the text, else the string result', () => {
+  assert.equal(failureText({ deny: 'not allowed' }), 'not allowed')
+  assert.equal(failureText({ isError: true, result: { content: [{ type: 'text', text: 'one' }, { type: 'text', text: 'two' }] }, text: 'one two' }), 'one')
+  assert.equal(failureText({ isError: true, result: { content: [{ type: 'image' }, { type: 'text', text: 'after image' }] } }), 'after image')
+  assert.equal(failureText({ isError: true, result: 'x', text: 'what the model read' }), 'what the model read')
+  assert.equal(failureText({ isError: true, result: 'a string result' }), 'a string result')
+  assert.equal(failureText({ isError: true, result: undefined }), '')
+  assert.equal(failureText({}), '')
+  assert.equal(failureText(undefined as never), '')
+})
+
+test('failureText cleans, redacts and clips to 160 characters, whatever the shape', () => {
+  const noisy = `line one\n\u0007line two sk-${'q'.repeat(40)} ${'w'.repeat(500)}`
+  const out = failureText({ isError: true, result: 'x', text: noisy })
+  assert.ok(out.length <= 160)
+  assert.ok(out.startsWith('line one line two [redacted] '))
+  assert.doesNotMatch(out, /[\u0000-\u001f]/)
+  assert.ok(failureText({ deny: 'd'.repeat(1000) }).length <= 160)
+  assert.equal(failureText({ isError: true, result: { content: [{ type: 'text', text: 42 }] }, text: 5 as never }), '')
+  assert.equal(failureText({ isError: true, result: { content: 'nope' as never }, text: 'fallback' }), 'fallback')
 })
 
 test('messageSent takes a name or an { agentId } address and the first 200 characters', () => {

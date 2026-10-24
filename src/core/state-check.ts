@@ -1,5 +1,5 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
-import { AGENT_OUTCOMES, GATE_RESULTS, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { AGENT_OUTCOMES, GATE_RESULTS, HANDOFF_WHY, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
 import { ERRS_KEEP, TRAIL_KEEP } from './fold-agents.ts'
 import { GATE_HISTORY, MAX_DEPENDS, MAX_OWNS, MAX_OWN_LEN, MAX_WORKTREE } from './fold-tasks.ts'
 import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
@@ -102,13 +102,16 @@ const gateRec = (x: unknown): boolean =>
 
 const TASK_KEYS = ['id', 'title', 'state', 'assignee', 'dependsOn', 'createdAt', 'updatedAt', 'note', 'owns', 'worktree', 'gate', 'gatePin']
 
+const handedOn = (x: unknown): boolean => exact(x, ['from', 'why']) && str(x.from, 64) && isOneOf(HANDOFF_WHY, x.why)
+
 const task = (x: unknown): boolean =>
-  exact(x, isPlain(x) && Object.hasOwn(x, 'handoffs') ? [...TASK_KEYS, 'handoffs'] : TASK_KEYS) &&
+  exact(x, isPlain(x) ? [...TASK_KEYS, ...['handoffs', 'handedOn'].filter(k => Object.hasOwn(x, k))] : TASK_KEYS) &&
   str(x.id, 32) && str(x.title, 120) && isOneOf(TASK_STATES, x.state) && nstr(x.assignee, 64) &&
   list(x.dependsOn, MAX_DEPENDS, d => str(d, 80)) && num(x.createdAt) && num(x.updatedAt) && nstr(x.note, 200) &&
   list(x.owns, MAX_OWNS, o => str(o, MAX_OWN_LEN)) && nstr(x.worktree, MAX_WORKTREE) && (x.gate === null || gateRec(x.gate)) &&
   (x.gatePin === null || (typeof x.gatePin === 'string' && /^[0-9a-f]{64}$/.test(x.gatePin))) &&
-  (!Object.hasOwn(x, 'handoffs') || num(x.handoffs))
+  (!Object.hasOwn(x, 'handoffs') || num(x.handoffs)) &&
+  (!Object.hasOwn(x, 'handedOn') || handedOn(x.handedOn))
 
 const feedItem = (x: unknown): boolean => {
   if (!isPlain(x)) return false

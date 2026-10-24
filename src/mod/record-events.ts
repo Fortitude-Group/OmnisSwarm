@@ -55,6 +55,7 @@ export function cleanPath(x: unknown, max: number): string {
 export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
 const URL_CREDS = /\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@:]+:[^\s/@]+@/gi
 const KEY_VALUE = /(token|key|secret|password|passwd|pwd)=[^\s&"']+/gi
+const AUTH_HEADER = /(\bauthorization\s*[=:]\s*(?:bearer|basic)\s+)[^\s"',;]+/gi
 const DASH_P = /(\s-p)\S+/g
 const REDACT_ROOM = 4096
 
@@ -63,6 +64,7 @@ export function redact(x: unknown): string {
   return x
     .slice(0, REDACT_ROOM)
     .replace(URL_CREDS, '$1[redacted]@')
+    .replace(AUTH_HEADER, '$1[redacted]')
     .replace(KEY_VALUE, '$1=[redacted]')
     .replace(DASH_P, '$1[redacted]')
     .replace(SECRETISH, '[redacted]')
@@ -164,11 +166,40 @@ export function agentUsage(rawUsage: StepUsage, agent: string, rawRequested?: un
   }
 }
 
-export function toolEvent(phase: 'start' | 'end', tool: string, args: Fields, agent: string, isError = false): RecordBody<'agent.tool'> {
+/** The longest error text the mod sends. The server cleans, redacts and clips again before it writes (src/mcp/tools/record.ts). */
+const MAX_ERROR = 160
+
+/** The first text block of an MCP-style result's content, or null. */
+function firstText(content: unknown): string | null {
+  if (!Array.isArray(content)) return null
+  for (const block of content.slice(0, 16)) {
+    const b = isObj(block)
+    if (b.type === 'text' && typeof b.text === 'string') return b.text
+  }
+  return null
+}
+
+/**
+ * Why a call failed, from the tool's own result or the reason a hook refused it, cleaned, redacted and clipped. Empty
+ * when there is nothing to say. Only this slice of the result is kept: never the whole result or its input.
+ */
+export function failureText(raw: { isError?: unknown; deny?: unknown; result?: unknown; text?: unknown }): string {
+  const result = isObj(raw)
+  if (typeof result.deny === 'string') return cleanRedacted(result.deny, MAX_ERROR)
+  const inner = result.result
+  const block = firstText(isObj(inner).content)
+  const said = block ?? (typeof result.text === 'string' ? result.text : typeof inner === 'string' ? inner : '')
+  return cleanRedacted(said, MAX_ERROR)
+}
+
+export function toolEvent(phase: 'start' | 'end', tool: string, args: Fields, agent: string, isError = false, error = ''): RecordBody<'agent.tool'> {
   return {
     type: 'agent.tool',
     agent,
-    data: { phase, tool: cleanText(tool, 80) || 'unknown', kind: toolKind(tool), subject: toolSubject(tool, args), isError },
+    data: {
+      phase, tool: cleanText(tool, 80) || 'unknown', kind: toolKind(tool), subject: toolSubject(tool, args), isError,
+      ...(phase === 'end' && isError && error !== '' && { error }),
+    },
   }
 }
 
