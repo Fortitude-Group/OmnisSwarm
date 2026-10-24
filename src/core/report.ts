@@ -54,6 +54,7 @@ function problems(s: SwarmState): string[] {
   for (const a of shown(s)) {
     if (a.stuckBy !== undefined) out.push(`- ${md(a.name)} looked stuck ${times(a.stuckBy.n)} and was asked to step back (last: ${md(a.stuckBy.p)}, ${a.stuckBy.s ? md(a.stuckBy.s) : 'no subject'}).`)
   }
+  for (const t of Object.values(s.tasks)) if (t.handedOn !== undefined) out.push(`- ${md(t.id)} was handed on from ${md(t.handedOn.from)} (${t.handedOn.why}).`)
   for (const t of Object.values(s.tasks)) {
     const r = t.gate?.result
     if (r === 'failed' || r === 'timeout' || r === 'error') out.push(`- Gate failed for ${md(t.id)} (${r === 'timeout' ? 'timed out' : r === 'error' ? 'could not start' : 'failed'}).`)

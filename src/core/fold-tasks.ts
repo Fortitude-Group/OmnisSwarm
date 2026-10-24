@@ -78,6 +78,7 @@ export function foldTasks(state: SwarmState, e: SwarmEvent, at: number, who: str
       const name = Object.hasOwn(state.agents, agentId) ? state.agents[agentId]!.name : agentId
       if (name === '') break
       task.handoffs = (task.handoffs ?? 0) + 1
+      task.handedOn = { from: name, why: d.why }
       feed(state, { at, kind: 'task', agent: who, text: `task ${id} handoff note from ${name}` })
       break
     }

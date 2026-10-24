@@ -489,7 +489,7 @@ test('a loop longer than 8 ids is shown cut with an ellipsis', async () => {
   await assert.rejects(update({ id: 't1', state: 'pending', dependsOn: ['t12'] }), /^InputError: dependsOn would make a loop: t1 → t12 → t11 → t10 → t9 → t8 → t7 → t6 → …\.$/)
 })
 
-test('task_update handoff is a boolean, is refused with done, and otherwise does nothing yet', async () => {
+test('task_update handoff is a boolean, is refused with done, and is refused for a task with no worked agent', async () => {
   const { call, update, events } = setup()
   call('omnis_swarm_init', { name: 'Hand', topology: 'mesh' })
   call('omnis_task_create', { title: 'a', assignee: 'dev' })
@@ -498,8 +498,8 @@ test('task_update handoff is a boolean, is refused with done, and otherwise does
   assert.equal(events('hand').some(e => e.type === 'task.updated'), false)
   assert.match((await update({ id: 't1', state: 'done', handoff: false })).text, /^Task t1 is now done\.$/)
   call('omnis_task_create', { title: 'b' })
-  assert.match((await update({ id: 't2', state: 'pending', handoff: true })).text, /^Task t2 is now pending\.$/)
-  assert.deepEqual(events('hand').filter(e => e.type === 'task.updated').at(-1)!.data, { id: 't2', state: 'pending' })
+  await assert.rejects(update({ id: 't2', state: 'pending', handoff: true }), /^InputError: t2 has no agent's work to hand on\.$/)
+  assert.deepEqual(events('hand').filter(e => e.type === 'task.updated').at(-1)!.data, { id: 't1', state: 'done' })
 })
 
 test('the update schema offers dependsOn and handoff', () => {

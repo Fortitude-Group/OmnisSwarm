@@ -20,6 +20,8 @@ type Options = {
   /** What $.state holds when the plugin loads, as after a reload. */
   stored?: { seen?: unknown; dropped?: unknown }
   writes?: Write[]
+  /** What the tool beneath the plugin answers; the default is a plain success. */
+  toolCall?: () => unknown
 }
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine and the MCP server.
@@ -59,7 +61,7 @@ function engine(on: On, opts: Options = {}): Sent[] {
     return { value: opts.agents ?? [] }
   })
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }))
-  on('tool.call', () => ({ result: { stdout: 'ok' } as never }))
+  on('tool.call', () => (opts.toolCall?.() ?? { result: { stdout: 'ok' } }) as never)
   on('turn.complete', () => ({ text: '' }))
   on('session.send', (_$, e) => (e.to === 'nobody' ? { isDelivered: false, reason: 'No agent named nobody' } : { isDelivered: true }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -400,4 +402,49 @@ test('a seen list in state keeps only its strings', LOADED, async ($, on) => {
   await until(() => sent.length === 1)
   await settle()
   expect(sent.map(s => [s.type, s.agent])).toEqual([['agent.started', 'a8']])
+})
+
+test('a failed tool end carries the first words of the error, cleaned and with secrets blanked', LOADED, async ($, on) => {
+  const sent = engine(on, { toolCall: () => ({ isError: true, result: 'x', text: `tests/a.test.ts:41\nexpected 3 tokens, got 2 token=ghp_${'a'.repeat(30)} ${'z'.repeat(300)}` }) })
+  await start($)
+  await call($, { tool: 'Bash', command: 'npm test' })
+  await until(() => sent.length === 2)
+  const end = sent[1]!.data
+  expect(end.isError).toBe(true)
+  expect(typeof end.error).toBe('string')
+  const error = end.error as string
+  expect(error.startsWith('tests/a.test.ts:41 expected 3 tokens, got 2 token=[redacted] ')).toBe(true)
+  expect(error.length).toBeLessThanOrEqual(160)
+  expect(error).not.toContain('ghp_')
+  expect(Object.hasOwn(sent[0]!.data, 'error')).toBe(false)
+})
+
+test('an MCP-style result gives its first text block as the error', LOADED, async ($, on) => {
+  const sent = engine(on, { toolCall: () => ({ isError: true, result: { content: [{ type: 'image' }, { type: 'text', text: 'first block' }, { type: 'text', text: 'second block' }] }, text: 'first block second block' }) })
+  await start($)
+  await call($, { tool: 'Bash', command: 'x' })
+  await until(() => sent.length === 2)
+  expect(sent[1]!.data.error).toBe('first block')
+})
+
+test('a refused call records the deny reason as its error', LOADED, async ($, on) => {
+  const sent = engine(on, { toolCall: () => ({ deny: 'coder-2 is editing src/a.ts.' }) })
+  await start($)
+  await call($, { tool: 'Edit', file_path: '/project/src/a.ts', old_string: 'a', new_string: 'b' })
+  await until(() => sent.length === 2)
+  expect(sent[1]!.data).toEqual({ phase: 'end', tool: 'Edit', kind: 'edit', subject: '/project/src/a.ts', isError: true, error: 'coder-2 is editing src/a.ts.' })
+})
+
+test('a call that succeeds never carries an error, and a failure with no text carries none either', LOADED, async ($, on) => {
+  let next: unknown = { result: { stdout: 'ok' }, text: 'fine' }
+  const sent = engine(on, { toolCall: () => next })
+  await start($)
+  await call($, { tool: 'Bash', command: 'a' })
+  await until(() => sent.length === 2)
+  next = { isError: true, result: undefined }
+  await call($, { tool: 'Bash', command: 'b' })
+  await until(() => sent.length === 4)
+  expect(Object.hasOwn(sent[1]!.data, 'error')).toBe(false)
+  expect(sent[3]!.data.isError).toBe(true)
+  expect(Object.hasOwn(sent[3]!.data, 'error')).toBe(false)
 })

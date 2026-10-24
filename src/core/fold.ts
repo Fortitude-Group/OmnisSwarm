@@ -1,7 +1,7 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
   AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
 import { foldAgentTool } from './fold-agents.ts'
 import { foldTasks } from './fold-tasks.ts'
@@ -104,6 +104,8 @@ export type TaskEntry = {
   gatePin: string | null
   /** How many handoff notes have been written for the task; absent until the first. */
   handoffs?: number
+  /** The latest handoff note's agent (its name, or id when unknown) and reason; absent until the first. */
+  handedOn?: { from: string; why: HandoffWhy }
 }
 export type FeedItem = { at: number; kind: 'agent' | 'message' | 'memory' | 'task'; agent: string; text: string; to?: string }
 export type SwarmInfo = {

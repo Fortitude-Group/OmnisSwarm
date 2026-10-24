@@ -16,6 +16,7 @@ import { gateTarget } from './gate/target.ts'
 import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
 import { SECRETISH } from './redact.ts'
 import type { Session } from './session.ts'
+import { handoffReply, saveNote, workedAgent } from './tools/handoff.ts'
 import { writeReport } from './tools/report.ts'
 import { resolveWorktree } from './worktrees.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
@@ -341,6 +342,9 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       for (const d of dependsOn ?? []) if (!Object.hasOwn(tasks, d)) throw new InputError(`dependsOn: no task ${clip(d, 80)} in swarm ${swarm}.`)
       const loop = dependsOn === undefined ? null : cyclePath(tasks, id, dependsOn)
       if (loop !== null) throw new InputError(`dependsOn would make a loop: ${loopText(loop)}.`)
+      // The agent whose work is handed on is the assignee before this call.
+      const handFrom = args.handoff === true ? workedAgent(session.state(swarm).state, tasks[id]!.assignee) : null
+      if (args.handoff === true && handFrom === null) throw new InputError(`${id} has no agent's work to hand on.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
       const settings = settingsFor(gateOptions.env)
       if (taskState === 'done' && settings.mode !== 'off') {
@@ -356,11 +360,12 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         if (!out.closes) return { text: out.text, isError: true }
         reply = { text: out.text }
       }
+      const handed = handFrom === null ? null : saveNote(ctx, swarm, session.state(swarm).state, id, handFrom, 'lead', clock())
       emit(makeEvent({
         type: 'task.updated', swarm, src: 'mcp', now: clock(),
         data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(dependsOn !== undefined && { dependsOn }) },
       }))
-      return reply
+      return handed === null ? reply : { ...reply, text: `${reply.text}${handoffReply(handed, id)}` }
     },
   }
 
