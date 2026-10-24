@@ -97,3 +97,66 @@ test('a refusal or warning is recorded once a minute per agent and path', () => 
   assert.equal(told.should('a1', '/r/y', 1), true)
   assert.equal(told.should('a1', '/r/x', 60_000), true)
 })
+
+const allows = (f: Fence, raw: string, cwd: string) => fenceAllows(f, key(raw, cwd), { raw, cwd })
+
+test('the session cwd is an alias of the project root, unless it already sits under a root', () => {
+  const f = fenced(['docs/'], ['/real/repo'])
+  assert.equal(allows(f, '/link/repo/docs/a.md', '/link/repo'), true)
+  assert.equal(allows(f, '/link/repo/src/x.ts', '/link/repo'), false)
+  assert.equal(allows(f, 'src/x.ts', '/link/repo'), false)
+  // A cwd inside the repo is not a root of its own: paths are still measured from the repo.
+  assert.equal(allows(f, '/real/repo/sub/docs/a.md', '/real/repo/sub'), false)
+  assert.equal(allows(f, '/real/repo/docs/a.md', '/real/repo/sub'), true)
+})
+
+test('with home roots, only paths under them can pass; scratch paths still pass', () => {
+  const f: Fence = { fenced: true, tasks: ['t1'], owns: ['src/**'], roots: ['/repo', '/wt1', '/wt2'], home: ['/wt1'] }
+  assert.equal(allows(f, '/wt1/src/x.ts', '/repo'), true)
+  assert.equal(allows(f, '/wt2/src/x.ts', '/repo'), false)
+  assert.equal(allows(f, '/repo/src/x.ts', '/repo'), false)
+  assert.equal(allows(f, '/tmp/x.ts', '/repo'), true)
+  // The cwd alias is home only when the project root is.
+  assert.equal(allows(f, '/link/src/x.ts', '/link'), false)
+  assert.equal(allows({ ...f, home: ['/repo'] }, '/link/src/x.ts', '/link'), true)
+})
+
+test('device-form paths are refused for a fenced agent, even inside its files', () => {
+  const f = fenced(['**'], ['C:/p'])
+  for (const raw of ['\\\\.\\C:\\p\\src\\x.ts', '//./C:/p/src/x.ts', '\\\\?\\C:\\p\\src\\x.ts', '\\\\?\\UNC\\host\\share\\x.ts']) {
+    assert.equal(allows(f, raw, 'C:\\p'), false, raw)
+    assert.equal(allows({ fenced: false }, raw, 'C:\\p'), true, raw)
+  }
+})
+
+test('a UNC path is refused unless it sits under a UNC root, which folds case', () => {
+  assert.equal(allows(fenced(['**'], ['C:/p']), '\\\\localhost\\C$\\p\\src\\x.ts', 'C:\\p'), false)
+  const share = fenced(['src/**'], ['//nas/share/repo'])
+  assert.equal(allows(share, '//NAS/share/repo/src/x.ts', 'C:\\p'), true)
+  assert.equal(allows(share, '//NAS/Share/Repo/SRC/x.ts', '/home/me'), true)
+  assert.equal(allows(share, '//nas/share/repo/docs/x.md', 'C:\\p'), false)
+})
+
+test('paths over 4,096 characters or 256 segments are refused before matching', () => {
+  const f = fenced(['**'], ['/repo'])
+  assert.equal(allows(f, `/repo/${'a'.repeat(4100)}.ts`, '/repo'), false)
+  assert.equal(allows(f, `/repo/${'d/'.repeat(256)}x.ts`, '/repo'), false)
+  assert.equal(allows(f, `/repo/${'d/'.repeat(200)}x.ts`, '/repo'), true)
+})
+
+test('parseFence takes an optional home list of strings', () => {
+  assert.deepEqual(parseFence('{"fenced":true,"tasks":["t1"],"owns":["src/**"],"roots":["/r"],"home":["/r"]}'), { ...fenced(['src/**'], ['/r']), home: ['/r'] })
+  assert.equal(parseFence('{"fenced":true,"tasks":["t1"],"owns":["src/**"],"roots":["/r"],"home":"/r"}'), null)
+})
+
+test('the cache remembers each agent\'s last fenced answer past expiry and clears, until an unfenced one', () => {
+  const cache = new FenceCache()
+  const f = fenced(['x'], ['/r'])
+  cache.set('a1', f, 0, cache.generation)
+  cache.clear()
+  assert.equal(cache.get('a1', 1), undefined)
+  assert.deepEqual(cache.last('a1'), f)
+  cache.set('a1', { fenced: false }, 2, cache.generation)
+  assert.equal(cache.last('a1'), undefined)
+  assert.equal(cache.last('a2'), undefined)
+})

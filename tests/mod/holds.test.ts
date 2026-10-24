@@ -81,3 +81,10 @@ test('reserve holds at once, and its undo restores what was there', () => {
   assert.equal(h.clashWith('/p/y', 'a2', HOLD_IDLE_MS), null)
   assert.equal(h.reserve('/p/z', null, 0)(), undefined)
 })
+
+test('device and long-path UNC prefixes are taken off the key', () => {
+  assert.equal(normalisePath('\\\\.\\C:\\proj\\x.ts', 'C:\\proj')!.key, 'c:/proj/x.ts')
+  assert.equal(normalisePath('//./C:/proj/x.ts', 'C:\\proj')!.key, 'c:/proj/x.ts')
+  assert.equal(normalisePath('\\\\?\\UNC\\Host\\Share\\x.ts', 'C:\\proj')!.key, '//host/share/x.ts')
+  assert.equal(normalisePath('\\\\?\\C:\\proj\\x.ts', 'C:\\proj')!.key, 'c:/proj/x.ts')
+})
