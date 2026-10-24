@@ -8,17 +8,21 @@ import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, FENCE_MODES, GUAR
 import { appendEvent } from '../../core/log.ts'
 import { RECORDER_TYPES, RECORD_TOOL, SESSION_ID, type RecorderType } from '../../core/recording.ts'
 import type { Args, ToolDef } from '../protocol.ts'
+import { redact } from '../redact.ts'
 import { TASK_ID, type ToolContext } from '../tools.ts'
 import { InputError, reqEnum, reqString } from '../validate.ts'
 
 /** Control and format characters, line and paragraph separators, and lone surrogates (which no terminal can draw). */
 const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u
+const CONTROL_RUN = new RegExp(CONTROL.source, 'gu')
 const MAX_COUNT = 1e12
 const MAX_USD = 1e9
 const MAX_USAGE = 1e9
 const AHEAD_MS = 5 * 60_000
 const BEHIND_MS = 24 * 3_600_000
 const MAX_FENCE_TASKS = 20
+/** The longest error text an agent.tool end keeps. */
+export const MAX_ERROR = 160
 const FAILED = 'Could not record the event in .omnis-swarm/ (see the server log).'
 
 const isObj = (x: unknown): x is Args => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -68,6 +72,20 @@ function isoTime(v: unknown, clock: Date): string {
   return v
 }
 
+/**
+ * Why a failed call failed, as the log may hold it: control characters become spaces, whitespace collapses, token-shaped
+ * runs are blanked, and it is cut to MAX_ERROR code points. Undefined when nothing is left. Only a failed end carries one.
+ */
+function errorText(d: Args, phase: string, isError: boolean): string | undefined {
+  if (d.error === undefined) return undefined
+  if (typeof d.error !== 'string') throw new InputError('data.error must be text')
+  if (phase !== 'end' || !isError) throw new InputError('data.error is only allowed on a failed tool end')
+  const flat = redact(d.error.replace(CONTROL_RUN, ' ').replace(/\s+/g, ' ').trim())
+  const points = Array.from(flat)
+  const cut = points.length <= MAX_ERROR ? flat : `${points.slice(0, MAX_ERROR - 1).join('')}…`
+  return cut === '' ? undefined : cut
+}
+
 function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
   switch (type) {
     case 'agent.started':
@@ -84,9 +102,12 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     case 'agent.tool': {
       const isError = d.isError
       if (typeof isError !== 'boolean') throw new InputError('data.isError must be true or false')
+      const phase = oneOf(d, 'phase', ['start', 'end'] as const)
+      const error = errorText(d, phase, isError)
       return {
-        phase: oneOf(d, 'phase', ['start', 'end'] as const), tool: text(d, 'tool', 80, true),
+        phase, tool: text(d, 'tool', 80, true),
         kind: oneOf(d, 'kind', TOOL_KINDS), subject: text(d, 'subject', LIMITS.subject), isError,
+        ...(error !== undefined && { error }),
       }
     }
     case 'message.sent':

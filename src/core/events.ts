@@ -33,6 +33,9 @@ export type ClashMode = (typeof CLASH_MODES)[number]
 /** How a verification gate result was handled: a failure refused the close, or let it through with a warning. */
 export const GATE_MODES = ['block', 'warn'] as const
 export type GateMode = (typeof GATE_MODES)[number]
+/** Why a handoff note was written: the agent got stuck again, finished while stuck, or the lead asked for it. */
+export const HANDOFF_WHY = ['stuck', 'finished', 'lead'] as const
+export type HandoffWhy = (typeof HANDOFF_WHY)[number]
 export const GATE_RESULTS = ['passed', 'failed', 'timeout', 'error', 'none', 'skipped'] as const
 export type GateResult = (typeof GATE_RESULTS)[number]
 /** How an out-of-scope edit was handled: refused, or let through with a warning to the lead. */
@@ -46,13 +49,16 @@ export type EventData = {
   'agent.finished': { outcome: AgentOutcome; reason?: string }
   /** `requested`: the model the request named, only when a gateway (OmnisRouter) answered with another. */
   'agent.usage': { model: string; input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number; requested?: string }
-  'agent.tool': { phase: 'start' | 'end'; tool: string; kind: ToolKind; subject: string; isError: boolean }
+  /** `error`: why a failed call failed (phase end, isError true only); cleaned, redacted and clipped to 160 by the server. */
+  'agent.tool': { phase: 'start' | 'end'; tool: string; kind: ToolKind; subject: string; isError: boolean; error?: string }
   'message.sent': { to: string; summary: string }
   'memory.put': { key: string; bytes: number; preview: string }
-  /** owns: path patterns the task's agent may edit. worktree: the resolved folder the work is done in. */
-  'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[]; owns?: string[]; worktree?: string }
-  /** owns replaces the list (an empty list clears it). */
-  'task.updated': { id: string; state: TaskState; assignee?: string; note?: string; owns?: string[]; worktree?: string }
+  /** owns: path patterns the task's agent may edit. worktree: the resolved folder the work is done in. gatePin: the gate's digest (64 lowercase hex) when the task was created. */
+  'task.created': { id: string; title: string; assignee?: string; dependsOn?: string[]; owns?: string[]; worktree?: string; gatePin?: string }
+  /** owns and dependsOn replace the list (an empty list clears it). */
+  'task.updated': { id: string; state: TaskState; assignee?: string; note?: string; owns?: string[]; worktree?: string; dependsOn?: string[] }
+  /** No event agent. data.agent is the id of the agent whose work was handed on. */
+  'task.handoff': { task: string; agent: string; why: HandoffWhy }
   'session.measure': { contextTokens?: number; contextWindow: number; contextPercent?: number; costUsd?: number }
   'budget.set': { agentMinutes?: number; agentUsd?: number; swarmUsd?: number }
   'guard.warned': { limit: GuardLimit; value: number; threshold: number }
@@ -75,7 +81,7 @@ export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
   'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked',
-  'clash.blocked', 'agent.stuck', 'report.written', 'gate.ran', 'fence.blocked',
+  'clash.blocked', 'agent.stuck', 'report.written', 'gate.ran', 'fence.blocked', 'task.handoff',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {

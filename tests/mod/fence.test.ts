@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FENCE_ASK_MS, FENCE_CACHE_MS, FenceCache, FenceTold, SKIP_GATE_REFUSAL, fenceAllows, fenceRefusal, fenceSettingFrom, fenceWarn, parseFence,
+  FENCE_ASK_MS, FENCE_CACHE_MS, FenceCache, FenceTold, SKIP_GATE_REFUSAL, DEPENDS_REFUSAL, HANDOFF_REFUSAL, fenceAllows, fenceRefusal, fenceSettingFrom, fenceWarn, parseFence,
   type Fence,
 } from '../../src/mod/fence.ts'
 import { normalisePath } from '../../src/mod/holds.ts'
@@ -32,6 +32,8 @@ test('the exact texts, patterns comma-separated and clipped to 120', () => {
   assert.ok(patterns.startsWith('src/folder-0/**, src/folder-1/**') && patterns.endsWith('…'))
   assert.equal(fenceWarn('coder-1', 'src/b.ts', ['t1', 't2']), "[OmnisSwarm scope fence] coder-1 edited src/b.ts, outside t1, t2's files.")
   assert.equal(SKIP_GATE_REFUSAL, 'Only main can skip the gate. Report the problem to main instead.')
+  assert.equal(DEPENDS_REFUSAL, 'Only main can change what a task depends on. Ask main instead.')
+  assert.equal(HANDOFF_REFUSAL, "Only main can hand a task on. Report what's blocking you to main instead.")
 })
 
 test('a path is matched relative to the longest root it sits under', () => {

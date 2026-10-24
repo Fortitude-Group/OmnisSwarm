@@ -107,7 +107,7 @@ test('an old log with none of the new fields still folds to a valid state', () =
   ])
   assert.deepEqual(s.tasks.t1, {
     id: 't1', title: 'Do it', state: 'done', assignee: 'bob', dependsOn: [], createdAt: Date.parse('2026-10-21T10:00:01.000Z'),
-    updatedAt: Date.parse('2026-10-21T10:00:02.000Z'), note: 'merged', owns: [], worktree: null, gate: null,
+    updatedAt: Date.parse('2026-10-21T10:00:02.000Z'), note: 'merged', owns: [], worktree: null, gate: null, gatePin: null,
   })
   assert.ok(isSwarmState(roundTrip(s), 's1'))
 })

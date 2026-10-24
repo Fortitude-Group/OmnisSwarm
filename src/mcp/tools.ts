@@ -7,6 +7,7 @@ import { uniqueSwarmId } from '../core/swarm.ts'
 import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
+import { cyclePath } from '../core/ready.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
@@ -76,6 +77,9 @@ function ownsArg(args: Args): string[] | undefined {
   })
   return [...new Set(owns)]
 }
+
+/** The loop a dependsOn change would close, as the refusal shows it: at most 8 ids, then an ellipsis. */
+const loopText = (path: string[]): string => `${path.slice(0, 8).join(' → ')}${path.length > 8 ? ' → …' : ''}`
 
 const NO_CALL: CallContext = { signal: new AbortController().signal, progress: () => {} }
 
@@ -310,6 +314,8 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         note: { type: 'string', maxLength: 200 },
         owns: { ...OWNS_PROP, description: `${OWNS_PROP.description} Replaces the task's list; an empty list clears it.` },
         worktree: WORKTREE_PROP,
+        dependsOn: { type: 'array', items: { type: 'string', pattern: TASK_ID.source }, maxItems: 20, description: "The tasks that must be done before this one can start. Replaces the task's list; an empty list clears it. Only the lead may change it." },
+        handoff: { type: 'boolean', description: "Save a note for whoever takes this task from its current assignee: what that agent did, what failed, which files it touched. Only the lead may use it. Not with state done." },
         skipGate: { type: 'boolean', description: 'Close the task without running its verification gate. Needs a note saying why. Only the lead may use it.' },
       },
       required: ['id', 'state'],
@@ -323,11 +329,18 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       const owns = ownsArg(args)
       const worktreeArg = optString(args, 'worktree', 400)
       const worktree = worktreeArg === undefined ? undefined : resolveWorktree(root, worktreeArg)
+      const dependsArg = optStringList(args, 'dependsOn', 20, 8, TASK_ID)
+      const dependsOn = dependsArg === undefined ? undefined : [...new Set(dependsArg)]
+      if (args.handoff !== undefined && args.handoff !== null && typeof args.handoff !== 'boolean') throw new InputError('handoff must be true or false')
+      if (args.handoff === true && taskState === 'done') throw new InputError('A done task has nothing to hand on.')
       if (args.skipGate !== undefined && args.skipGate !== null && typeof args.skipGate !== 'boolean') throw new InputError('skipGate must be true or false')
       if (args.skipGate === true && note === undefined) throw new InputError('skipGate needs a note saying why.')
       const swarm = session.runningSwarm()
       const tasks = session.state(swarm).state.tasks
       if (!Object.hasOwn(tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
+      for (const d of dependsOn ?? []) if (!Object.hasOwn(tasks, d)) throw new InputError(`dependsOn: no task ${clip(d, 80)} in swarm ${swarm}.`)
+      const loop = dependsOn === undefined ? null : cyclePath(tasks, id, dependsOn)
+      if (loop !== null) throw new InputError(`dependsOn would make a loop: ${loopText(loop)}.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
       const settings = settingsFor(gateOptions.env)
       if (taskState === 'done' && settings.mode !== 'off') {
@@ -345,7 +358,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       }
       emit(makeEvent({
         type: 'task.updated', swarm, src: 'mcp', now: clock(),
-        data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
+        data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(dependsOn !== undefined && { dependsOn }) },
       }))
       return reply
     },
