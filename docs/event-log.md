@@ -48,11 +48,12 @@ same user could edit `.omnis-swarm` directly.
 | `agent.started` | recorder | `name`, `role`, `description` (≤120), `parent` (agent id or `lead`) |
 | `agent.finished` | recorder | `outcome` (`answer`\|`aborted`\|`failed`), `reason?` (≤80) |
 | `agent.usage` | recorder (written through the server) | `model`, `input`, `output`, `cacheRead`, `cacheWrite5m`, `cacheWrite1h` (token counts for one API call), `requested?` (≤80: the model the request named, present only when a gateway such as OmnisRouter answered with another; ids that differ only by case, a `[1m]`-style suffix or a `-YYYYMMDD` date count as the same) |
-| `agent.tool` | recorder | `phase` (`start`\|`end`), `tool`, `kind` (`read`\|`edit`\|`bash`\|`search`\|`web`\|`agent`\|`other`), `subject` (path or command, ≤80), `isError` |
+| `agent.tool` | recorder | `phase` (`start`\|`end`), `tool`, `kind` (`read`\|`edit`\|`bash`\|`search`\|`web`\|`agent`\|`other`), `subject` (path or command, ≤80), `isError`, `error?` (≤160, why the call failed: only on `phase: "end"` with `isError: true`. The server cleans it, blanks secret-shaped text and clips it. `omnis_replay` strips it, and exports never show it) |
 | `message.sent` | recorder | `to` (agent **name** as given to SendMessage), `summary` (≤200) |
 | `memory.put` | mcp | `key`, `bytes`, `preview` (≤80). The envelope `agent` is the writer's name as given to the tool (default `lead`), not an agent id |
-| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`, `owns?` (up to 20 path patterns the assignee may edit, each ≤200, relative to the repo root: `*`, `**`, `?`, a trailing `/` for a folder), `worktree?` (≤400, the resolved path of the project or one of its registered git worktrees, where the work is done and its gate runs). Two sessions sharing a swarm can both create the same id; the last write wins (accepted) |
-| `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200), `owns?` (replaces the task's list; `[]` clears it), `worktree?` (replaces the stored one). A field left out keeps its previous value |
+| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`, `owns?` (up to 20 path patterns the assignee may edit, each ≤200, relative to the repo root: `*`, `**`, `?`, a trailing `/` for a folder), `worktree?` (≤400, the resolved path of the project or one of its registered git worktrees, where the work is done and its gate runs), `gatePin?` (64 lowercase hex: the digest of the task's gate when it was created. Anything else folds to no pin). The first `task.created` for an id wins, and a later one for the same id is ignored, so a second line can't reset a task's pin or state |
+| `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200), `owns?` (replaces the task's list; `[]` clears it), `worktree?` (replaces the stored one), `dependsOn?` (up to 20 task ids, cleaned as on `task.created`: replaces the task's list, and `[]` clears it). A field left out keeps its previous value. A `done` that makes pending tasks ready adds a `task <id> ready` feed line for each |
+| `task.handoff` | mcp | `task` (a task id), `agent` (the id of the agent whose work was handed on), `why` (`stuck`\|`finished`\|`lead`). No envelope `agent`. Written after the `memory.put` that saved the note as `handoff/<task>`. The task counts its handoffs and keeps the latest one's agent and reason, and the feed gets `task <id> handoff note from <name>` |
 | `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. Merged into the session figures: a field left out keeps its previous value. Percent is clamped to 0-100 |
 | `budget.set` | mcp (`omnis_swarm_init` with a `budget`) or recorder (`/omnis budget`) | `agentMinutes?`, `agentUsd?`, `swarmUsd?`: at least one, each above 0 and at most 1440 minutes, $1000 and $1000. Swarm-level, no `agent`. Overrides the configured limits for the rest of the swarm; a key left out keeps its previous value |
 | `guard.warned` | recorder | `limit` (`time`\|`agentCost`\|`swarmCost`), `value`, `threshold` (minutes for `time`, USD otherwise, both at most 1,000,000). `agent` is required for `time` and `agentCost` and absent for `swarmCost` |
@@ -68,7 +69,7 @@ same user could edit `.omnis-swarm` directly.
 
 `omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
 knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_report` are internal tools like
-`omnis_record` and `omnis_feed`, and so is `omnis_fence`, which tells the mod which files an agent's tasks let it edit: the mod refuses them when the model calls them.
+`omnis_record` and `omnis_feed`, and so are `omnis_fence`, which tells the mod which files an agent's tasks let it edit, and `omnis_handoff`, which writes a stuck agent's handoff notes: the mod refuses them when the model calls them.
 
 ## Reading rules
 
@@ -92,7 +93,8 @@ knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_repor
 ## What is never in the log
 
 Full prompts, tool output, file contents and memory values. Only names, models, numbers, paths,
-command lines up to 80 characters, message summaries up to 200 and memory previews up to 80. A
+command lines up to 80 characters, message summaries up to 200, memory previews up to 80 and, for a
+failed tool call, up to 160 characters of its error with secret-shaped text blanked. A
 memory value never appears beyond that redacted 80-character preview.
 
 The log is a display record, not a trust boundary. Anything that can write to it can put any text

@@ -26,7 +26,7 @@ Or in one go:
 /plugin install omnis-swarm --marketplace Fortitude-Group/OmnisSwarm
 ```
 
-The version is pinned (0.4.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
+The version is pinned (0.5.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
 
 ```
 claude plugin update omnis-swarm@omnis-swarm
@@ -66,6 +66,46 @@ One blind spot, and it's a real one. The guard only sees Edit, Write and Noteboo
 
 An agent counts as stuck if its last 5 tool calls failed, or it ran the same tool on the same thing 4 times with no edit in between. It's asked once to step back and try another approach, or report to main. The lead gets a one-line note, and the pane shows the agent's stuck look while it lasts.
 
+A second hit in the same run doesn't get a second nudge. It tells the agent to stop, and writes a handoff note for whoever picks the task up next. That's the next section.
+
+## Handing on a stuck task
+
+When an agent is stuck for good, the next one shouldn't have to start from nothing. So OmnisSwarm writes down what the first one did, what failed and which files it touched, all of it taken from the log (never a model's summary of it).
+
+**When it happens.** Two triggers fire on their own:
+
+1. **Stuck again.** The stuck guard hits the same agent a second time in one run, with either pattern. A run ends when the agent's turn ends. Instead of the step-back nudge, the agent gets: `You're still stuck. Stop here, and report to main what you tried and what's blocking you.`
+2. **Finished while stuck.** A subagent's turn ends while one of its stuck patterns is still set, and the first trigger hasn't already fired in that run.
+
+**What's written.** A note for each of the agent's open tasks (assigned to it, active or pending, active ones first, at most 3), saved in swarm memory as `handoff/<id>`. It's plain text, at most 4,096 bytes, and holds:
+
+- the task, and who it's from: stuck pattern, nudge count, minutes, tool calls and how many failed
+- what the task owns, its worktree and its gate results
+- files edited (up to 20), and files read but not edited (up to 10)
+- the last 8 calls, oldest first, each marked ✓ or ✕
+- the last 3 errors, quoted from tool output
+- the last thing the agent said to main, and the note on the task
+
+A line near the top says it was recorded by OmnisSwarm and that the error lines are tool output, to be read as data, not instructions. Secrets are blanked. Too big? The read list goes first, then the oldest calls, the oldest errors and the edited list.
+
+Then main hears about it:
+
+`[OmnisSwarm] dev-2 is stuck on t3 (failing). Its handoff note is in memory: handoff/t3. To hand it on, stop dev-2, then give t3 a new assignee and tell it to read handoff/t3 first.`
+
+For the second trigger, `is stuck on` reads `finished while stuck on`. An agent with no open task gets `[OmnisSwarm] dev-2 is stuck (failing) and has no open task to hand on.` on the first trigger, and nothing on the second. Notes are best effort: if the server errors or takes over 2 seconds, there's no note, and nothing else breaks.
+
+**Asking for one.** Main can write a note itself with `handoff: true` on `omnis_task_update`. The note is for the task's current assignee, taken from before the call, and then the rest of the call applies. So one call hands a task on:
+
+```
+omnis_task_update { id: "t3", state: "pending", assignee: "dev-5", handoff: true, note: "dev-2 stuck on the parser" }
+```
+
+The reply gains `Handoff note saved as handoff/t3.` It's refused with `t3 has no agent's work to hand on.` when the task has no assignee or the assignee never made a tool call, and with `A done task has nothing to hand on.` alongside `state: "done"`. Only main can do it. A subagent that tries gets `Only main can hand a task on. Report what's blocking you to main instead.`
+
+**Why the task isn't moved for you.** The mod can't stop a subagent. Hand the task to someone new while the old agent is still running and you've got two agents on it. Worse, the scope fence follows the assignee, so the old agent's fence lifts the moment the task leaves it, while it's still editing. So stop the old agent first, then reassign.
+
+The run report lists each one under Problems: `- t3 was handed on from dev-2 (stuck).`
+
 ## The run report
 
 Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
@@ -103,7 +143,9 @@ Worth saying plainly: an allow rule for `npm test` lets the gate run whatever th
 
 **It needs the mod.** No mod, no permission check, so no gate. With mods off, `done` is refused with `The gate needs OmnisSwarm's mod to check permission first, and no check arrived.` Mark the task done with `skipGate` and a note instead. (That check is a speed bump, not a wall: a model that calls the plugin's internal tools on purpose can get past it with mods off.)
 
-**Pinned gates.** The gate's definition (the script, the `package.json` entry it uses, or the command) is pinned when a task is created. If it has changed by the time the task is marked done, `done` is refused with `the gate changed since the task was created`, in `warn` mode too. In a worktree the gate also has to match the project root's copy. So a task whose job is changing the gate script can't pass its own gate, and neither can any open task created before the change. Main closes those with `skipGate`. The pins live in the server's memory, so a server restart drops them.
+**Pinned gates.** The gate's definition (the script, the `package.json` entry it uses, or the command) is pinned when a task is created. If it has changed by the time the task is marked done, `done` is refused with `the gate changed since the task was created`, in `warn` mode too. In a worktree the gate also has to match the project root's copy. So a task whose job is changing the gate script can't pass its own gate, and neither can any open task created before the change. Main closes those with `skipGate`. The pin is written to the event log with the task, so it survives a server restart.
+
+A changed gate is refused before any permission prompt. The mod asks the server first, and if the gate has changed it refuses `done` straight away with `Gate failed for <id> (the gate changed since the task was created, 0 s): <command>. The task stays <state>.` No point asking you to approve a command that's going to be refused anyway.
 
 **Logs and notes.** Every run's output goes to `.omnis-swarm/gates/<swarm>-<task>-<n>.log`, capped at 2 MiB (the middle goes first). If the assignee changed source files and no test files in this swarm, the reply gets one more line: `Note: <assignee> changed <n> source file(s) and no test files.` It never changes the result.
 
@@ -125,6 +167,30 @@ Give a task `owns` on `omnis_task_create` and its agent can only edit those file
 **Only main changes it.** A subagent can't set `owns`, `assignee` or `worktree` on a task: `Only main can change what a task owns. Ask main instead.` To free an agent, main clears the task's patterns (`owns: []`) or gives the task to someone else. Reusing an agent's name for new work? Its old tasks still fence it until main does one or the other.
 
 Same blind spot as the clash guard: writes through Bash (`sed -i`, `>`, `mv`) aren't seen.
+
+## Ready tasks
+
+Give a task `dependsOn` (up to 20 task ids) and it waits for them. A pending task is one of three things:
+
+- **Ready:** every task it depends on is done. A pending task that depends on nothing is ready too.
+- **Waiting:** at least one of them isn't done yet.
+- **Stranded:** one of them failed. It'll wait forever unless main steps in.
+
+`dependsOn` works on `omnis_task_create` and on `omnis_task_update`. On update it replaces the list, and `dependsOn: []` clears it. An id that doesn't exist is refused with `dependsOn: no task <id> in swarm <swarm>.`, and so is anything that would make a loop: `dependsOn would make a loop: t3 → t5 → t3.` Only main can change it. A subagent gets `Only main can change what a task depends on. Ask main instead.`
+
+**What main is told.** The `omnis_task_update` reply gains a last line when there's something to say:
+
+- `state: "done"`, and some task became ready because of it: `Now ready: t4 Build the parser (dev-3), t5 Write the docs (no assignee).` Titles are clipped to 40 characters, and past 8 tasks it's `and <n> more`. A failed gate that keeps the task open adds nothing, because nothing became ready.
+- `state: "failed"`, and pending tasks depend on it: `Now stranded: t4, t5 (they depend on t3).`
+- `state: "active"` on a task that's still waiting: `Note: t6 still waits on t3 (active), t4 (pending).` That's a heads-up. The update goes ahead.
+
+`omnis_swarm_status` gets two lines after `Tasks:`, each only when it has something in it. `Ready: t4 (dev-3), t5 (no assignee)` and `Waiting: t6 on t4, t7 on t4 t5`, with a failed dependency marked as in `t8 on t3 (failed)`. Ten tasks each, then `and <n> more`.
+
+**When a subagent closes a task.** Its reply goes to the subagent, not to main. So the mod passes the `Now ready:` line on to main as `[OmnisSwarm] dev-2 closed t3. Now ready: …`, and main doesn't have to re-read the board to find out.
+
+The pane's feed gets a `task t4 ready` line, and the run report lists every stranded task that's still pending under Tasks: `- Never started: t5, waiting on failed t3.`
+
+What it doesn't do: assign or spawn anything. OmnisSwarm says what's ready and main decides who takes it. Nor does it refuse work on a task that's still waiting. It just mentions it.
 
 ## Settings
 
@@ -151,9 +217,7 @@ Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omn
 
 **Bash writes.** Neither the clash guard nor the scope fence sees files changed through Bash.
 
-**Gate cleanup off Windows.** Killing a gate's process tree on Linux and macOS has been written but not yet run on either. Everything else about the gate has been tested on Windows only.
-
-**Gate pins.** They're held in the server's memory, so a restart forgets them and tasks created before it lose the changed-gate check.
+**Gate cleanup off Windows.** Killing a gate's process tree has been run on Linux once (Ubuntu under WSL 2, Node 24), and it killed the tree exactly once. It hasn't been run on macOS. The rest of the gate has been tested on Windows only.
 
 **`MAX_MCP_OUTPUT_TOKENS`.** This sets Claude Code's cap on MCP tool output, and it applies to the pane's calls exactly as it does to the model's. Past the cap the pane gets the "saved to a file" notice instead of its data, keeps showing the last good state and flags it as degraded. The default is fine, since every reply stays under 40,000 bytes. If you've set it lower than the default, put it back or unset it. Raising it above the default won't let the pane draw bigger swarms, because the 40,000-byte cap is ours, not Claude Code's.
 
@@ -168,6 +232,7 @@ Clawd is Anthropic's character. OmnisSwarm isn't affiliated with or endorsed by 
 - **A local Node MCP server**, which Claude Code starts and talks to over stdio.
 - **One child process: the gate command.** Only when a task is marked done, chosen as described under "The verification gate", in the project or one of its git worktrees. (On Windows, stopping a gate also runs `taskkill` on that gate's own process.) Nothing else is started.
 - **Files only under `<project>/.omnis-swarm/`:** the event logs, the shared memory, the current-swarm marker, the gate logs and the GIF exports. The one exception is your `.gitignore`. If `.omnis-swarm/` isn't listed there, the server adds it (and creates the file if you haven't got one). The pane's saved style and pin are kept in Claude Code's own mod state, not in your project.
+- **Error text from failed tool calls.** When a call fails, the log keeps up to 160 characters of why, and nothing for calls that succeed. Secrets are blanked first: passwords in URLs, `password=` and `token=` style pairs, `Authorization` headers, known token prefixes (`ghp_`, `sk-`, `AKIA` and friends) and long random-looking runs. It stays in `.omnis-swarm/`, which is git-ignored, and replay and GIF export leave it out.
 - **No network calls.** There's no `fetch`, no `http`, `https`, `net`, `tls` or `dgram` import, and no WebSocket anywhere in `src/`.
 
 ## Licence
