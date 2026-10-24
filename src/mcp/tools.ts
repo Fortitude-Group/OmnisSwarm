@@ -5,16 +5,18 @@ import { appendEvent, clearCurrent, readCurrent, writeCurrent } from '../core/lo
 import { agentStats, fileClashes, swarmTotals } from '../core/stats.ts'
 import { uniqueSwarmId } from '../core/swarm.ts'
 import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
+import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
-import type { ToolDef } from './protocol.ts'
+import type { Args, ToolDef } from './protocol.ts'
 import type { Session } from './session.ts'
 import { writeReport } from './tools/report.ts'
+import { resolveWorktree } from './worktrees.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
 export type ToolContext = { root: string; now?: () => Date; session: Session }
 
-const TASK_ID = /^t[0-9]{1,6}$/
+export const TASK_ID = /^t[0-9]{1,6}$/
 
 const usd = (x: number | null): string => (x === null ? '–' : `≈$${x.toFixed(x < 1 ? 3 : 2)}`)
 const int = (n: number): string => Math.round(n).toLocaleString('en-GB')
@@ -43,7 +45,27 @@ export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-
 const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
 
 export const MAX_TASKS = 500
+const MAX_OWNS = 20
+const OWNS_PROP = {
+  type: 'array', items: { type: 'string', minLength: 1, maxLength: 200 }, maxItems: MAX_OWNS,
+  description: 'Paths the assigned agent may edit, relative to the repo root: src/**, docs/, tests/*.test.ts. * is inside one folder, ** crosses folders, a trailing / means the folder and everything under it. Other edits by that agent are refused.',
+} as const
+const WORKTREE_PROP = {
+  type: 'string', maxLength: 400,
+  description: "A registered git worktree of this repo (or the repo itself) where this task's work is done and checked.",
+} as const
 const FAILED = 'Could not update the swarm files in .omnis-swarm/ (see the server log).'
+
+/** `owns` as given: at most 20 patterns, each valid, duplicates dropped. Undefined when absent. */
+function ownsArg(args: Args): string[] | undefined {
+  const owns = optStringList(args, 'owns', MAX_OWNS, 200)
+  if (owns === undefined) return undefined
+  owns.forEach((p, i) => {
+    const why = validPattern(p)
+    if (why !== null) throw new InputError(`owns item ${i + 1} ${why}`)
+  })
+  return [...new Set(owns)]
+}
 
 export function createTools(ctx: ToolContext): ToolDef[] {
   const root = ctx.root
@@ -222,6 +244,8 @@ export function createTools(ctx: ToolContext): ToolDef[] {
           title: { type: 'string', minLength: 1, maxLength: 120 },
           assignee: { type: 'string', pattern: NAME.source, description: 'Agent name.' },
           dependsOn: { type: 'array', items: { type: 'string', pattern: TASK_ID.source }, maxItems: 20 },
+          owns: OWNS_PROP,
+          worktree: WORKTREE_PROP,
         },
         required: ['title'],
         additionalProperties: false,
@@ -230,6 +254,9 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const title = reqText(args, 'title', 120)
         const assignee = optString(args, 'assignee', 64, NAME)
         const dependsOn = optStringList(args, 'dependsOn', 20, 8, TASK_ID)
+        const owns = ownsArg(args)
+        const worktreeArg = optString(args, 'worktree', 400)
+        const worktree = worktreeArg === undefined ? undefined : resolveWorktree(root, worktreeArg)
         const now = clock()
         const swarm = session.swarmOrCreate(now)
         const { state } = session.state(swarm)
@@ -241,7 +268,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const id = `t${n}`
         emit(makeEvent({
           type: 'task.created', swarm, src: 'mcp', now,
-          data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }) },
+          data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
         }))
         return { text: `Created task ${id}.` }
       },
@@ -256,6 +283,9 @@ export function createTools(ctx: ToolContext): ToolDef[] {
           state: { type: 'string', enum: [...TASK_STATES] },
           assignee: { type: 'string', pattern: NAME.source },
           note: { type: 'string', maxLength: 200 },
+          owns: { ...OWNS_PROP, description: `${OWNS_PROP.description} Replaces the task's list; an empty list clears it.` },
+          worktree: WORKTREE_PROP,
+          skipGate: { type: 'boolean', description: 'Close the task without running its verification gate. Needs a note saying why. Only the lead may use it.' },
         },
         required: ['id', 'state'],
         additionalProperties: false,
@@ -265,11 +295,16 @@ export function createTools(ctx: ToolContext): ToolDef[] {
         const taskState = reqEnum(args, 'state', TASK_STATES)
         const assignee = optString(args, 'assignee', 64, NAME)
         const note = optText(args, 'note', 200)
+        const owns = ownsArg(args)
+        const worktreeArg = optString(args, 'worktree', 400)
+        const worktree = worktreeArg === undefined ? undefined : resolveWorktree(root, worktreeArg)
+        if (args.skipGate !== undefined && args.skipGate !== null && typeof args.skipGate !== 'boolean') throw new InputError('skipGate must be true or false')
+        if (args.skipGate === true && note === undefined) throw new InputError('skipGate needs a note saying why.')
         const swarm = session.runningSwarm()
         if (!Object.hasOwn(session.state(swarm).state.tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
         emit(makeEvent({
           type: 'task.updated', swarm, src: 'mcp', now: clock(),
-          data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }) },
+          data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
         }))
         return { text: `Task ${id} is now ${taskState}.` }
       },

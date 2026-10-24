@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent, readCurrent, readEvents, swarmLogPath, writeCurrent } from '../../src/core/log.ts'
 import { handleMessage } from '../../src/mcp/protocol.ts'
@@ -365,4 +365,75 @@ test('status shows this session swarm, not the shared current', () => {
   b('omnis_swarm_init', { name: 'Second', topology: 'mesh' })
   assert.match(a('omnis_swarm_status').text, /First \[first\]/)
   assert.match(b('omnis_swarm_status').text, /Second \[second\]/)
+})
+
+// Scope fence and gate fields (gate-fence plan, Task 1)
+const withWorktree = () => {
+  const s = setup()
+  const wt = tmpRoot()
+  mkdirSync(join(s.root, '.git', 'worktrees', 'w1'), { recursive: true })
+  writeFileSync(join(s.root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
+  return { ...s, wt, real: realpathSync.native(wt) }
+}
+
+test('task_create and task_update store owns and a resolved worktree', () => {
+  const { call, events, wt, real, root } = withWorktree()
+  call('omnis_swarm_init', { name: 'Fen', topology: 'mesh' })
+  call('omnis_task_create', { title: 'x', assignee: 'bob', owns: ['src/**', 'docs/'], worktree: wt })
+  call('omnis_task_create', { title: 'y' })
+  const made = events('fen').filter(e => e.type === 'task.created')
+  assert.deepEqual(made[0]!.data, { id: 't1', title: 'x', assignee: 'bob', owns: ['src/**', 'docs/'], worktree: real })
+  assert.deepEqual(made[1]!.data, { id: 't2', title: 'y' })
+  call('omnis_task_update', { id: 't1', state: 'active', owns: [] })
+  call('omnis_task_update', { id: 't2', state: 'active', owns: ['a/*.ts'], worktree: root })
+  const upd = events('fen').filter(e => e.type === 'task.updated')
+  assert.deepEqual(upd[0]!.data, { id: 't1', state: 'active', owns: [] })
+  assert.deepEqual(upd[1]!.data, { id: 't2', state: 'active', owns: ['a/*.ts'], worktree: realpathSync.native(root) })
+})
+
+test('owns and worktree are checked at input', () => {
+  const { call, events, root } = withWorktree()
+  call('omnis_swarm_init', { name: 'Bad', topology: 'mesh' })
+  call('omnis_task_create', { title: 'x' })
+  const before = events('bad').length
+  const badOwns: unknown[] = [
+    ['/etc/**'], ['C:/x'], ['../x'], ['a\b'], ['a;b'], [''], ['a'.repeat(201)], 'src/**', [5],
+    Array.from({ length: 21 }, (_, i) => `d${i}/`),
+  ]
+  for (const owns of badOwns) {
+    assert.throws(() => call('omnis_task_create', { title: 'z', owns }), InputError, JSON.stringify(owns))
+    assert.throws(() => call('omnis_task_update', { id: 't1', state: 'active', owns }), InputError, JSON.stringify(owns))
+  }
+  for (const worktree of [join(root, '..'), join(root, 'nope'), '', 'x'.repeat(401), 5]) {
+    assert.throws(() => call('omnis_task_create', { title: 'z', worktree }), InputError, JSON.stringify(worktree))
+    assert.throws(() => call('omnis_task_update', { id: 't1', state: 'active', worktree }), InputError, JSON.stringify(worktree))
+  }
+  assert.equal(events('bad').length, before, 'a refused call writes nothing')
+  assert.throws(() => call('omnis_task_create', { title: 'z', worktree: join(root, 'nope') }), /worktree is not this project or one of its git worktrees\./)
+})
+
+test('skipGate needs a note, and Task 1 does not change what done does', () => {
+  const { call, events } = setup()
+  call('omnis_swarm_init', { name: 'Skip', topology: 'mesh' })
+  call('omnis_task_create', { title: 'x' })
+  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: true }), /^InputError: skipGate needs a note saying why\.$/)
+  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: true, note: '' }), InputError)
+  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: 'yes' }), InputError)
+  assert.equal(events('skip').some(e => e.type === 'task.updated'), false)
+  assert.match(call('omnis_task_update', { id: 't1', state: 'done', skipGate: true, note: 'no suite here' }).text, /^Task t1 is now done\.$/)
+  assert.match(call('omnis_task_update', { id: 't1', state: 'done', skipGate: false }).text, /^Task t1 is now done\.$/)
+  assert.deepEqual(events('skip').filter(e => e.type === 'task.updated')[0]!.data, { id: 't1', state: 'done', note: 'no suite here' })
+})
+
+test('the schemas offer owns, worktree and skipGate', () => {
+  const { tools } = setup()
+  const props = (n: string) => tools.find(t => t.name === n)!.inputSchema.properties as Record<string, Record<string, unknown>>
+  for (const n of ['omnis_task_create', 'omnis_task_update']) {
+    assert.equal(props(n).owns?.type, 'array')
+    assert.equal(props(n).owns?.maxItems, 20)
+    assert.equal((props(n).owns?.items as Record<string, unknown>).maxLength, 200)
+    assert.equal(props(n).worktree?.maxLength, 400)
+  }
+  assert.equal(props('omnis_task_update').skipGate?.type, 'boolean')
+  assert.equal(props('omnis_task_create').skipGate, undefined)
 })
