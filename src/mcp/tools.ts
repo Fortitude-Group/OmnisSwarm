@@ -17,7 +17,10 @@ import { writeReport } from './tools/report.ts'
 import { resolveWorktree } from './worktrees.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
-/** Where the gate's settings come from (the server's environment by default), and shorter limits for tests. */
+/**
+ * Where the gate's settings come from, and shorter limits for tests. Only server.ts passes the real environment;
+ * without `env` the gate is off, so a test (or a gate run of this repo's own tests) never picks the settings up.
+ */
 export type GateOptions = { env?: Record<string, string | undefined>; limitMs?: number; progressMs?: number }
 export type ToolContext = { root: string; now?: () => Date; session: Session; gate?: GateOptions }
 
@@ -72,6 +75,7 @@ function ownsArg(args: Args): string[] | undefined {
   return [...new Set(owns)]
 }
 
+const GATE_OFF = { OMNIS_VERIFY_GATE: 'off' }
 const NO_CALL: CallContext = { signal: new AbortController().signal, progress: () => {} }
 
 export function createTools(ctx: ToolContext): AnyToolDef[] {
@@ -314,7 +318,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       const tasks = session.state(swarm).state.tasks
       if (!Object.hasOwn(tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
-      const settings = gateSettings(gateOptions.env ?? process.env)
+      const settings = gateSettings(gateOptions.env ?? GATE_OFF)
       if (taskState === 'done' && settings.mode !== 'off') {
         const task = tasks[id]!
         const out = await gateForDone({

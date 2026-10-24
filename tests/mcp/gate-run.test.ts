@@ -160,3 +160,20 @@ test('a background child holding the output open does not hold the gate past its
     if (alive(pid)) process.kill(pid) // ours: started by this test's command
   }
 })
+
+test('the gate settings are not passed on to the gate command', async () => {
+  const keys = ['OMNIS_VERIFY_GATE', 'OMNIS_GATE_COMMAND', 'OMNIS_GATE_MINUTES'] as const
+  const saved = keys.map(k => process.env[k])
+  process.env.OMNIS_VERIFY_GATE = 'warn'
+  process.env.OMNIS_GATE_COMMAND = 'npm run check'
+  process.env.OMNIS_GATE_MINUTES = '5'
+  process.env.OMNIS_GATE_TEST_KEPT = 'kept'
+  try {
+    const opts = setup({ command: node("console.log(['OMNIS_VERIFY_GATE','OMNIS_GATE_COMMAND','OMNIS_GATE_MINUTES','OMNIS_GATE_TEST_KEPT'].map(k=>k+'='+(process.env[k]??'unset')).join(' '))") })
+    const out = await runGate(opts)
+    assert.equal(out.tail, 'OMNIS_VERIFY_GATE=unset OMNIS_GATE_COMMAND=unset OMNIS_GATE_MINUTES=unset OMNIS_GATE_TEST_KEPT=kept')
+  } finally {
+    keys.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i] })
+    delete process.env.OMNIS_GATE_TEST_KEPT
+  }
+})

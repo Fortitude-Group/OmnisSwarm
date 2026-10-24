@@ -267,3 +267,20 @@ test('a link where the gates folder should be is refused with the fixed message'
   await assert.rejects(s.done(), (err: unknown) => err instanceof Error && !(err instanceof InputError) && err.message === 'Could not update the swarm files in .omnis-swarm/ (see the server log).')
   assert.equal(s.closed(), false)
 })
+
+test('without a gate option the tools never read the real environment: the gate is off', async () => {
+  const saved = process.env.OMNIS_GATE_COMMAND
+  process.env.OMNIS_GATE_COMMAND = FAIL
+  try {
+    const root = tmpRoot()
+    const tools = createTools({ root, now: () => NOW, session: new Session(root) })
+    const run = async (name: string, args: Record<string, unknown>) => tools.find(t => t.name === name)!.handler(args)
+    await run('omnis_swarm_init', { name: 'Gate', topology: 'mesh' })
+    await run('omnis_task_create', { title: 'x' })
+    assert.deepEqual(await run('omnis_task_update', { id: 't1', state: 'done' }), { text: 'Task t1 is now done.' })
+    assert.equal(readEvents(swarmLogPath(root, 'gate')).events.some(e => e.type === 'gate.ran'), false)
+  } finally {
+    if (saved === undefined) delete process.env.OMNIS_GATE_COMMAND
+    else process.env.OMNIS_GATE_COMMAND = saved
+  }
+})

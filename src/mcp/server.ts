@@ -14,5 +14,6 @@ const root = resolve(pick(process.env.OMNIS_PROJECT_DIR, process.env.CLAUDE_PROJ
 if (process.env.OMNIS_DEBUG) process.stderr.write(`omnis: project root ${root}\n`)
 
 const session = new Session(root)
-const tools = toolFactories.flatMap(factory => factory({ root, session }))
+// The one place the gate settings are read from the environment (tools default to the gate off).
+const tools = toolFactories.flatMap(factory => factory({ root, session, gate: { env: process.env } }))
 void runStdio(tools, { name: 'omnis-swarm', version: '0.3.0' })

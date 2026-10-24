@@ -40,6 +40,11 @@ const WINDOWS = process.platform === 'win32'
 const busy = new Set<string>()
 const live = new Set<ChildProcess>()
 const dirKey = (dir: string): string => (WINDOWS ? resolve(dir).toLowerCase() : resolve(dir))
+/** The gate's own settings: a gate command that starts this server (or its tests) must not start the gate again. */
+const GATE_KEYS = new Set(['OMNIS_VERIFY_GATE', 'OMNIS_GATE_COMMAND', 'OMNIS_GATE_MINUTES'])
+/** The server's environment without the gate settings. Names compare without case, as Windows does. */
+export const childEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv =>
+  Object.fromEntries(Object.entries(env).filter(([k]) => !GATE_KEYS.has(k.toUpperCase())))
 const taskkill = (): string => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe')
 
 /** Kills the tree of `child` by its PID: taskkill /T on Windows, the process group elsewhere. */
@@ -212,7 +217,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
         stdio: ['ignore', 'pipe', 'pipe'],
         // Its own process group elsewhere, so the whole group can be killed; on Windows taskkill /T walks the tree.
         detached: !WINDOWS,
-        env: process.env,
+        env: childEnv(),
       })
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
