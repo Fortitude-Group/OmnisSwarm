@@ -4,11 +4,11 @@
  * unguarded, so this checks everything itself (spec section 6). It builds each event's data
  * afresh from known fields, so nothing else the caller sends reaches the log.
  */
-import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, STUCK_PATTERNS, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
+import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, FENCE_MODES, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, STUCK_PATTERNS, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
 import { appendEvent } from '../../core/log.ts'
 import { RECORDER_TYPES, RECORD_TOOL, SESSION_ID, type RecorderType } from '../../core/recording.ts'
 import type { Args, ToolDef } from '../protocol.ts'
-import type { ToolContext } from '../tools.ts'
+import { TASK_ID, type ToolContext } from '../tools.ts'
 import { InputError, reqEnum, reqString } from '../validate.ts'
 
 /** Control and format characters, line and paragraph separators, and lone surrogates (which no terminal can draw). */
@@ -18,6 +18,7 @@ const MAX_USD = 1e9
 const MAX_USAGE = 1e9
 const AHEAD_MS = 5 * 60_000
 const BEHIND_MS = 24 * 3_600_000
+const MAX_FENCE_TASKS = 20
 const FAILED = 'Could not record the event in .omnis-swarm/ (see the server log).'
 
 const isObj = (x: unknown): x is Args => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -112,6 +113,13 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     }
     case 'clash.blocked':
       return { path: text(d, 'path', LIMITS.subject, true), holder: agentName(d, 'holder'), mode: oneOf(d, 'mode', CLASH_MODES) }
+    case 'fence.blocked': {
+      const tasks = d.tasks
+      if (!Array.isArray(tasks) || tasks.length > MAX_FENCE_TASKS || !tasks.every(t => typeof t === 'string' && TASK_ID.test(t))) {
+        throw new InputError(`data.tasks must be a list of at most ${MAX_FENCE_TASKS} task ids`)
+      }
+      return { path: text(d, 'path', LIMITS.subject, true), tasks: [...tasks] as string[], mode: oneOf(d, 'mode', FENCE_MODES) }
+    }
     case 'agent.stuck': {
       if (typeof d.delivered !== 'boolean') throw new InputError('data.delivered must be true or false')
       return {
@@ -162,9 +170,9 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       if (!isObj(args.data)) throw new InputError('data must be an object')
       const dropped = args.dropped === undefined ? 0 : count(args, 'dropped')
       const data = dataFor(type, args.data)
-      const agentLevel = type === 'guard.nudged' || type === 'clash.blocked' || type === 'agent.stuck' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
+      const agentLevel = type === 'guard.nudged' || type === 'clash.blocked' || type === 'fence.blocked' || type === 'agent.stuck' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
       const swarmLevel = type === 'budget.set' || type === 'guard.blocked' || (type === 'guard.warned' && !agentLevel)
-      if (agentLevel && agent === undefined) throw new InputError(type === 'clash.blocked' || type === 'agent.stuck' ? `${type} needs agent` : `${type} for an agent limit needs agent`)
+      if (agentLevel && agent === undefined) throw new InputError(type === 'clash.blocked' || type === 'fence.blocked' || type === 'agent.stuck' ? `${type} needs agent` : `${type} for an agent limit needs agent`)
       if (swarmLevel && agent !== undefined) throw new InputError(`${type} is about the swarm and takes no agent`)
       if (dropped > 0) Object.assign(data, { dropped })
       const now = new Date(ts)

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EVENT_TYPES } from '../../src/core/events.ts'
 import {
-  INTERNAL_TOOL, MAX_IN_FLIGHT, RECORDER_TYPES, RECORD_TOOL, SERVER_KEY, SESSION_ID, guardVerdict,
+  FENCE_TOOL, INTERNAL_TOOL, MAX_IN_FLIGHT, RECORDER_TYPES, RECORD_TOOL, SERVER_KEY, SESSION_ID, guardVerdict,
 } from '../../src/core/recording.ts'
 
 const RECORD = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_record'
@@ -15,8 +15,14 @@ test('recorder types are log event types, and never the server-only ones', () =>
   }
 })
 
+test('fence.blocked comes from the mod, gate.ran from the server', () => {
+  assert.ok((RECORDER_TYPES as readonly string[]).includes('fence.blocked'))
+  assert.equal((RECORDER_TYPES as readonly string[]).includes('gate.ran'), false)
+})
+
 test('names and limits', () => {
   assert.equal(RECORD_TOOL, 'omnis_record')
+  assert.equal(FENCE_TOOL, 'omnis_fence')
   assert.equal(SERVER_KEY, 'omnis-swarm')
   assert.equal(MAX_IN_FLIGHT, 64)
 })
@@ -33,7 +39,7 @@ test('the internal tool pattern matches our two tools by full name and nothing p
   assert.ok(INTERNAL_TOOL.test(FEED))
   assert.ok(INTERNAL_TOOL.test('mcp__omnis-swarm__omnis_record'))
   assert.ok(INTERNAL_TOOL.test('mcp__other__omnis_record'))
-  for (const name of ['omnis_replay', 'omnis_export']) {
+  for (const name of ['omnis_replay', 'omnis_export', 'omnis_fence']) {
     assert.ok(INTERNAL_TOOL.test(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`), name)
     assert.ok(INTERNAL_TOOL.test(`mcp__omnis-swarm__${name}`), name)
     assert.equal(guardVerdict(`mcp__plugin_omnis-swarm_omnis-swarm__${name}`, 'engine', 'omnis-swarm'), 'deny', name)

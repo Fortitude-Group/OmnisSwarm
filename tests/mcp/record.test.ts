@@ -310,6 +310,34 @@ test('clash.blocked and agent.stuck are recorded with an agent, and refused with
   for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
 })
 
+test('fence.blocked is recorded with an agent, a path, task ids and a mode, and refused otherwise', () => {
+  const { call, events } = setup()
+  call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' } })
+  call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/y.ts', tasks: [], mode: 'block', extra: 'dropped' } })
+  assert.deepEqual(events(SWARM).slice(-2).map(e => [e.type, e.agent, e.data]), [
+    ['fence.blocked', 'a2', { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' }],
+    ['fence.blocked', 'a2', { path: 'src/y.ts', tasks: [], mode: 'block' }],
+  ])
+  const bad = [
+    { type: 'fence.blocked', data: { path: 'src/x.ts', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: '', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x'.repeat(81), tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x\ny', tasks: ['t1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: ['t1'], mode: 'off' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: 't1', mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: ['x1'], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: [1], mode: 'block' } },
+    { type: 'fence.blocked', agent: 'a2', data: { path: 'x', tasks: Array.from({ length: 21 }, (_, i) => `t${i + 1}`), mode: 'block' } },
+  ]
+  for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
+})
+
+test("gate.ran is the server's own event: omnis_record refuses it", () => {
+  const { call } = setup()
+  assert.throws(() => call({ sessionId: SID, ts: TS, type: 'gate.ran', data: { task: 't1', result: 'passed', ms: 1, mode: 'block' } }), InputError)
+})
+
 test('report.written is the server\'s own event: omnis_record refuses it', () => {
   const { call } = setup()
   assert.throws(() => call({ sessionId: SID, ts: TS, type: 'report.written', data: { path: 'x', agents: 1, minutes: 1, costUsd: 1 } }), InputError)
