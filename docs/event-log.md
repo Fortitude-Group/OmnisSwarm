@@ -51,8 +51,8 @@ same user could edit `.omnis-swarm` directly.
 | `agent.tool` | recorder | `phase` (`start`\|`end`), `tool`, `kind` (`read`\|`edit`\|`bash`\|`search`\|`web`\|`agent`\|`other`), `subject` (path or command, ≤80), `isError` |
 | `message.sent` | recorder | `to` (agent **name** as given to SendMessage), `summary` (≤200) |
 | `memory.put` | mcp | `key`, `bytes`, `preview` (≤80). The envelope `agent` is the writer's name as given to the tool (default `lead`), not an agent id |
-| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`. Two sessions sharing a swarm can both create the same id; the last write wins (accepted) |
-| `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200) |
+| `task.created` | mcp | `id` (`t1`, `t2`…), `title` (≤120), `assignee?`, `dependsOn?`, `owns?` (up to 20 path patterns the assignee may edit, each ≤200, relative to the repo root: `*`, `**`, `?`, a trailing `/` for a folder), `worktree?` (≤400, the resolved path of the project or one of its registered git worktrees, where the work is done and its gate runs). Two sessions sharing a swarm can both create the same id; the last write wins (accepted) |
+| `task.updated` | mcp | `id`, `state` (`pending`\|`active`\|`done`\|`failed`), `assignee?`, `note?` (≤200), `owns?` (replaces the task's list; `[]` clears it), `worktree?` (replaces the stored one). A field left out keeps its previous value |
 | `session.measure` | recorder | `contextWindow`, `contextTokens?`, `contextPercent?` (0-100), `costUsd?`. Lead-level, no `agent`. Merged into the session figures: a field left out keeps its previous value. Percent is clamped to 0-100 |
 | `budget.set` | mcp (`omnis_swarm_init` with a `budget`) or recorder (`/omnis budget`) | `agentMinutes?`, `agentUsd?`, `swarmUsd?`: at least one, each above 0 and at most 1440 minutes, $1000 and $1000. Swarm-level, no `agent`. Overrides the configured limits for the rest of the swarm; a key left out keeps its previous value |
 | `guard.warned` | recorder | `limit` (`time`\|`agentCost`\|`swarmCost`), `value`, `threshold` (minutes for `time`, USD otherwise, both at most 1,000,000). `agent` is required for `time` and `agentCost` and absent for `swarmCost` |
@@ -60,11 +60,15 @@ same user could edit `.omnis-swarm` directly.
 | `guard.blocked` | recorder | `value`, `threshold` (USD): the swarm reached its budget and the lead's new agents are refused until it is raised or the swarm ends. Swarm-level, no `agent` |
 | `clash.blocked` | recorder | `path` (≤80, the recorder's subject for the refused call), `holder` (the holding agent's id), `mode` (`block`|`warn`). `agent` (the refused or warned agent) is required. Repeats for the same agent and path within 60 s are not recorded |
 | `agent.stuck` | recorder | `pattern` (`failing`|`repeating`), `count`, `subject` (≤80), `delivered` (bool), `reason?` (≤80). `agent` is required |
+| `gate.ran` | mcp | `task` (a task id), `result` (`passed`\|`failed`\|`timeout`\|`error`\|`none`\|`skipped`), `ms` (how long the gate ran), `mode` (`block`\|`warn`, the `verifyGate` setting at the time), `command?` (the command line, clipped), `exit?` (the exit code), `log?` (the output file, relative to the project), `gap?` (source files the assignee changed with no test file). No `agent`. The task keeps a count of runs and its last five results |
+| `fence.blocked` | recorder | `path` (≤80, the recorder's subject for the refused call), `tasks` (up to 20 task ids whose `owns` the agent is held to), `mode` (`block`\|`warn`). `agent` (the refused or warned agent) is required. Repeats for the same agent and path within 60 s are not recorded |
 | `report.written` | mcp | `path` (the report file, relative to the project), `agents` (subagents), `minutes`, `costUsd`. Written by `omnis_report` and `omnis_swarm_end` |
+
+`gate.ran` is written by the server when `omnis_task_update` closes a task. `fence.blocked` reaches the log through `omnis_record`, like `clash.blocked`.
 
 `omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
 knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_report` are internal tools like
-`omnis_record` and `omnis_feed`: the mod refuses them when the model calls them.
+`omnis_record` and `omnis_feed`, and so is `omnis_fence`, which tells the mod which files an agent's tasks let it edit: the mod refuses them when the model calls them.
 
 ## Reading rules
 
