@@ -2,9 +2,10 @@
  * The gate's permission check. omnis_task_update(done) runs the project's gate command in the server, outside the
  * engine's Bash permissions, and an agent could have edited the script that command runs. So before the call runs,
  * this asks the server what the gate would run (omnis_gate_plan) and gives the call exactly the verdict a Bash call
- * running that command would get from the user's rules: allow passes, deny refuses, ask asks about this call. On
- * allow or ask it records a one-shot approval of that exact plan (omnis_gate_approve); the server runs a gate only
- * with one, and only if what it would run still matches. Unlike the other guards this fails closed.
+ * running that command would get from the user's rules: an explicit allow rule passes, deny refuses, and anything else
+ * asks about this call. Once the rest of the hook chain hasn't refused the call, it records a one-shot approval of that
+ * exact plan (omnis_gate_approve); the server runs a gate only with one, and only if what it would run still matches.
+ * Unlike the other guards this fails closed.
  */
 import type { EngineInterface, On, ToolCheckResult } from 'claude-code'
 import { APPROVE_TOOL, GATE_PLAN_TOOL } from '../core/recording.ts'
@@ -75,10 +76,14 @@ export function registerGateGuard(on: On): void {
     if (!plan.run) return next(e)
     const verdict = await $.tool.check({ tool: 'Bash', input: { command: plan.command, description: gateDescription(plan.dir) } })
     if (verdict.decision === 'deny') return refuse(deniedText(plan.command))
-    // Approved before the ask is answered: a declined ask leaves an approval only this call could have used, and it lapses.
+    // A query runs no PreToolUse hook and carries no agent, and a sandbox or a mode can allow a Bash call the gate
+    // would run unsandboxed. So only an explicit allow rule lets the gate run unasked; any other allow asks a person.
+    const asks = verdict.decision === 'ask' || verdict.rule === undefined
+    const result = await next(e)
+    if (result.decision === 'deny') return result
+    // Approved before an ask is answered: a declined ask leaves an approval only this call could have used, and it lapses.
     const approved = await callServer($, APPROVE_TOOL, { id: plan.id, dir: plan.dir, command: plan.command, digest: plan.digest })
     if (approved === null) return refuse(FAILED_TEXT)
-    if (verdict.decision === 'ask') return { decision: 'ask', reason: askText(plan.command, plan.dir) }
-    return next(e)
+    return asks ? { decision: 'ask', reason: askText(plan.command, plan.dir) } : result
   }).catch(() => refuse(FAILED_TEXT))
 }

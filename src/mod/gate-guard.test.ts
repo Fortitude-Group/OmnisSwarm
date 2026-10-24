@@ -14,6 +14,8 @@ const APPROVAL = { id: 't1', dir: '/p/wt', command: 'npm test', digest: DIGEST }
 type Reply = 'ok' | 'error' | 'throw' | 'hang' | 'garbage'
 type Seen = {
   plan: Reply | 'none' | 'disconnected'; approve: Reply; bash: 'allow' | 'ask' | 'deny'; beneath: 'allow' | 'ask' | 'deny'
+  /** The settings rule the Bash verdict names; undefined when a mode or the tool's own check decided. */
+  rule: string | undefined
   planCalls: Array<Record<string, unknown>>; approvals: Array<Record<string, unknown>>; bashChecks: unknown[]
 }
 
@@ -27,7 +29,7 @@ async function answer(how: Reply, ok: string) {
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine, its rules and the server.
 function engine(on: On): Seen {
-  const seen: Seen = { plan: 'ok', approve: 'ok', bash: 'allow', beneath: 'allow', planCalls: [], approvals: [], bashChecks: [] }
+  const seen: Seen = { plan: 'ok', approve: 'ok', bash: 'allow', beneath: 'allow', rule: 'Bash(npm test)', planCalls: [], approvals: [], bashChecks: [] }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'abcdef12-3456-7890-abcd-ef1234567890' }))
   on('session.cwd', () => ({ value: '/p' }))
@@ -52,7 +54,7 @@ function engine(on: On): Seen {
   on('tool.check', (_$, e) => {
     if (e.tool !== 'Bash') return { decision: seen.beneath }
     seen.bashChecks.push(e.input)
-    return { decision: seen.bash }
+    return { decision: seen.bash, ...(seen.rule !== undefined && { rule: seen.rule }) }
   })
   return seen
 }
@@ -69,7 +71,25 @@ let n = 0
 const done = ($: Engine, input: Record<string, unknown> = {}, tool = UPDATE) =>
   $.tool.check({ tool, input: { id: 't1', state: 'done', ...input }, tool_use_id: `toolu_${++n}` } as never)
 
-test('a gate the Bash rules allow is approved, and the call goes on to its own verdict', KIT, async ($, on) => {
+test('an allow that names no rule (a mode, a sandbox, a tool check) becomes an ask, and is approved', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  seen.rule = undefined
+  const verdict = await done($)
+  expect(verdict.decision).toBe('ask')
+  expect(verdict.reason).toBe('OmnisSwarm will run the verification gate: npm test in /p/wt')
+  expect(seen.approvals).toEqual([APPROVAL])
+})
+
+test('when the rest of the chain refuses the call, nothing is approved', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  seen.beneath = 'deny'
+  expect((await done($)).decision).toBe('deny')
+  seen.bash = 'ask'
+  expect((await done($)).decision).toBe('deny')
+  expect(seen.approvals).toEqual([])
+})
+
+test('a gate an explicit Bash allow rule allows is approved, and the call goes on to its own verdict', KIT, async ($, on) => {
   const { seen } = await boot($, on)
   expect((await done($)).decision).toBe('allow')
   expect(seen.planCalls).toEqual([{ id: 't1' }])
