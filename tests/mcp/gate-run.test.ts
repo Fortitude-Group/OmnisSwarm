@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { LOG_CAP, TAIL_CHARS, TAIL_LINES, installShutdown, killAllGates, runGate, type RunOptions } from '../../src/mcp/gate/run.ts'
@@ -143,7 +143,7 @@ test('a second gate in the same directory is refused while one runs', async () =
   assert.throws(() => runGate({ ...opts, logFile: `${opts.logFile}.2` }), (err: unknown) =>
     err instanceof InputError && err.message === `A gate is already running in ${opts.cwd}. Wait for it, then try again.`)
   assert.equal((await first).result, 'passed')
-  assert.equal((await runGate({ ...opts, command: node('0') })).result, 'passed', 'free again once it ends')
+  assert.equal((await runGate({ ...opts, command: node('0'), logFile: `${opts.logFile}.3` })).result, 'passed', 'free again once it ends')
 })
 
 test('a fourth gate anywhere is refused while three run', async () => {
@@ -208,4 +208,13 @@ test('the gate settings are not passed on to the gate command', async () => {
     keys.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i] })
     delete process.env.OMNIS_GATE_TEST_KEPT
   }
+})
+
+test('the log is created new: an existing file at its name is never overwritten', async () => {
+  const opts = setup()
+  writeFileSync(opts.logFile, 'keep me')
+  const out = await runGate(opts)
+  assert.equal(out.result, 'error')
+  assert.match(out.error ?? '', /^could not write the log \(EEXIST\)$/)
+  assert.equal(readFileSync(opts.logFile, 'utf8'), 'keep me')
 })

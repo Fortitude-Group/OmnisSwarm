@@ -32,6 +32,7 @@ async function setup(env: Record<string, string> = {}, gate: Partial<GateOptions
     return t
   }
   const run = async (name: string, args: Record<string, unknown>, ctx?: CallContext): Promise<ToolResult> => find(name).handler(args, ctx)
+  ctx.session.noteSession('abcdef12-3456-7890-abcd-ef1234567890') // as the recorder mod's first omnis_record does
   await run('omnis_swarm_init', { name: 'Gate', topology: 'hierarchical' })
   await run('omnis_task_create', { title: 'build it', assignee: 'coder' })
   await run('omnis_task_update', { id: 't1', state: 'active' })
@@ -104,14 +105,26 @@ test('block, timeout: the reply says how long it was given', async () => {
   assert.equal(s.closed(), false)
 })
 
-test('block, error: a gate that could not start keeps the task open', async () => {
+test('a log name already taken, by a file, a folder or a link, is stepped over and never written through', async t => {
   const s = await setup({ OMNIS_GATE_COMMAND: PASS })
-  mkdirSync(join(s.root, '.omnis-swarm', 'gates', 'gate-t1-1.log'), { recursive: true }) // the log can't be opened
+  const gates = join(s.root, '.omnis-swarm', 'gates')
+  mkdirSync(join(gates, 'gate-t1-1.log'), { recursive: true })
+  writeFileSync(join(gates, 'gate-t1-2.log'), 'an older log')
+  const target = join(tmpRoot(), 'target.txt')
+  writeFileSync(target, 'not to be touched')
+  let linked = true
+  try {
+    symlinkSync(target, join(gates, 'gate-t1-3.log'), 'file')
+  } catch {
+    linked = false // links can't be made here; the file and folder cases still run
+  }
   const r = await s.done()
-  assert.equal(r.isError, true)
-  assert.match(secs(r.text), /^Gate failed for t1 \(could not start: could not write the log \(E[A-Z]+\), N s\): /)
-  assert.equal(s.gates()[0]!.result, 'error')
-  assert.equal(s.closed(), false)
+  assert.match(r.text, /Gate passed/)
+  const n = linked ? 4 : 3
+  assert.equal(s.gates()[0]!.log, `.omnis-swarm/gates/gate-t1-${n}.log`)
+  assert.equal(readFileSync(join(gates, 'gate-t1-2.log'), 'utf8'), 'an older log')
+  assert.equal(readFileSync(target, 'utf8'), 'not to be touched')
+  if (!linked) t.diagnostic('file links could not be made; the link case was not checked')
 })
 
 test('warn, failed: the task closes and the reply carries the failure', async () => {

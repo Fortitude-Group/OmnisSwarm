@@ -2,7 +2,7 @@
  * The verification gate on omnis_task_update(done) (spec section 2): where it runs, what it runs, what it records and
  * what the reply says. tools.ts writes the task.updated event only when this says the task closes.
  */
-import { mkdirSync } from 'node:fs'
+import { lstatSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { clip, makeEvent, type GateMode, type GateResult, type SwarmEvent } from '../../core/events.ts'
 import type { SwarmState, TaskEntry } from '../../core/fold.ts'
@@ -18,6 +18,8 @@ export const PROGRESS_MS = 30_000
 const SHOWN_COMMAND = 80
 const STORED_COMMAND = 120
 const MAX_ERROR = 200
+/** How far past the expected log number the next free name is looked for. */
+const MAX_LOG_STEPS = 1000
 
 export type GateCall = {
   root: string
@@ -90,12 +92,16 @@ function logFor(root: string, swarm: string, task: TaskEntry): { rel: string; fi
   const dir = join(top, 'gates')
   if (isLink(top) || isLink(dir)) throw new Error('refusing a link for the gates folder')
   mkdirSync(dir, { recursive: true })
+  // The next name that is neither taken on disk (a file, a folder or a link) nor held by a running gate. runGate
+  // creates it with 'wx', so a name taken in between is an error, never a file written through.
+  const taken = (name: string): boolean => logsInUse.has(name) || lstatSync(join(dir, name), { throwIfNoEntry: false }) !== undefined
   let n = (task.gate?.runs ?? 0) + 1
-  while (logsInUse.has(`${swarm}-${task.id}-${n}.log`)) n++
+  for (let tries = 0; taken(`${swarm}-${task.id}-${n}.log`); tries++) {
+    if (tries >= MAX_LOG_STEPS) throw new Error('too many gate logs with this name')
+    n++
+  }
   const name = `${swarm}-${task.id}-${n}.log`
-  const file = join(dir, name)
-  if (isLink(file)) throw new Error('refusing a link for a gate log')
-  return { rel: `.omnis-swarm/gates/${name}`, file, name }
+  return { rel: `.omnis-swarm/gates/${name}`, file: join(dir, name), name }
 }
 
 /** Runs (or skips) the gate for a task being marked done. Throws an InputError when it is refused before running. */

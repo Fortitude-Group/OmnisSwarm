@@ -7,6 +7,7 @@ import { APPROVE_TOOL, GATE_PLAN_TOOL } from '../../src/core/recording.ts'
 import { takeApproval } from '../../src/mcp/gate/approvals.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createGatePlanTools } from '../../src/mcp/tools/gate-plan.ts'
+import { createRecordTools } from '../../src/mcp/tools/record.ts'
 import { createTools, type GateOptions } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
 import { tmpRoot } from '../helpers.ts'
@@ -15,6 +16,8 @@ import { syncResult } from './sync.ts'
 const NOW = new Date('2026-10-24T10:00:00.000Z')
 const BLOCK = { env: { OMNIS_GATE_COMMAND: 'npm run ci' } }
 const sha = (x: string) => createHash('sha256').update(x).digest('hex')
+const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
+const NO_MOD = "The gate needs OmnisSwarm's mod, and it isn't running in this session. Turn mods on, or mark the task done with skipGate and a note."
 
 function setup(gate?: GateOptions, root = tmpRoot()) {
   const session = new Session(root)
@@ -23,7 +26,7 @@ function setup(gate?: GateOptions, root = tmpRoot()) {
   const tools = createTools(ctx)
   const ask = (args: Record<string, unknown>) => JSON.parse(syncResult(plan!.handler(args)).text) as Record<string, unknown>
   const run = async (name: string, args: Record<string, unknown>) => tools.find(t => t.name === name)!.handler(args)
-  return { root, plan: plan!, approve: approve!, ask, run }
+  return { root, session, plan: plan!, approve: approve!, ask, run }
 }
 
 test('the tool is the internal omnis_gate_plan, taking id, worktree and skipGate', () => {
@@ -94,6 +97,7 @@ test('bad input is an InputError', () => {
 test('omnis_gate_approve stores a one-shot approval for the task', async () => {
   const s = setup(BLOCK)
   await s.run('omnis_swarm_init', { name: 'P', topology: 'mesh' })
+  s.session.noteSession(SID)
   assert.equal(s.approve.name, APPROVE_TOOL)
   assert.match(s.approve.description, /^Internal to the OmnisSwarm plugin/)
   const a = { dir: realpathSync.native(s.root), command: 'npm run ci', digest: sha('npm run ci') }
@@ -103,9 +107,27 @@ test('omnis_gate_approve stores a one-shot approval for the task', async () => {
 })
 
 test('omnis_gate_approve refuses bad input', () => {
-  const { approve } = setup(BLOCK)
+  const { approve, session } = setup(BLOCK)
+  session.noteSession(SID)
   const ok = { id: 't1', dir: '/p', command: 'npm test', digest: 'a'.repeat(64) }
   for (const bad of [{ ...ok, id: 'x' }, { ...ok, digest: 'A'.repeat(64) }, { ...ok, digest: 'a'.repeat(63) }, { ...ok, dir: '' }, { ...ok, command: '' }, { id: 't1' }]) {
     assert.throws(() => approve.handler(bad), InputError, JSON.stringify(bad))
   }
+})
+
+test('omnis_gate_approve is refused until the recorder mod has been heard from in this server', () => {
+  const s = setup(BLOCK)
+  const ok = { id: 't1', dir: realpathSync.native(s.root), command: 'npm run ci', digest: sha('npm run ci') }
+  assert.throws(() => s.approve.handler(ok), (err: unknown) => err instanceof InputError && err.message === NO_MOD)
+  assert.equal(takeApproval(s.root, '', 't1', NOW.getTime()), null, 'nothing was stored')
+  const [record] = createRecordTools({ root: s.root, session: s.session, now: () => NOW })
+  record!.handler({ sessionId: SID, ts: NOW.toISOString(), type: 'agent.tool', agent: 'lead', data: { phase: 'start', tool: 'Bash', kind: 'bash', subject: 'ls', isError: false } })
+  assert.deepEqual(syncResult(s.approve.handler(ok)), { text: 'approved' })
+})
+
+test('an omnis_record call that is refused does not count as the mod', () => {
+  const s = setup(BLOCK)
+  const [record] = createRecordTools({ root: s.root, session: s.session, now: () => NOW })
+  assert.throws(() => record!.handler({ sessionId: 'bad id', ts: NOW.toISOString(), type: 'agent.tool', data: {} }))
+  assert.throws(() => s.approve.handler({ id: 't1', dir: '/p', command: 'x', digest: 'a'.repeat(64) }), (err: unknown) => err instanceof Error && err.message === NO_MOD)
 })

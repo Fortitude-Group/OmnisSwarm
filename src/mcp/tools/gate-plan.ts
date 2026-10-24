@@ -16,6 +16,7 @@ import { resolveWorktree } from '../worktrees.ts'
 export type GatePlan = { run: false } | { run: true; id: string; dir: string; command: string; digest: string }
 
 const DIGEST = /^[0-9a-f]{64}$/
+export const NO_MOD_TEXT = "The gate needs OmnisSwarm's mod, and it isn't running in this session. Turn mods on, or mark the task done with skipGate and a note."
 const MAX_DIR = 1000
 const MAX_COMMAND = 4000
 
@@ -73,6 +74,10 @@ export function createGatePlanTools(ctx: ToolContext): ToolDef[] {
       const dir = reqString(args, 'dir', MAX_DIR)
       const command = reqString(args, 'command', MAX_COMMAND)
       const digest = reqString(args, 'digest', 64, DIGEST)
+      // A speed bump, not a boundary: approvals come from the mod, and the server only knows the mod is running once
+      // the recorder's first valid omnis_record has told it the session id. A model that calls the internal tools on
+      // purpose with mods off could make that call too.
+      if (session.sessionId === null) throw new InputError(NO_MOD_TEXT)
       approveGate(root, swarmKey(), id, { dir, command, digest }, clock().getTime())
       return { text: 'approved' }
     },

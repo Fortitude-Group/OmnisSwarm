@@ -157,7 +157,8 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
   }
   let fd: number
   try {
-    fd = openSync(opts.logFile, 'w')
+    // A new file only: an existing file, or a link at the name, is never written through.
+    fd = openSync(opts.logFile, 'wx')
   } catch (err) {
     release()
     return Promise.resolve({ result: 'error', error: `could not write the log (${(err as NodeJS.ErrnoException).code ?? 'error'})`, ms: elapsed(), tail: '' })
