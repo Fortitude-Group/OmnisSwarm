@@ -41,31 +41,31 @@ test('omnis_fence is internal, named from FENCE_TOOL, and registered with the se
   assert.ok(names.includes(FENCE_TOOL))
 })
 
-test('an agent with a pending or active task that owns paths is fenced to the union of them', () => {
+test('an agent with a pending or active task that owns paths is fenced to the union of them', async () => {
   const { root, tool, ask } = swarm()
   tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/a/**', 'docs/'] })
   tool('omnis_task_create', { title: 'two', assignee: 'coder-1', owns: ['src/a/**', 'tests/a.test.ts'] })
-  tool('omnis_task_update', { id: 't2', state: 'active' })
+  await tool('omnis_task_update', { id: 't2', state: 'active' })
   assert.deepEqual(ask('a1'), { fenced: true, tasks: ['t1', 't2'], owns: ['src/a/**', 'docs/', 'tests/a.test.ts'], roots: [real(root)], fold: FOLD })
 })
 
-test('done and failed tasks still fence, so a state change can not lift a fence; empty owns and other agents\' tasks add nothing', () => {
+test('done and failed tasks still fence, so a state change can not lift a fence; empty owns and other agents\' tasks add nothing', async () => {
   const { tool, ask } = swarm()
   tool('omnis_task_create', { title: 'free', assignee: 'coder-1' })
   tool('omnis_task_create', { title: 'theirs', assignee: 'coder-2', owns: ['src/b/**'] })
   assert.deepEqual(ask('a1'), { fenced: false })
   tool('omnis_task_create', { title: 'closed', assignee: 'coder-1', owns: ['src/c/**'] })
-  tool('omnis_task_update', { id: 't3', state: 'done' })
+  await tool('omnis_task_update', { id: 't3', state: 'done' })
   tool('omnis_task_create', { title: 'broken', assignee: 'coder-1', owns: ['src/d/**'] })
-  tool('omnis_task_update', { id: 't4', state: 'failed' })
+  await tool('omnis_task_update', { id: 't4', state: 'failed' })
   const a1 = ask('a1')
   assert.deepEqual([a1.fenced, a1.tasks, a1.owns], [true, ['t3', 't4'], ['src/c/**', 'src/d/**']])
   // The toggle the review found: failed, edit, back to active. The fence never lifts.
-  tool('omnis_task_update', { id: 't4', state: 'active' })
+  await tool('omnis_task_update', { id: 't4', state: 'active' })
   assert.deepEqual(ask('a1').tasks, ['t3', 't4'])
   const a2 = ask('a2')
   assert.deepEqual([a2.fenced, a2.tasks, a2.owns], [true, ['t2'], ['src/b/**']])
-  tool('omnis_task_update', { id: 't2', state: 'active', owns: [] })
+  await tool('omnis_task_update', { id: 't2', state: 'active', owns: [] })
   assert.deepEqual(ask('a2'), { fenced: false })
 })
 

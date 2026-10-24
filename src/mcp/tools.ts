@@ -8,13 +8,23 @@ import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
-import type { Args, ToolDef } from './protocol.ts'
+import { settingsFor } from './gate/detect.ts'
+import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
+import { pinGate, pinnedGate } from './gate/pins.ts'
+import { gateTarget } from './gate/target.ts'
+import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
+import { SECRETISH } from './redact.ts'
 import type { Session } from './session.ts'
 import { writeReport } from './tools/report.ts'
 import { resolveWorktree } from './worktrees.ts'
 import { InputError, optString, optStringList, optText, reqEnum, reqString, reqText } from './validate.ts'
 
-export type ToolContext = { root: string; now?: () => Date; session: Session }
+/**
+ * Where the gate's settings come from, and shorter limits for tests. Only server.ts passes the real environment;
+ * without `env` the gate is off, so a test (or a gate run of this repo's own tests) never picks the settings up.
+ */
+export type GateOptions = { env?: Record<string, string | undefined>; limitMs?: number; progressMs?: number }
+export type ToolContext = { root: string; now?: () => Date; session: Session; gate?: GateOptions }
 
 export const TASK_ID = /^t[0-9]{1,6}$/
 
@@ -40,8 +50,8 @@ function statusText(state: SwarmState, nowMs: number): string {
   return lines.join('\n')
 }
 
-/** Token-shaped runs are blanked before a value preview reaches the log. The recorder keeps a copy (record-events.ts); a test keeps them equal. */
-export const SECRETISH = /(ghp_|gho_|github_pat_|sk-|sk_live_|xox[bap]-|AKIA)[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]+|[A-Za-z0-9+/=_-]{32,}/g
+/** Token-shaped runs are blanked before a value preview reaches the log (the pattern lives in redact.ts, shared with the gate). */
+export { SECRETISH }
 const preview = (value: string): string => clip(value.replace(SECRETISH, '[redacted]'), 80)
 
 export const MAX_TASKS = 500
@@ -67,10 +77,13 @@ function ownsArg(args: Args): string[] | undefined {
   return [...new Set(owns)]
 }
 
-export function createTools(ctx: ToolContext): ToolDef[] {
+const NO_CALL: CallContext = { signal: new AbortController().signal, progress: () => {} }
+
+export function createTools(ctx: ToolContext): AnyToolDef[] {
   const root = ctx.root
   const clock = ctx.now ?? (() => new Date())
   const session = ctx.session
+  const gateOptions = ctx.gate ?? {}
 
   const emit = (event: SwarmEvent): void => {
     if (!appendEvent(root, event)) throw new Error('Could not write to the swarm log in .omnis-swarm/')
@@ -270,58 +283,90 @@ export function createTools(ctx: ToolContext): ToolDef[] {
           type: 'task.created', swarm, src: 'mcp', now,
           data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
         }))
+        // Pin the gate the task starts with, where it would run now, so done can tell if it was edited since.
+        const settings = settingsFor(gateOptions.env)
+        if (settings.mode !== 'off') {
+          try {
+            const { digest } = gateTarget(root, null, worktree, settings.command)
+            if (digest !== null) pinGate(root, swarm, id, digest)
+          } catch {
+            // The task exists by now; one whose gate can't be read is left unpinned, as a task with no gate is.
+          }
+        }
         return { text: `Created task ${id}.` }
-      },
-    },
-    {
-      name: 'omnis_task_update',
-      description: 'Change a task\'s state (pending, active, done, failed), assignee or note.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', pattern: TASK_ID.source },
-          state: { type: 'string', enum: [...TASK_STATES] },
-          assignee: { type: 'string', pattern: NAME.source },
-          note: { type: 'string', maxLength: 200 },
-          owns: { ...OWNS_PROP, description: `${OWNS_PROP.description} Replaces the task's list; an empty list clears it.` },
-          worktree: WORKTREE_PROP,
-          skipGate: { type: 'boolean', description: 'Close the task without running its verification gate. Needs a note saying why. Only the lead may use it.' },
-        },
-        required: ['id', 'state'],
-        additionalProperties: false,
-      },
-      handler: args => {
-        const id = reqString(args, 'id', 8, TASK_ID)
-        const taskState = reqEnum(args, 'state', TASK_STATES)
-        const assignee = optString(args, 'assignee', 64, NAME)
-        const note = optText(args, 'note', 200)
-        const owns = ownsArg(args)
-        const worktreeArg = optString(args, 'worktree', 400)
-        const worktree = worktreeArg === undefined ? undefined : resolveWorktree(root, worktreeArg)
-        if (args.skipGate !== undefined && args.skipGate !== null && typeof args.skipGate !== 'boolean') throw new InputError('skipGate must be true or false')
-        if (args.skipGate === true && note === undefined) throw new InputError('skipGate needs a note saying why.')
-        const swarm = session.runningSwarm()
-        if (!Object.hasOwn(session.state(swarm).state.tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
-        emit(makeEvent({
-          type: 'task.updated', swarm, src: 'mcp', now: clock(),
-          data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
-        }))
-        return { text: `Task ${id} is now ${taskState}.` }
       },
     },
   ]
 
+  const taskUpdate: AsyncToolDef = {
+    name: 'omnis_task_update',
+    description: 'Change a task\'s state (pending, active, done, failed), assignee or note. Marking it done first runs the project\'s verification gate (its build and tests) unless that is turned off; a failing gate keeps the task open.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', pattern: TASK_ID.source },
+        state: { type: 'string', enum: [...TASK_STATES] },
+        assignee: { type: 'string', pattern: NAME.source },
+        note: { type: 'string', maxLength: 200 },
+        owns: { ...OWNS_PROP, description: `${OWNS_PROP.description} Replaces the task's list; an empty list clears it.` },
+        worktree: WORKTREE_PROP,
+        skipGate: { type: 'boolean', description: 'Close the task without running its verification gate. Needs a note saying why. Only the lead may use it.' },
+      },
+      required: ['id', 'state'],
+      additionalProperties: false,
+    },
+    handler: async (args, call = NO_CALL) => {
+      const id = reqString(args, 'id', 8, TASK_ID)
+      const taskState = reqEnum(args, 'state', TASK_STATES)
+      const assignee = optString(args, 'assignee', 64, NAME)
+      const note = optText(args, 'note', 200)
+      const owns = ownsArg(args)
+      const worktreeArg = optString(args, 'worktree', 400)
+      const worktree = worktreeArg === undefined ? undefined : resolveWorktree(root, worktreeArg)
+      if (args.skipGate !== undefined && args.skipGate !== null && typeof args.skipGate !== 'boolean') throw new InputError('skipGate must be true or false')
+      if (args.skipGate === true && note === undefined) throw new InputError('skipGate needs a note saying why.')
+      const swarm = session.runningSwarm()
+      const tasks = session.state(swarm).state.tasks
+      if (!Object.hasOwn(tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
+      let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
+      const settings = settingsFor(gateOptions.env)
+      if (taskState === 'done' && settings.mode !== 'off') {
+        const task = tasks[id]!
+        const out = await gateForDone({
+          root, swarm, task, ...(worktree !== undefined && { worktree }), assignee: assignee ?? task.assignee,
+          skip: args.skipGate === true, mode: settings.mode, command: settings.command, minutes: settings.minutes,
+          pinned: pinnedGate(root, swarm, id),
+          limitMs: gateOptions.limitMs ?? settings.minutes * 60_000, progressMs: gateOptions.progressMs ?? PROGRESS_MS,
+          emit, now: clock, state: () => session.state(swarm).state, ctx: call,
+        })
+        // A gate that blocks leaves the task as it was: nothing from this call is written.
+        if (!out.closes) return { text: out.text, isError: true }
+        reply = { text: out.text }
+      }
+      emit(makeEvent({
+        type: 'task.updated', swarm, src: 'mcp', now: clock(),
+        data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
+      }))
+      return reply
+    },
+  }
+
   // Anything but a bad-input error gets a fixed message; the detail (which may hold paths) goes to stderr only.
-  return tools.map(tool => ({
+  const fixed = (name: string) => (err: unknown): never => {
+    if (err instanceof InputError || err instanceof MemoryLimitError) throw err
+    process.stderr.write(`omnis: ${name} failed: ${err instanceof Error ? err.message : String(err)}\n`)
+    throw new Error(FAILED)
+  }
+  const guarded: AnyToolDef[] = tools.map((tool): ToolDef => ({
     ...tool,
-    handler: args => {
+    handler: (args, call) => {
       try {
-        return tool.handler(args)
+        return tool.handler(args, call)
       } catch (err) {
-        if (err instanceof InputError || err instanceof MemoryLimitError) throw err
-        process.stderr.write(`omnis: ${tool.name} failed: ${err instanceof Error ? err.message : String(err)}\n`)
-        throw new Error(FAILED)
+        return fixed(tool.name)(err)
       }
     },
   }))
+  guarded.push({ ...taskUpdate, handler: (args, call) => Promise.resolve().then(() => taskUpdate.handler(args, call)).catch(fixed(taskUpdate.name)) })
+  return guarded
 }

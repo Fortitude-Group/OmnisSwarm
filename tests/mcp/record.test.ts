@@ -11,6 +11,7 @@ import { createRecordTools } from '../../src/mcp/tools/record.ts'
 import { createTools } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
 import { tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const SID = 'abcdef12-3456-7890-abcd-ef1234567890'
 const SWARM = `session-${sessionKey(SID).slice(0, 8)}`
@@ -25,7 +26,7 @@ const setup = () => {
   const [record] = createRecordTools({ root, session, now: NOW })
   const tools = createTools({ root, session, now: () => new Date('2026-10-21T10:00:05.000Z') })
   const call = (args: Record<string, unknown>) => record!.handler(args)
-  const tool = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  const tool = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
   const events = (id: string) => readEvents(swarmLogPath(root, id)).events
   return { root, session, record: record!, call, tool, events }
 }

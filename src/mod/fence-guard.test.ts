@@ -182,8 +182,8 @@ test('a subagent can not skip the gate; main can, and a subagent may update with
   expect(await updateAs($, 'a1', { id: 't1', state: 'done', skipGate: true, note: 'flaky' }))
     .toEqual({ decision: 'deny', reason: 'Only main can skip the gate. Report the problem to main instead.' })
   expect((await updateAs($, undefined, { id: 't1', state: 'done', skipGate: true, note: 'flaky' })).decision).toBe('allow')
-  expect((await updateAs($, 'a1', { id: 't1', state: 'done' })).decision).toBe('allow')
-  expect((await updateAs($, 'a1', { id: 't1', state: 'done', skipGate: false })).decision).toBe('allow')
+  expect((await updateAs($, 'a1', { id: 't1', state: 'active' })).decision).toBe('allow')
+  expect((await updateAs($, 'a1', { id: 't1', state: 'active', skipGate: false })).decision).toBe('allow')
 })
 
 test('the skipGate refusal holds even with the fence off', { ...KIT, options: { scopeFence: 'off' } }, async ($, on) => {

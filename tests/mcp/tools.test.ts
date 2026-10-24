@@ -8,18 +8,22 @@ import { Session } from '../../src/mcp/session.ts'
 import { MAX_TASKS, createTools } from '../../src/mcp/tools.ts'
 import { InputError, optStringList } from '../../src/mcp/validate.ts'
 import { ev, tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const NOW = new Date('2026-10-21T10:00:00.000Z')
 const setup = () => {
   const root = tmpRoot()
-  const tools = createTools({ root, now: () => NOW, session: new Session(root) })
-  const call = (name: string, args: Record<string, unknown> = {}) => {
+  const tools = createTools({ root, now: () => NOW, session: new Session(root), gate: { env: { OMNIS_VERIFY_GATE: 'off' } } })
+  const find = (name: string) => {
     const tool = tools.find(t => t.name === name)
     if (tool === undefined) throw new Error(`no tool ${name}`)
-    return tool.handler(args)
+    return tool
   }
+  const call = (name: string, args: Record<string, unknown> = {}) => syncResult(find(name).handler(args))
+  /** omnis_task_update is async (it may run the gate). */
+  const update = async (args: Record<string, unknown>) => find('omnis_task_update').handler(args)
   const events = (id: string) => readEvents(swarmLogPath(root, id)).events
-  return { root, tools, call, events }
+  return { root, tools, call, update, events }
 }
 
 test('exactly the eight omnis tools are offered, each with an object schema', () => {
@@ -99,18 +103,19 @@ test('the 513th distinct key comes back as an error result, not a crash', () => 
     tools,
     { name: 't', version: '0' },
   )
+  assert.ok(!(reply instanceof Promise), 'memory_put answers synchronously')
   const result = reply?.result as { isError: boolean; content: { text: string }[] }
   assert.equal(result.isError, true)
   assert.match(result.content[0]!.text, /Memory is full/)
 })
 
-test('tasks are created with sequential ids and updated', () => {
-  const { root, call, events } = setup()
+test('tasks are created with sequential ids and updated', async () => {
+  const { root, call, update, events } = setup()
   call('omnis_swarm_init', { name: 'Tasks', topology: 'hierarchical' })
   assert.match(call('omnis_task_create', { title: 'Write auth', assignee: 'coder' }).text, /t1/)
   assert.match(call('omnis_task_create', { title: 'Test auth', dependsOn: ['t1'] }).text, /t2/)
-  call('omnis_task_update', { id: 't1', state: 'done', note: 'merged' })
-  assert.throws(() => call('omnis_task_update', { id: 't9', state: 'done' }), InputError)
+  await update({ id: 't1', state: 'done', note: 'merged' })
+  await assert.rejects(update({ id: 't9', state: 'done' }), InputError)
   const types = events(readCurrent(root)!).map(e => e.type)
   assert.deepEqual(types.filter(t => t.startsWith('task.')), ['task.created', 'task.created', 'task.updated'])
 })
@@ -139,14 +144,17 @@ test('null-prototype arguments work', () => {
 const twoSessions = () => {
   const root = tmpRoot()
   const make = () => {
-    const tools = createTools({ root, now: () => NOW, session: new Session(root) })
-    return (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+    const tools = createTools({ root, now: () => NOW, session: new Session(root), gate: { env: { OMNIS_VERIFY_GATE: 'off' } } })
+    const call = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
+    const update = async (args: Record<string, unknown>) => tools.find(t => t.name === 'omnis_task_update')!.handler(args)
+    return { call, update }
   }
-  return { root, a: make(), b: make() }
+  const a = make()
+  return { root, a: a.call, updateA: a.update, b: make().call }
 }
 
-test('two sessions in one project keep their own swarms', () => {
-  const { root, a, b } = twoSessions()
+test('two sessions in one project keep their own swarms', async () => {
+  const { root, a, updateA, b } = twoSessions()
   a('omnis_swarm_init', { name: 'Alpha', topology: 'mesh' })
   a('omnis_memory_put', { key: 'k', value: 'from-a' })
   b('omnis_swarm_init', { name: 'Beta', topology: 'star' })
@@ -166,7 +174,7 @@ test('two sessions in one project keep their own swarms', () => {
   // B ending clears current; A then has nothing running.
   b('omnis_swarm_end')
   assert.equal(readCurrent(root), null)
-  assert.throws(() => a('omnis_task_update', { id: 't1', state: 'done' }), InputError)
+  await assert.rejects(updateA({ id: 't1', state: 'done' }), InputError)
 })
 
 test('a swarm ended elsewhere is no longer mine', () => {
@@ -184,8 +192,8 @@ test('an explicit init does not rename another session swarm', () => {
   assert.equal(readEvents(swarmLogPath(root, implicit)).events.filter(e => e.type === 'swarm.started').length, 1)
 })
 
-test('free text with control or formatting characters is refused', () => {
-  const { call } = setup()
+test('free text with control or formatting characters is refused', async () => {
+  const { call, update } = setup()
   for (const bad of ['a\nb', 'a‮b', 'a​b']) {
     assert.throws(() => call('omnis_swarm_init', { name: bad, topology: 'mesh' }), InputError)
   }
@@ -193,7 +201,7 @@ test('free text with control or formatting characters is refused', () => {
   assert.throws(() => call('omnis_swarm_init', { name: 'ok', topology: 'mesh', goal: 'x\u0007' }), InputError)
   assert.throws(() => call('omnis_task_create', { title: 'x\ny' }), InputError)
   call('omnis_task_create', { title: 'fine' })
-  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', note: 'n\r' }), InputError)
+  await assert.rejects(update({ id: 't1', state: 'done', note: 'n\r' }), InputError)
   assert.throws(() => call('omnis_swarm_end', { outcome: 'o\u0000' }), InputError)
 })
 
@@ -277,11 +285,11 @@ test('memory get and list say so when no swarm is running', () => {
   assert.throws(() => call('omnis_memory_list'), InputError)
 })
 
-test('task_update takes an assignee, and swarm_end logs its outcome', () => {
-  const { root, call, events } = setup()
+test('task_update takes an assignee, and swarm_end logs its outcome', async () => {
+  const { root, call, update, events } = setup()
   call('omnis_swarm_init', { name: 'Upd', topology: 'mesh' })
   call('omnis_task_create', { title: 'x' })
-  call('omnis_task_update', { id: 't1', state: 'active', assignee: 'coder' })
+  await update({ id: 't1', state: 'active', assignee: 'coder' })
   const upd = events('upd').find(e => e.type === 'task.updated')
   assert.deepEqual(upd?.data, { id: 't1', state: 'active', assignee: 'coder' })
   call('omnis_swarm_end', { outcome: 'shipped' })
@@ -351,7 +359,7 @@ test('losing the race to publish current means adopting the winner without ownin
     return NOW.toISOString()
   }
   const tools = createTools({ root, now: () => racing, session: new Session(root) })
-  const run = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  const run = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
   run('omnis_task_create', { title: 'x' })
   assert.equal(readCurrent(root), 'winner')
   assert.match(run('omnis_swarm_end').text, /another session/)
@@ -379,23 +387,23 @@ const withWorktree = () => {
   return { ...s, wt, real: realpathSync.native(wt) }
 }
 
-test('task_create and task_update store owns and a resolved worktree', () => {
-  const { call, events, wt, real, root } = withWorktree()
+test('task_create and task_update store owns and a resolved worktree', async () => {
+  const { call, update, events, wt, real, root } = withWorktree()
   call('omnis_swarm_init', { name: 'Fen', topology: 'mesh' })
   call('omnis_task_create', { title: 'x', assignee: 'bob', owns: ['src/**', 'docs/'], worktree: wt })
   call('omnis_task_create', { title: 'y' })
   const made = events('fen').filter(e => e.type === 'task.created')
   assert.deepEqual(made[0]!.data, { id: 't1', title: 'x', assignee: 'bob', owns: ['src/**', 'docs/'], worktree: real })
   assert.deepEqual(made[1]!.data, { id: 't2', title: 'y' })
-  call('omnis_task_update', { id: 't1', state: 'active', owns: [] })
-  call('omnis_task_update', { id: 't2', state: 'active', owns: ['a/*.ts'], worktree: root })
+  await update({ id: 't1', state: 'active', owns: [] })
+  await update({ id: 't2', state: 'active', owns: ['a/*.ts'], worktree: root })
   const upd = events('fen').filter(e => e.type === 'task.updated')
   assert.deepEqual(upd[0]!.data, { id: 't1', state: 'active', owns: [] })
   assert.deepEqual(upd[1]!.data, { id: 't2', state: 'active', owns: ['a/*.ts'], worktree: realpathSync.native(root) })
 })
 
-test('owns and worktree are checked at input', () => {
-  const { call, events, root } = withWorktree()
+test('owns and worktree are checked at input', async () => {
+  const { call, update, events, root } = withWorktree()
   call('omnis_swarm_init', { name: 'Bad', topology: 'mesh' })
   call('omnis_task_create', { title: 'x' })
   const before = events('bad').length
@@ -405,26 +413,26 @@ test('owns and worktree are checked at input', () => {
   ]
   for (const owns of badOwns) {
     assert.throws(() => call('omnis_task_create', { title: 'z', owns }), InputError, JSON.stringify(owns))
-    assert.throws(() => call('omnis_task_update', { id: 't1', state: 'active', owns }), InputError, JSON.stringify(owns))
+    await assert.rejects(update({ id: 't1', state: 'active', owns }), InputError, JSON.stringify(owns))
   }
   for (const worktree of [join(root, '..'), join(root, 'nope'), '', 'x'.repeat(401), 5]) {
     assert.throws(() => call('omnis_task_create', { title: 'z', worktree }), InputError, JSON.stringify(worktree))
-    assert.throws(() => call('omnis_task_update', { id: 't1', state: 'active', worktree }), InputError, JSON.stringify(worktree))
+    await assert.rejects(update({ id: 't1', state: 'active', worktree }), InputError, JSON.stringify(worktree))
   }
   assert.equal(events('bad').length, before, 'a refused call writes nothing')
   assert.throws(() => call('omnis_task_create', { title: 'z', worktree: join(root, 'nope') }), /worktree is not this project or one of its git worktrees\./)
 })
 
-test('skipGate needs a note, and Task 1 does not change what done does', () => {
-  const { call, events } = setup()
+test('skipGate needs a note, and with the gate off done behaves as before', async () => {
+  const { call, update, events } = setup()
   call('omnis_swarm_init', { name: 'Skip', topology: 'mesh' })
   call('omnis_task_create', { title: 'x' })
-  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: true }), /^InputError: skipGate needs a note saying why\.$/)
-  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: true, note: '' }), InputError)
-  assert.throws(() => call('omnis_task_update', { id: 't1', state: 'done', skipGate: 'yes' }), InputError)
+  await assert.rejects(update({ id: 't1', state: 'done', skipGate: true }), /^InputError: skipGate needs a note saying why\.$/)
+  await assert.rejects(update({ id: 't1', state: 'done', skipGate: true, note: '' }), InputError)
+  await assert.rejects(update({ id: 't1', state: 'done', skipGate: 'yes' }), InputError)
   assert.equal(events('skip').some(e => e.type === 'task.updated'), false)
-  assert.match(call('omnis_task_update', { id: 't1', state: 'done', skipGate: true, note: 'no suite here' }).text, /^Task t1 is now done\.$/)
-  assert.match(call('omnis_task_update', { id: 't1', state: 'done', skipGate: false }).text, /^Task t1 is now done\.$/)
+  assert.match((await update({ id: 't1', state: 'done', skipGate: true, note: 'no suite here' })).text, /^Task t1 is now done\.$/)
+  assert.match((await update({ id: 't1', state: 'done', skipGate: false })).text, /^Task t1 is now done\.$/)
   assert.deepEqual(events('skip').filter(e => e.type === 'task.updated')[0]!.data, { id: 't1', state: 'done', note: 'no suite here' })
 })
 

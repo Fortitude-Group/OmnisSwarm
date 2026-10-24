@@ -8,6 +8,7 @@ import { createReportTools } from '../../src/mcp/tools/report.ts'
 import { createTools } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
 import { ev, tmpRoot } from '../helpers.ts'
+import { syncResult } from './sync.ts'
 
 const NOW = new Date('2026-10-23T10:05:00.000Z')
 const setup = () => {
@@ -16,7 +17,7 @@ const setup = () => {
   const ctx = { root, session, now: () => NOW }
   const [report] = createReportTools(ctx)
   const tools = createTools(ctx)
-  const tool = (name: string, args: Record<string, unknown> = {}) => tools.find(t => t.name === name)!.handler(args)
+  const tool = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
   return { root, session, report: report!, tool }
 }
 const reports = (root: string) => readdirSync(join(root, '.omnis-swarm', 'reports')).sort()
