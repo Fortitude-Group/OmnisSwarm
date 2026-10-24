@@ -4,6 +4,7 @@
  */
 import { lstatSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { PINNED_WHY, refusedText } from '../../core/gate-text.ts'
 import { clip, makeEvent, type GateMode, type GateResult, type SwarmEvent } from '../../core/events.ts'
 import type { SwarmState, TaskEntry } from '../../core/fold.ts'
 import { isLink, logPaths } from '../../core/log.ts'
@@ -15,7 +16,7 @@ import { differsFromRoot, gateTarget } from './target.ts'
 
 export const PROGRESS_MS = 30_000
 /** The command as shown in a reply, and as stored on gate.ran. */
-const SHOWN_COMMAND = 80
+export const SHOWN_COMMAND = 80
 const STORED_COMMAND = 120
 const MAX_ERROR = 200
 /** How far past the expected log number the next free name is looked for. */
@@ -33,7 +34,7 @@ export type GateCall = {
   mode: GateMode
   /** The gate command setting; empty means detect. */
   command: string
-  /** The digest of the gate the task was created with, when it had one (pins.ts). */
+  /** The digest of the gate the task was created with (its folded gatePin), when it had one. */
   pinned: string | undefined
   minutes: number
   limitMs: number
@@ -46,9 +47,9 @@ export type GateCall = {
 }
 export type GateOutcome = { closes: boolean; text: string; isError?: true }
 
+export { PINNED_WHY }
 export const NO_CHECK_TEXT = "The gate needs OmnisSwarm's mod to check permission first, and no check arrived. Make sure mods are on, or mark the task done with skipGate and a note."
 export const CHANGED_WHY = 'the gate changed after it was approved'
-export const PINNED_WHY = 'the gate changed since the task was created'
 export const differsWhy = (file: string): string => `the gate script in this worktree differs from the project's (${file})`
 
 /** Log names already handed to a running gate, so two runs of one task never share a file. */
@@ -125,7 +126,7 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
     if (g.mode === 'warn' && !always) {
       return { closes: true, text: `Task ${id} is now done, but its gate failed (${whyText}, 0 s): ${shown}. verifyGate is warn, so it closed anyway.` }
     }
-    return { closes: false, isError: true, text: `Gate failed for ${id} (${whyText}, 0 s): ${shown}. The task stays ${g.task.state}.` }
+    return { closes: false, isError: true, text: refusedText(id, whyText, shown, g.task.state) }
   }
   // Checked before "no gate", so removing the gate is caught as well as editing it.
   if (g.pinned !== undefined && digest !== g.pinned) return refused(PINNED_WHY, true)

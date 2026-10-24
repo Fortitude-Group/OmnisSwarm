@@ -11,11 +11,15 @@ const DIGEST = 'ab'.repeat(32)
 const PLAN = { run: true, id: 't1', dir: '/p/wt', command: 'npm test', digest: DIGEST }
 const APPROVAL = { id: 't1', dir: '/p/wt', command: 'npm test', digest: DIGEST }
 
+const CHANGED_PLAN = { run: false, changed: true, state: 'active', command: 'npm test' }
+const CHANGED_TEXT = 'Gate failed for t1 (the gate changed since the task was created, 0 s): npm test. The task stays active.'
+
 type Reply = 'ok' | 'error' | 'throw' | 'hang' | 'garbage'
 type Seen = {
   plan: Reply | 'none' | 'disconnected'; approve: Reply; bash: 'allow' | 'ask' | 'deny'; beneath: 'allow' | 'ask' | 'deny'
   /** The settings rule the Bash verdict names; undefined when a mode or the tool's own check decided. */
   rule: string | undefined
+  changed: boolean
   planCalls: Array<Record<string, unknown>>; approvals: Array<Record<string, unknown>>; bashChecks: unknown[]
 }
 
@@ -29,7 +33,7 @@ async function answer(how: Reply, ok: string) {
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine, its rules and the server.
 function engine(on: On): Seen {
-  const seen: Seen = { plan: 'ok', approve: 'ok', bash: 'allow', beneath: 'allow', rule: 'Bash(npm test)', planCalls: [], approvals: [], bashChecks: [] }
+  const seen: Seen = { plan: 'ok', approve: 'ok', bash: 'allow', beneath: 'allow', rule: 'Bash(npm test)', changed: false, planCalls: [], approvals: [], bashChecks: [] }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'abcdef12-3456-7890-abcd-ef1234567890' }))
   on('session.cwd', () => ({ value: '/p' }))
@@ -42,6 +46,7 @@ function engine(on: On): Seen {
   on('mcp.call', async (_$, e) => {
     if (e.tool === 'omnis_gate_plan') {
       seen.planCalls.push(e.args)
+      if (seen.changed) return answer('ok', JSON.stringify(CHANGED_PLAN))
       if (seen.plan === 'none') return answer('ok', '{"run":false}')
       return answer(seen.plan === 'disconnected' ? 'ok' : seen.plan, JSON.stringify(PLAN))
     }
@@ -120,6 +125,15 @@ test('when the plan says nothing would run, the call goes on with no Bash check 
   seen.plan = 'none'
   seen.bash = 'deny'
   expect((await done($)).decision).toBe('allow')
+  expect(seen.bashChecks).toEqual([])
+  expect(seen.approvals).toEqual([])
+})
+
+test('a gate that changed since its task was created is refused with the exact text, before any Bash query', KIT, async ($, on) => {
+  const { seen } = await boot($, on)
+  seen.changed = true
+  seen.bash = 'ask'
+  expect(await done($)).toEqual({ decision: 'deny', reason: CHANGED_TEXT })
   expect(seen.bashChecks).toEqual([])
   expect(seen.approvals).toEqual([])
 })

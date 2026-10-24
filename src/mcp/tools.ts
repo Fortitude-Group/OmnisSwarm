@@ -11,7 +11,6 @@ import { cyclePath } from '../core/ready.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
-import { pinGate, pinnedGate } from './gate/pins.ts'
 import { gateTarget } from './gate/target.ts'
 import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
 import { SECRETISH } from './redact.ts'
@@ -283,20 +282,21 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         let n = Object.keys(state.tasks).length + 1
         while (Object.hasOwn(state.tasks, `t${n}`)) n++
         const id = `t${n}`
-        emit(makeEvent({
-          type: 'task.created', swarm, src: 'mcp', now,
-          data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }) },
-        }))
         // Pin the gate the task starts with, where it would run now, so done can tell if it was edited since.
         const settings = settingsFor(gateOptions.env)
+        let gatePin: string | undefined
         if (settings.mode !== 'off') {
           try {
             const { digest } = gateTarget(root, null, worktree, settings.command)
-            if (digest !== null) pinGate(root, swarm, id, digest)
+            if (digest !== null) gatePin = digest
           } catch {
-            // The task exists by now; one whose gate can't be read is left unpinned, as a task with no gate is.
+            // One whose gate can't be read is left unpinned, as a task with no gate is.
           }
         }
+        emit(makeEvent({
+          type: 'task.created', swarm, src: 'mcp', now,
+          data: { id, title, ...(assignee !== undefined && { assignee }), ...(deps !== undefined && { dependsOn: deps }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(gatePin !== undefined && { gatePin }) },
+        }))
         return { text: `Created task ${id}.` }
       },
     },
@@ -348,7 +348,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         const out = await gateForDone({
           root, swarm, task, ...(worktree !== undefined && { worktree }), assignee: assignee ?? task.assignee,
           skip: args.skipGate === true, mode: settings.mode, command: settings.command, minutes: settings.minutes,
-          pinned: pinnedGate(root, swarm, id),
+          pinned: task.gatePin ?? undefined,
           limitMs: gateOptions.limitMs ?? settings.minutes * 60_000, progressMs: gateOptions.progressMs ?? PROGRESS_MS,
           emit, now: clock, state: () => session.state(swarm).state, ctx: call,
         })

@@ -87,6 +87,21 @@ test('a task that does not exist yet is answered for the project root, never as 
   assert.deepEqual(s.ask({ id: 't42' }), { run: true, id: 't42', dir: realpathSync.native(s.root), command: 'npm run ci', digest: sha('npm run ci') })
 })
 
+test('a gate changed since its task was created is answered as changed, with what the refusal needs', async () => {
+  const s = setup({ env: {} })
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 0' } }))
+  await s.run('omnis_swarm_init', { name: 'P', topology: 'mesh' })
+  await s.run('omnis_task_create', { title: 'pinned' })
+  await s.run('omnis_task_update', { id: 't1', state: 'active' })
+  assert.equal(s.ask({ id: 't1' }).run, true, 'unchanged: it would run')
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 1' } }))
+  assert.deepEqual(s.ask({ id: 't1' }), { run: false, changed: true, state: 'active', command: 'npm run check' })
+  assert.deepEqual(s.ask({ id: 't1', skipGate: true }), { run: false }, 'skipGate closes it anyway')
+  writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: {} }))
+  assert.deepEqual(s.ask({ id: 't1' }), { run: false, changed: true, state: 'active', command: 'no gate found' }, 'a removed gate is a change')
+  assert.deepEqual(setup({ env: { OMNIS_VERIFY_GATE: 'off' } }).ask({ id: 't1' }), { run: false })
+})
+
 test('bad input is an InputError', () => {
   const { plan } = setup(BLOCK)
   for (const args of [{}, { id: 'x1' }, { id: 't1', worktree: '/not/a/worktree' }, { id: 't1', skipGate: 'yes' }]) {
