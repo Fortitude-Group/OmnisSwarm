@@ -25,6 +25,9 @@ export const FENCE_TOOL = 'omnis_fence'
 /** The internal tool the mod asks what a task's gate would run, and where, before omnis_task_update(done) runs it. */
 export const GATE_PLAN_TOOL = 'omnis_gate_plan'
 
+/** The internal tool the mod records its approval of a task's gate with; the gate runs only with one. */
+export const APPROVE_TOOL = 'omnis_gate_approve'
+
 /** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
 export const SERVER_KEY = 'omnis-swarm'
 
@@ -39,7 +42,7 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
  * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan|gate_approve)$/
 
 /** A plugin name without an `@marketplace` suffix. Plugin names can't contain `@`, so the part before it is the name. */
 const bareName = (name: string): string => name.split('@', 1)[0] ?? ''

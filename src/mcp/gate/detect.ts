@@ -76,13 +76,36 @@ function solution(dir: string): string | null {
   return pick.includes(' ') ? `"${pick}"` : pick
 }
 
-/** The first marker found in `dir`, in the spec's order, as the command to run there; null when there is none. */
-export function detectCommand(dir: string): string | null {
-  if (isFile(join(dir, 'scripts', 'build-test.ps1'))) return 'pwsh -NoProfile -File scripts/build-test.ps1'
-  if (isFile(join(dir, 'scripts', 'build-test.sh'))) return 'bash scripts/build-test.sh'
-  const scripts = packageScripts(dir)
-  if (scripts !== null && nonEmpty(scripts.check)) return 'npm run check'
-  if (scripts !== null && nonEmpty(scripts.test) && !scripts.test.includes('no test specified')) return 'npm test'
-  const sln = solution(dir)
-  return sln === null ? null : `dotnet test ${sln}`
+/**
+ * A detected gate: its command, which marker it came from, the file that defines what it runs (null for dotnet) and
+ * that definition: the script's bytes, the package.json scripts entry used, or for dotnet the command itself.
+ */
+export type Detected = { command: string; kind: 'ps1' | 'sh' | 'check' | 'test' | 'dotnet'; file: string | null; content: string | Uint8Array }
+
+const readScript = (path: string): Uint8Array | null => {
+  try {
+    return statSync(path).isFile() ? readFileSync(path) : null
+  } catch {
+    return null
+  }
 }
+
+/** The first marker found in `dir`, in the spec's order, with what defines it; null when there is none. */
+export function detectGate(dir: string): Detected | null {
+  const ps1 = readScript(join(dir, 'scripts', 'build-test.ps1'))
+  if (ps1 !== null) return { command: 'pwsh -NoProfile -File scripts/build-test.ps1', kind: 'ps1', file: 'scripts/build-test.ps1', content: ps1 }
+  const sh = readScript(join(dir, 'scripts', 'build-test.sh'))
+  if (sh !== null) return { command: 'bash scripts/build-test.sh', kind: 'sh', file: 'scripts/build-test.sh', content: sh }
+  const scripts = packageScripts(dir)
+  if (scripts !== null && nonEmpty(scripts.check)) return { command: 'npm run check', kind: 'check', file: 'package.json', content: scripts.check }
+  if (scripts !== null && nonEmpty(scripts.test) && !scripts.test.includes('no test specified')) {
+    return { command: 'npm test', kind: 'test', file: 'package.json', content: scripts.test }
+  }
+  const sln = solution(dir)
+  if (sln === null) return null
+  const command = `dotnet test ${sln}`
+  return { command, kind: 'dotnet', file: null, content: command }
+}
+
+/** The detected command alone; null when there is none. */
+export const detectCommand = (dir: string): string | null => detectGate(dir)?.command ?? null

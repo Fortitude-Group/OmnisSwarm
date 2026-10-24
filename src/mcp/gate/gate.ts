@@ -9,9 +9,9 @@ import type { SwarmState, TaskEntry } from '../../core/fold.ts'
 import { isLink, logPaths } from '../../core/log.ts'
 import type { CallContext } from '../protocol.ts'
 import { redact } from '../redact.ts'
-import { projectRoots, resolveWorktree } from '../worktrees.ts'
-import { detectCommand } from './detect.ts'
+import { takeApproval } from './approvals.ts'
 import { runGate, type RunOutcome } from './run.ts'
+import { differsFromRoot, gateTarget } from './target.ts'
 
 export const PROGRESS_MS = 30_000
 /** The command as shown in a reply, and as stored on gate.ran. */
@@ -41,6 +41,10 @@ export type GateCall = {
   ctx: CallContext
 }
 export type GateOutcome = { closes: boolean; text: string; isError?: true }
+
+export const NO_CHECK_TEXT = "The gate needs OmnisSwarm's mod to check permission first, and no check arrived. Make sure mods are on, or mark the task done with skipGate and a note."
+export const CHANGED_WHY = 'the gate changed after it was approved'
+export const differsWhy = (file: string): string => `the gate script in this worktree differs from the project's (${file})`
 
 /** Log names already handed to a running gate, so two runs of one task never share a file. */
 const logsInUse = new Set<string>()
@@ -94,16 +98,6 @@ function logFor(root: string, swarm: string, task: TaskEntry): { rel: string; fi
   return { rel: `.omnis-swarm/gates/${name}`, file, name }
 }
 
-/**
- * Where the gate runs and what it runs: the resolved worktree argument, else the task's stored worktree (checked
- * again, as it may have been removed), else the project root; the command setting, else what detectCommand finds
- * there (null: no gate). The gate and omnis_gate_plan both use this, so a permission check sees what would run.
- */
-export function gateTarget(root: string, stored: string | null, worktree: string | undefined, setting: string): { dir: string; command: string | null } {
-  const dir = worktree ?? (stored !== null ? resolveWorktree(root, stored) : projectRoots(root)[0]!)
-  return { dir, command: setting !== '' ? setting : detectCommand(dir) }
-}
-
 /** Runs (or skips) the gate for a task being marked done. Throws an InputError when it is refused before running. */
 export async function gateForDone(g: GateCall): Promise<GateOutcome> {
   const id = g.task.id
@@ -114,11 +108,26 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
     record({ result: 'skipped', ms: 0 })
     return { closes: true, text: `Task ${id} is now done. Gate skipped.` }
   }
-  const { dir, command } = gateTarget(g.root, g.task.worktree, g.worktree, g.command)
+  const { dir, command, digest, detected } = gateTarget(g.root, g.task.worktree, g.worktree, g.command)
   if (command === null) {
     record({ result: 'none', ms: 0 })
     return { closes: true, text: `Task ${id} is now done. No gate found in ${dir}, so nothing was run.` }
   }
+  // Nothing runs without the mod's permission check for this call, and only what that check saw.
+  const approval = takeApproval(g.root, g.swarm, id, g.now().getTime())
+  if (approval === null) return { closes: false, isError: true, text: NO_CHECK_TEXT }
+  const shown = clip(redact(command), SHOWN_COMMAND)
+  /** A gate refused before it ran: result error, nothing in the log. `always`: refused even when verifyGate is warn. */
+  const refused = (whyText: string, always: boolean): GateOutcome => {
+    record({ result: 'error', ms: 0, command: clip(redact(command), STORED_COMMAND) })
+    if (g.mode === 'warn' && !always) {
+      return { closes: true, text: `Task ${id} is now done, but its gate failed (${whyText}, 0 s): ${shown}. verifyGate is warn, so it closed anyway.` }
+    }
+    return { closes: false, isError: true, text: `Gate failed for ${id} (${whyText}, 0 s): ${shown}. The task stays ${g.task.state}.` }
+  }
+  if (approval.dir !== dir || approval.command !== command || approval.digest !== digest) return refused(CHANGED_WHY, true)
+  const differs = differsFromRoot(g.root, dir, detected)
+  if (differs !== null) return refused(differsWhy(differs), false)
 
   const log = logFor(g.root, g.swarm, g.task)
   const started = Date.now()
@@ -139,7 +148,6 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
     ...(out.exit !== undefined && { exit: out.exit }), log: log.rel, ...(gap > 0 && { gap }),
   })
   const note = gap > 0 ? `\nNote: ${g.assignee} changed ${gap} source file(s) and no test files.` : ''
-  const shown = clip(redact(command), SHOWN_COMMAND)
   const s = seconds(out.ms)
   if (out.result === 'passed') return { closes: true, text: `Task ${id} is now done. Gate passed in ${s} s (${shown}).${note}` }
   const detail = `\nLast lines:\n${out.tail}\nFull log: ${log.rel}${note}`

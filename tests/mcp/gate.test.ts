@@ -8,7 +8,8 @@ import type { CallContext, ToolResult } from '../../src/mcp/protocol.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createTools, type GateOptions } from '../../src/mcp/tools.ts'
 import { InputError } from '../../src/mcp/validate.ts'
-import { gapOf } from '../../src/mcp/gate/gate.ts'
+import { CHANGED_WHY, NO_CHECK_TEXT, differsWhy, gapOf } from '../../src/mcp/gate/gate.ts'
+import { createGatePlanTools } from '../../src/mcp/tools/gate-plan.ts'
 import { emptyState } from '../../src/core/fold.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
@@ -23,7 +24,8 @@ const secs = (text: string) => text.replace(/(\d+) s([),])/g, 'N s$2').replace(/
 
 async function setup(env: Record<string, string> = {}, gate: Partial<GateOptions> = {}, rootDir?: string) {
   const root = rootDir ?? tmpRoot()
-  const tools = createTools({ root, now: () => NOW, session: new Session(root), gate: { env, ...gate } })
+  const ctx = { root, now: () => NOW, session: new Session(root), gate: { env, ...gate } }
+  const tools = [...createTools(ctx), ...createGatePlanTools(ctx)]
   const find = (name: string) => {
     const t = tools.find(x => x.name === name)
     if (t === undefined) throw new Error(`no tool ${name}`)
@@ -36,8 +38,18 @@ async function setup(env: Record<string, string> = {}, gate: Partial<GateOptions
   const events = () => readEvents(swarmLogPath(root, 'gate')).events
   const gates = () => events().filter(e => e.type === 'gate.ran').map(e => e.data as Record<string, unknown>)
   const closed = () => events().some(e => e.type === 'task.updated' && (e.data as { state: string }).state === 'done')
-  const done = (extra: Record<string, unknown> = {}, ctx?: CallContext) => run('omnis_task_update', { id: 't1', state: 'done', ...extra }, ctx)
-  return { root, run, events, gates, closed, done }
+  /** What the mod's gate guard does once the user's rules allow the command: ask for the plan, then approve it. */
+  const approve = async (extra: Record<string, unknown> = {}) => {
+    const plan = JSON.parse((await run('omnis_gate_plan', { id: extra.id ?? 't1', ...(extra.worktree !== undefined && { worktree: extra.worktree }) })).text)
+    if (plan.run === true) await run('omnis_gate_approve', { id: plan.id, dir: plan.dir, command: plan.command, digest: plan.digest })
+  }
+  /** omnis_task_update(done) with no approval, as when the mod is off. */
+  const bare = (extra: Record<string, unknown> = {}, ctx?: CallContext) => run('omnis_task_update', { id: 't1', state: 'done', ...extra }, ctx)
+  const done = async (extra: Record<string, unknown> = {}, ctx?: CallContext) => {
+    if (extra.skipGate !== true) await approve(extra)
+    return bare(extra, ctx)
+  }
+  return { root, run, events, gates, closed, done, bare, approve }
 }
 
 test('verifyGate off keeps the old path: no gate runs and the task closes', async () => {
@@ -198,13 +210,15 @@ test('the gate runs in the worktree argument, else the stored worktree', async (
   const wt = tmpRoot()
   mkdirSync(join(root, '.git', 'worktrees', 'w1'), { recursive: true })
   writeFileSync(join(root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
-  writeFileSync(join(wt, '.git'), 'gitdir: x')
+  // git's two-way link: a HEAD in the entry, and the worktree's .git file pointing back at it.
+  writeFileSync(join(root, '.git', 'worktrees', 'w1', 'HEAD'), 'ref: refs/heads/w1\n')
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(root, '.git', 'worktrees', 'w1')}\n`)
   const s = await setup({ OMNIS_GATE_COMMAND: node("require('fs').writeFileSync('ran-here','x')") }, {}, root)
   await s.done({ worktree: wt })
   assert.ok(existsSync(join(wt, 'ran-here')))
   assert.equal(existsSync(join(root, 'ran-here')), false)
   await s.run('omnis_task_create', { title: 'two', worktree: wt })
-  await s.run('omnis_task_update', { id: 't2', state: 'done' })
+  await s.done({ id: 't2' })
   assert.equal(s.gates().filter(g => g.task === 't2').length, 1)
   await assert.rejects(s.done({ worktree: tmpRoot() }), InputError)
 })
@@ -283,4 +297,78 @@ test('without a gate option the tools never read the real environment: the gate 
     if (saved === undefined) delete process.env.OMNIS_GATE_COMMAND
     else process.env.OMNIS_GATE_COMMAND = saved
   }
+})
+
+test('without an approval from the mod nothing runs and the task stays open, in block and warn alike', async () => {
+  for (const mode of ['block', 'warn']) {
+    const s = await setup({ OMNIS_VERIFY_GATE: mode, OMNIS_GATE_COMMAND: PASS })
+    assert.deepEqual(await s.bare(), { text: NO_CHECK_TEXT, isError: true }, mode)
+    assert.equal(s.closed(), false, mode)
+    assert.deepEqual(s.gates(), [], mode)
+  }
+  assert.equal(NO_CHECK_TEXT, "The gate needs OmnisSwarm's mod to check permission first, and no check arrived. Make sure mods are on, or mark the task done with skipGate and a note.")
+})
+
+test('an approval is used once', async () => {
+  const s = await setup({ OMNIS_GATE_COMMAND: FAIL })
+  assert.equal((await s.done()).isError, true)
+  assert.deepEqual(await s.bare(), { text: NO_CHECK_TEXT, isError: true })
+  assert.equal(s.gates().length, 1)
+})
+
+test('skipGate and no gate found need no approval', async () => {
+  const s = await setup()
+  assert.match((await s.bare()).text, /No gate found/)
+  const k = await setup({ OMNIS_GATE_COMMAND: FAIL })
+  assert.equal((await k.bare({ skipGate: true, note: 'ok' })).text, 'Task t1 is now done. Gate skipped.')
+})
+
+test('a gate that changed after its approval is refused, even in warn mode', async () => {
+  for (const mode of ['block', 'warn']) {
+    const s = await setup({ OMNIS_VERIFY_GATE: mode })
+    writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 0' } }))
+    await s.approve()
+    writeFileSync(join(s.root, 'package.json'), JSON.stringify({ scripts: { check: 'node -e 1' } }))
+    const r = await s.bare()
+    assert.deepEqual(r, { text: `Gate failed for t1 (${CHANGED_WHY}, 0 s): npm run check. The task stays active.`, isError: true }, mode)
+    assert.equal(s.closed(), false, mode)
+    assert.deepEqual(s.gates(), [{ task: 't1', result: 'error', ms: 0, command: 'npm run check', mode }], mode)
+  }
+  assert.equal(CHANGED_WHY, 'the gate changed after it was approved')
+})
+
+/** A project with a gate script, and a worktree of it with its own copy. */
+async function withScript(env: Record<string, string>, rootScript: string, wtScript: string) {
+  const root = tmpRoot()
+  const wt = tmpRoot()
+  mkdirSync(join(root, '.git', 'worktrees', 'w1'), { recursive: true })
+  writeFileSync(join(root, '.git', 'worktrees', 'w1', 'gitdir'), `${join(wt, '.git')}\n`)
+  writeFileSync(join(root, '.git', 'worktrees', 'w1', 'HEAD'), 'ref: refs/heads/w1\n')
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(root, '.git', 'worktrees', 'w1')}\n`)
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { check: rootScript } }))
+  writeFileSync(join(wt, 'package.json'), JSON.stringify({ scripts: { check: wtScript } }))
+  return { s: await setup(env, {}, root), wt }
+}
+
+test('a worktree whose gate script differs from the project root is not run: block refuses', async () => {
+  const { s, wt } = await withScript({}, "node -e \"console.log('real')\"", 'node -e 0')
+  const r = await s.done({ worktree: wt })
+  assert.deepEqual(r, { text: `Gate failed for t1 (${differsWhy('package.json')}, 0 s): npm run check. The task stays active.`, isError: true })
+  assert.equal(differsWhy('package.json'), "the gate script in this worktree differs from the project's (package.json)")
+  assert.equal(s.gates()[0]!.result, 'error')
+  assert.equal(s.closed(), false)
+})
+
+test('a worktree whose gate script differs: warn closes with the reason', async () => {
+  const { s, wt } = await withScript({ OMNIS_VERIFY_GATE: 'warn' }, "node -e \"console.log('real')\"", 'node -e 0')
+  const r = await s.done({ worktree: wt })
+  assert.equal(r.text, `Task t1 is now done, but its gate failed (${differsWhy('package.json')}, 0 s): npm run check. verifyGate is warn, so it closed anyway.`)
+  assert.ok(s.closed())
+})
+
+test('a worktree whose gate script matches the project root runs there', async () => {
+  const { s, wt } = await withScript({}, "node -e \"require('fs').writeFileSync('ran-here','x')\"", "node -e \"require('fs').writeFileSync('ran-here','x')\"")
+  const r = await s.done({ worktree: wt })
+  assert.equal(secs(r.text), 'Task t1 is now done. Gate passed in N s (npm run check).')
+  assert.ok(existsSync(join(wt, 'ran-here')))
 })

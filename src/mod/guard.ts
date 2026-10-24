@@ -11,7 +11,7 @@ import type { On } from 'claude-code'
 import { INTERNAL_TOOL, guardVerdict } from '../core/recording.ts'
 
 export const DENY_REASON =
-  'omnis_record, omnis_feed, omnis_replay, omnis_export, omnis_report, omnis_fence and omnis_gate_plan are internal to the omnis-swarm plugin and only its own hooks may call them. Use the public omnis_* tools instead.'
+  'omnis_record, omnis_feed, omnis_replay, omnis_export, omnis_report, omnis_fence, omnis_gate_plan and omnis_gate_approve are internal to the omnis-swarm plugin and only its own hooks may call them. Use the public omnis_* tools instead.'
 export const INTERNAL_DESCRIPTION = 'Internal to the omnis-swarm plugin. Not for use: calls from anywhere but the plugin itself are refused.'
 
 export function registerGuard(on: On): void {
