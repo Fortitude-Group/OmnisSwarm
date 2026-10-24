@@ -160,8 +160,10 @@ test('a background child holding the output open does not hold the gate past its
   try {
     assert.equal(out.result, 'passed')
     assert.ok(out.ms < 10_000, `took ${out.ms} ms`)
-    // Its PID may already be another process's: killing by it after the exit could hit anything.
-    assert.deepEqual(kills, [], 'no kill once the command had exited')
+    // On Windows its PID may already be another process's, so nothing is killed after the exit. Elsewhere the
+    // process group is killed (its id can't be reused while a member lives), but only if the output was still held.
+    if (process.platform === 'win32') assert.deepEqual(kills, [], 'no kill once the command had exited')
+    else assert.ok(kills.length <= 1)
   } finally {
     if (alive(pid)) process.kill(pid) // ours: started by this test's command
   }

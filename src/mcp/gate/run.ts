@@ -43,8 +43,9 @@ export type RunOptions = {
 const WINDOWS = process.platform === 'win32'
 const busy = new Set<string>()
 /**
- * Gates whose command is still running. A child leaves at its exit: from then on its PID may belong to another
- * process (Windows reuses them), so nothing is ever killed by it again.
+ * Gates whose command is still running. A child leaves at its exit. On Windows its PID may then belong to another
+ * process, so nothing is killed by it again. Elsewhere the gate is its own process group, whose id can't be reused
+ * while any member lives, so the group is still killed after the exit (a worker or watcher left holding the output).
  */
 const live = new Map<ChildProcess, ((pid: number) => void) | undefined>()
 const dirKey = (dir: string): string => (WINDOWS ? resolve(dir).toLowerCase() : resolve(dir))
@@ -60,11 +61,11 @@ export const childEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEn
 })
 const taskkill = (): string => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe')
 
-/** Kills the tree of `child` by its PID while it still runs: taskkill /T on Windows, the process group elsewhere. */
-function killTree(child: ChildProcess): Promise<void> {
+/** Kills the tree of `child`: on Windows taskkill /T, only while it still runs; elsewhere its process group. */
+function killTree(child: ChildProcess, onKill?: (pid: number) => void): Promise<void> {
   const pid = child.pid
-  if (pid === undefined || !live.has(child)) return Promise.resolve()
-  live.get(child)?.(pid)
+  if (pid === undefined || (WINDOWS && !live.has(child))) return Promise.resolve()
+  onKill?.(pid)
   if (!WINDOWS) {
     try {
       process.kill(-pid, 'SIGKILL')
@@ -234,7 +235,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
     const waitForClose = () => {
       clearTimeout(grace)
       grace = setTimeout(() => {
-        if (child !== undefined && live.has(child)) void killTree(child)
+        if (child !== undefined && (live.has(child) || !WINDOWS)) void killTree(child, opts.onKill)
         else heldOpen = stopped === null
         child?.stdout?.destroy()
         child?.stderr?.destroy()
@@ -244,7 +245,7 @@ export function runGate(opts: RunOptions): Promise<RunOutcome> {
     const stop = (why: 'timeout' | 'cancelled') => {
       if (settled || stopped !== null || exit !== null || signal !== null) return
       stopped = why
-      if (child !== undefined) void killTree(child).then(waitForClose)
+      if (child !== undefined) void killTree(child, opts.onKill).then(waitForClose)
       else settle()
     }
     const onAbort = () => stop('cancelled')
