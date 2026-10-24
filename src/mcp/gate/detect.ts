@@ -33,6 +33,10 @@ export function gateSettings(env: Record<string, string | undefined>): GateSetti
   return { mode, command, minutes }
 }
 
+/** Without an environment given (tests, anything but server.ts) the gate is off. */
+const GATE_OFF = { OMNIS_VERIFY_GATE: 'off' }
+export const settingsFor = (env: Record<string, string | undefined> | undefined): GateSettings => gateSettings(env ?? GATE_OFF)
+
 const isFile = (path: string): boolean => {
   try {
     return statSync(path).isFile()

@@ -94,6 +94,16 @@ function logFor(root: string, swarm: string, task: TaskEntry): { rel: string; fi
   return { rel: `.omnis-swarm/gates/${name}`, file, name }
 }
 
+/**
+ * Where the gate runs and what it runs: the resolved worktree argument, else the task's stored worktree (checked
+ * again, as it may have been removed), else the project root; the command setting, else what detectCommand finds
+ * there (null: no gate). The gate and omnis_gate_plan both use this, so a permission check sees what would run.
+ */
+export function gateTarget(root: string, stored: string | null, worktree: string | undefined, setting: string): { dir: string; command: string | null } {
+  const dir = worktree ?? (stored !== null ? resolveWorktree(root, stored) : projectRoots(root)[0]!)
+  return { dir, command: setting !== '' ? setting : detectCommand(dir) }
+}
+
 /** Runs (or skips) the gate for a task being marked done. Throws an InputError when it is refused before running. */
 export async function gateForDone(g: GateCall): Promise<GateOutcome> {
   const id = g.task.id
@@ -104,9 +114,7 @@ export async function gateForDone(g: GateCall): Promise<GateOutcome> {
     record({ result: 'skipped', ms: 0 })
     return { closes: true, text: `Task ${id} is now done. Gate skipped.` }
   }
-  // A stored worktree is checked again: it may have been removed since it was set.
-  const dir = g.worktree ?? (g.task.worktree !== null ? resolveWorktree(g.root, g.task.worktree) : projectRoots(g.root)[0]!)
-  const command = g.command !== '' ? g.command : detectCommand(dir)
+  const { dir, command } = gateTarget(g.root, g.task.worktree, g.worktree, g.command)
   if (command === null) {
     record({ result: 'none', ms: 0 })
     return { closes: true, text: `Task ${id} is now done. No gate found in ${dir}, so nothing was run.` }

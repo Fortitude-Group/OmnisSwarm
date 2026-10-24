@@ -9,6 +9,7 @@ const REPLAY = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_replay'
 const EXPORT = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_export'
 const REPORT = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_report'
 const FENCE = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_fence'
+const GATE_PLAN = 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_gate_plan'
 const BARE_RECORD = 'mcp__omnis-swarm__omnis_record'
 
 // Nothing sits beneath the plugin in a test: these hooks stand for the engine.
@@ -20,11 +21,12 @@ function engine(on: On): void {
 
 test('the model is refused every internal tool', KIT, async ($, on) => {
   engine(on)
-  for (const tool of [RECORD, FEED, REPLAY, EXPORT, REPORT, FENCE, BARE_RECORD, 'mcp__omnis-swarm__omnis_fence']) {
+  for (const tool of [RECORD, FEED, REPLAY, EXPORT, REPORT, FENCE, GATE_PLAN, BARE_RECORD, 'mcp__omnis-swarm__omnis_fence', 'mcp__omnis-swarm__omnis_gate_plan']) {
     const verdict = await $.tool.check({ tool, input: {} })
     expect(verdict.decision).toBe('deny')
     expect(verdict.reason).toContain('internal to the omnis-swarm plugin')
     expect(verdict.reason).toContain('omnis_fence')
+    expect(verdict.reason).toContain('omnis_gate_plan')
   }
 })
 

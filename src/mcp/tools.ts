@@ -8,7 +8,7 @@ import { LEAD, MEMORY_KEY, type SwarmState } from '../core/fold.ts'
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
-import { gateSettings } from './gate/detect.ts'
+import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
 import type { AnyToolDef, Args, AsyncToolDef, CallContext, ToolDef, ToolResult } from './protocol.ts'
 import { SECRETISH } from './redact.ts'
@@ -75,7 +75,6 @@ function ownsArg(args: Args): string[] | undefined {
   return [...new Set(owns)]
 }
 
-const GATE_OFF = { OMNIS_VERIFY_GATE: 'off' }
 const NO_CALL: CallContext = { signal: new AbortController().signal, progress: () => {} }
 
 export function createTools(ctx: ToolContext): AnyToolDef[] {
@@ -318,7 +317,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
       const tasks = session.state(swarm).state.tasks
       if (!Object.hasOwn(tasks, id)) throw new InputError(`No task ${clip(id, 80)} in swarm ${swarm}.`)
       let reply: ToolResult = { text: `Task ${id} is now ${taskState}.` }
-      const settings = gateSettings(gateOptions.env ?? GATE_OFF)
+      const settings = settingsFor(gateOptions.env)
       if (taskState === 'done' && settings.mode !== 'off') {
         const task = tasks[id]!
         const out = await gateForDone({
