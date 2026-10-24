@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent } from '../../src/core/log.ts'
 import { FENCE_TOOL } from '../../src/core/recording.ts'
@@ -13,8 +13,7 @@ import { ev, tmpRoot } from '../helpers.ts'
 
 const real = (p: string): string => realpathSync.native(p)
 
-function setup() {
-  const root = tmpRoot()
+function setup(root = tmpRoot()) {
   const session = new Session(root)
   const ctx = { root, session }
   const [fence] = createFenceTools(ctx)
@@ -25,8 +24,8 @@ function setup() {
 }
 
 /** A swarm with coder-1 (id a1) and coder-2 (id a2) started. */
-function swarm() {
-  const s = setup()
+function swarm(root?: string) {
+  const s = setup(root)
   s.tool('omnis_swarm_init', { name: 'auth', topology: 'hierarchical' })
   appendEvent(s.root, ev('agent.started', { name: 'coder-1', role: 'coder', description: '', parent: 'lead' }, { agent: 'a1', swarm: 'auth', atSec: 1 }))
   appendEvent(s.root, ev('agent.started', { name: 'coder-2', role: 'coder', description: '', parent: 'lead' }, { agent: 'a2', swarm: 'auth', atSec: 1 }))
@@ -73,14 +72,55 @@ test('the lead, an unknown agent and a session with no swarm are never fenced', 
   assert.deepEqual(ask('a9'), { fenced: false })
 })
 
+/** Registers a worktree folder with the repo at `root` the way git does, with no git process. */
+function addWorktree(root: string, name: string): string {
+  const wt = join(tmpRoot(), name)
+  const entry = join(root, '.git', 'worktrees', name)
+  mkdirSync(wt, { recursive: true })
+  mkdirSync(entry, { recursive: true })
+  writeFileSync(join(entry, 'gitdir'), `${join(wt, '.git')}\n`)
+  writeFileSync(join(entry, 'HEAD'), 'ref: refs/heads/x\n')
+  writeFileSync(join(wt, '.git'), `gitdir: ${entry}\n`)
+  return wt
+}
+
 test('roots are the project and its registered worktrees', () => {
   const { root, tool, ask } = swarm()
-  const wt = join(tmpRoot(), 'wt-a')
-  mkdirSync(wt, { recursive: true })
-  mkdirSync(join(root, '.git', 'worktrees', 'wt-a'), { recursive: true })
-  writeFileSync(join(root, '.git', 'worktrees', 'wt-a', 'gitdir'), `${join(wt, '.git')}\n`)
+  const wt = addWorktree(root, 'wt-a')
   tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/**'] })
   assert.deepEqual(ask('a1').roots, [real(root), real(wt)])
+  assert.equal(ask('a1').home, undefined)
+})
+
+test('a project reached through a junction answers both the link and the real folder as roots', () => {
+  const target = tmpRoot()
+  const link = join(tmpRoot(), 'linked')
+  try {
+    symlinkSync(target, link, 'junction')
+  } catch {
+    return // this machine cannot make links
+  }
+  const { tool, ask } = swarm(link)
+  tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/**'] })
+  assert.deepEqual(ask('a1').roots, [real(target), link])
+})
+
+test('when every fencing task names a worktree, home is that worktree in each spelling', () => {
+  const { root, tool, ask } = swarm()
+  const wt = addWorktree(root, 'wt-a')
+  const wt2 = addWorktree(root, 'wt-b')
+  tool('omnis_task_create', { title: 'one', assignee: 'coder-1', owns: ['src/**'], worktree: wt })
+  assert.deepEqual(ask('a1').home, [real(wt)])
+  tool('omnis_task_create', { title: 'two', assignee: 'coder-1', owns: ['docs/'], worktree: wt2 })
+  assert.deepEqual(ask('a1').home, [real(wt), real(wt2)])
+  tool('omnis_task_create', { title: 'three', assignee: 'coder-1', owns: ['lib/'] })
+  assert.equal(ask('a1').home, undefined)
+})
+
+test('the owns union is capped at 200 patterns', () => {
+  const { tool, ask } = swarm()
+  for (let t = 0; t < 11; t++) tool('omnis_task_create', { title: `t${t}`, assignee: 'coder-1', owns: Array.from({ length: 20 }, (_, i) => `p${t}/f${i}/**`) })
+  assert.equal((ask('a1').owns as string[]).length, 200)
 })
 
 test('agent must be an agent id', () => {

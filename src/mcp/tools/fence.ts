@@ -8,12 +8,19 @@ import { FENCE_TOOL } from '../../core/recording.ts'
 import type { ToolDef } from '../protocol.ts'
 import type { ToolContext } from '../tools.ts'
 import { InputError, reqString } from '../validate.ts'
-import { projectRoots } from '../worktrees.ts'
+import { rootGroups } from '../worktrees.ts'
 
 const FAILED = 'Could not read the swarm files in .omnis-swarm/ (see the server log).'
 const FENCING = new Set(['pending', 'active'])
+/** The most patterns one answer carries (spec review L7): the union of many tasks' owns is otherwise unbounded. */
+const MAX_UNION = 200
+const same = (a: string, b: string): boolean => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
 
-export type FenceAnswer = { fenced: false } | { fenced: true; tasks: string[]; owns: string[]; roots: string[] }
+/**
+ * roots: every root in every spelling (real path and the links it was reached by), so the mod can measure a path however
+ * it was written. home: present only when every fencing task names a worktree; the agent may edit under those alone.
+ */
+export type FenceAnswer = { fenced: false } | { fenced: true; tasks: string[]; owns: string[]; roots: string[]; home?: string[] }
 
 export function createFenceTools(ctx: ToolContext): ToolDef[] {
   const { root, session } = ctx
@@ -29,7 +36,19 @@ export function createFenceTools(ctx: ToolContext): ToolDef[] {
     if (found === undefined || found.name === '') return { fenced: false }
     const tasks = Object.values(state.tasks).filter(t => t.assignee === found.name && FENCING.has(t.state) && t.owns.length > 0)
     if (tasks.length === 0) return { fenced: false }
-    return { fenced: true, tasks: tasks.map(t => t.id), owns: [...new Set(tasks.flatMap(t => t.owns))], roots: projectRoots(root) }
+    const groups = rootGroups(root)
+    const answer: FenceAnswer = {
+      fenced: true, tasks: tasks.map(t => t.id), owns: [...new Set(tasks.flatMap(t => t.owns))].slice(0, MAX_UNION), roots: groups.flat(),
+    }
+    if (tasks.every(t => t.worktree !== null)) {
+      const home = new Set<string>()
+      for (const t of tasks) {
+        const group = groups.find(g => g.some(f => same(f, t.worktree!)))
+        for (const f of group ?? [t.worktree!]) home.add(f)
+      }
+      answer.home = [...home]
+    }
+    return answer
   }
 
   const tool: ToolDef = {
