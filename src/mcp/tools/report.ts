@@ -5,6 +5,8 @@
 import { isValidSwarmId, makeEvent } from '../../core/events.ts'
 import { appendEvent, isLink, swarmLogPath } from '../../core/log.ts'
 import { REPORT_TOOL } from '../../core/recording.ts'
+import { hintLines } from '../../core/hints.ts'
+import { HINTS_OFF, loadRows, recordRun, type HintsOptions } from '../history-store.ts'
 import { hasNewWork, pointerText, reportMarkdown, reportSummary } from '../../core/report.ts'
 import { existsSync } from 'node:fs'
 import { stamp, writeUnique } from '../out-file.ts'
@@ -17,9 +19,11 @@ const FAILED = 'Could not write the swarm report (see the server log).'
 const NOTHING_NEW = 'Nothing new to report.'
 
 /** Writes swarm `swarm`'s report and records report.written. Answers the pointer line. */
-export function writeReport(root: string, session: Session, swarm: string, now: Date): string {
+export function writeReport(root: string, session: Session, swarm: string, now: Date, hints: HintsOptions = HINTS_OFF): string {
+  recordRun(root, session, swarm, hints)
+  const rows = loadRows(root, hints)
   const state = session.state(swarm).state
-  const md = reportMarkdown(state, now.getTime(), -now.getTimezoneOffset())
+  const md = reportMarkdown(state, now.getTime(), -now.getTimezoneOffset(), hintLines(rows.project, rows.machine))
   const name = writeUnique(root, 'reports', `${swarm}-${stamp(now)}`, '.md', md)
   const path = `.omnis-swarm/reports/${name}`
   const sum = reportSummary(state, now.getTime())
@@ -51,7 +55,7 @@ export function createReportTools(ctx: ToolContext): ToolDef[] {
       if (!existsSync(file) || isLink(file)) throw new InputError(`No swarm ${swarm} here.`)
       try {
         if (args.quiet === true && !hasNewWork(session.state(swarm).state)) return { text: NOTHING_NEW, isError: true }
-        return { text: writeReport(root, session, swarm, clock()) }
+        return { text: writeReport(root, session, swarm, clock(), ctx.hints ?? HINTS_OFF) }
       } catch (err) {
         process.stderr.write(`omnis: ${REPORT_TOOL} failed: ${err instanceof Error ? err.message : String(err)}\n`)
         throw new Error(FAILED)
