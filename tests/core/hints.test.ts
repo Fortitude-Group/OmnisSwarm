@@ -80,3 +80,8 @@ test('hintsText says so when there is no history, and lists the table and hints 
   assert.match(text, /^Model history \(role · model · runs · clean · avg cost · avg minutes · source\):\n- dev · Sonnet · 8 · 7 · ≈\$0\.41 · 5 · project\n- dev · Opus · 10 · 9 · ≈\$1\.80 · 5 · project\n\nHints:\n- dev: Sonnet/)
   assert.match(hintsText(runs('dev', O, 3, 3), []), /\n\nNo hints yet: no role has 5 or more runs on each of two models\.$/)
 })
+
+test('exact edges that floating point would miss still count', () => {
+  assert.deepEqual(hintLines([...runs('sec', H, 6, 1), ...runs('sec', S, 12, 5)], []), ['sec: Haiku finished clean 1 of 6 vs Sonnet 5 of 12. Keep it on Sonnet.'])
+  assert.match(hintLines([...runs('dev', S, 15, 1), ...runs('dev', O, 6, 1)], [])[0]!, /^dev: Sonnet finished clean 1 of 15 .*Try model: 'sonnet'\.$/)
+})

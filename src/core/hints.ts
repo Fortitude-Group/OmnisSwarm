@@ -50,8 +50,15 @@ function statsBy(rows: readonly HistoryRow[], source: Source): Map<string, HintS
 }
 
 const qualifies = (stats: readonly HintStat[]): boolean => stats.filter(s => s.runs >= MIN_RUNS).length >= 2
-/** Clean rate in points. Integer maths first, so 3 of 5 is exactly 60. */
-const rate = (s: HintStat): number => (s.clean * 100) / s.runs
+/**
+ * Clean rates compared by cross-multiplying, all in integers, so an exact edge (1 of 6 against 5 of 12 is 25 points)
+ * isn't lost to floating point. `within(low, top, p)`: low's rate is at least top's minus p points.
+ */
+const within = (low: HintStat, top: HintStat, points: number): boolean =>
+  low.clean * top.runs * 100 >= (top.clean * 100 - points * top.runs) * low.runs
+/** `below(bad, top, p)`: bad's rate is at most top's minus p points. */
+const below = (bad: HintStat, top: HintStat, points: number): boolean =>
+  bad.clean * top.runs * 100 <= (top.clean * 100 - points * top.runs) * bad.runs
 const usd = (x: number): string => `≈$${x.toFixed(2)}`
 const byRole = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -75,14 +82,14 @@ function hintFor(role: string, stats: readonly HintStat[]): Hint | null {
   const top = q[q.length - 1]!
   const cheaper = q.slice(0, -1)
   const label = top.source === 'machine' ? ' (across projects)' : ''
-  const low = cheaper.find(s => rate(s) >= rate(top) - CHEAPER_WITHIN)
+  const low = cheaper.find(s => within(s, top, CHEAPER_WITHIN))
   if (low !== undefined) {
     return {
       role, runs: low.runs + top.runs,
       text: `${role}: ${NAMES[low.tier]} finished clean ${low.clean} of ${low.runs} (${usd(low.avgUsd)} avg) vs ${NAMES[top.tier]} ${top.clean} of ${top.runs} (${usd(top.avgUsd)}). Try model: '${ALIAS[low.tier]}'${label}.`,
     }
   }
-  const bad = cheaper.find(s => rate(s) <= rate(top) - KEEP_BELOW)
+  const bad = cheaper.find(s => below(s, top, KEEP_BELOW))
   if (bad === undefined) return null
   return {
     role, runs: bad.runs + top.runs,
