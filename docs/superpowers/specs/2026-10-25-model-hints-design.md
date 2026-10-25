@@ -44,7 +44,7 @@ When the server writes a run report (`report.written`: swarm end or the quiet re
 `src/core/hints.ts` (pure). Input: project rows and machine rows. Output: up to 5 hint lines.
 
 1. Tier each row by model id: contains `haiku` = 1, `sonnet` = 2, `opus` = 3; anything else (a gateway model, say) is left out of tiering.
-2. For each role, use project rows when the role has at least 5 project rows on two or more tiers between them; otherwise use machine rows, and label the line "across projects". Fewer than that anywhere: no hint for the role.
+2. For each role, use project rows when at least two tiers each have 5 or more project rows for the role; otherwise use machine rows, and label the line "across projects". Fewer than that anywhere: no hint for the role.
 3. For each pair of tiers with at least 5 rows each, compare clean rates:
    - **Cheaper:** the cheaper tier's clean rate is no more than 10 points below the dearer one's. Hint the cheapest tier that qualifies.
    - **Keep:** the cheaper tier's clean rate is 25 or more points below. Hint to keep the role on the dearer tier.
