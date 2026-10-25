@@ -105,7 +105,9 @@ test('resolveWorktree follows a link before it decides', () => {
 test('rootGroups gives each root as the real path and every spelling it was reached by', () => {
   const { root, wtA } = layout()
   assert.deepEqual(rootGroups(root).map(g => g[0]), [real(root), real(wtA)])
-  assert.ok(rootGroups(root)[1]!.includes(wtA))
+  // A temp folder spelt `c:\…` differs from its real path only by case, and then the group holds the real spelling alone.
+  const sameSpelling = (f: string): boolean => (process.platform === 'win32' ? f.toLowerCase() === wtA.toLowerCase() : f === wtA)
+  assert.ok(rootGroups(root)[1]!.some(sameSpelling))
 })
 
 test('a project reached through a junction lists the link and the real folder', () => {
