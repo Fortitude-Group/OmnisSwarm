@@ -23,7 +23,7 @@ function engine(on: On): void {
 
 test('the model is refused every internal tool', KIT, async ($, on) => {
   engine(on)
-  for (const tool of [RECORD, FEED, REPLAY, EXPORT, REPORT, FENCE, GATE_PLAN, APPROVE, HANDOFF, BARE_RECORD, 'mcp__omnis-swarm__omnis_handoff', 'mcp__omnis-swarm__omnis_fence', 'mcp__omnis-swarm__omnis_gate_plan', 'mcp__omnis-swarm__omnis_gate_approve']) {
+  for (const tool of [RECORD, FEED, REPLAY, EXPORT, REPORT, FENCE, GATE_PLAN, APPROVE, HANDOFF, BARE_RECORD, 'mcp__omnis-swarm__omnis_handoff', 'mcp__omnis-swarm__omnis_fence', 'mcp__omnis-swarm__omnis_gate_plan', 'mcp__omnis-swarm__omnis_gate_approve', 'mcp__plugin_omnis-swarm_omnis-swarm__omnis_hints']) {
     const verdict = await $.tool.check({ tool, input: {} })
     expect(verdict.decision).toBe('deny')
     expect(verdict.reason).toContain('internal to the omnis-swarm plugin')
@@ -31,6 +31,7 @@ test('the model is refused every internal tool', KIT, async ($, on) => {
     expect(verdict.reason).toContain('omnis_gate_plan')
     expect(verdict.reason).toContain('omnis_gate_approve')
     expect(verdict.reason).toContain('omnis_handoff')
+    expect(verdict.reason).toContain('omnis_hints')
   }
 })
 
