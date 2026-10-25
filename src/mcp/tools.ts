@@ -8,7 +8,7 @@ import { LEAD, MEMORY_KEY, type SwarmState, type TaskEntry } from '../core/fold.
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
 import { cyclePath, newlyReady, readyTasks, strandedBy, waitsOn } from '../core/ready.ts'
-import { HINTS_OFF, hintBlock, type HintsOptions } from './history-store.ts'
+import { HINTS_OFF, hintBlock, recordRun, type HintsOptions } from './history-store.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
@@ -172,17 +172,20 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
           if (state.swarm.implicit) {
             emit(makeEvent({ type: 'swarm.started', swarm: existing, src: 'mcp', data, now }))
             noteBudget(existing)
-            return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.${hintBlock(root, hints)}` }
+            return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.${hintBlock(root, hints, existing)}` }
           }
           replaced = existing
         }
         const id = uniqueSwarmId(root, name)
-        if (replaced !== null) emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
+        if (replaced !== null) {
+          emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
+          recordRun(root, session, replaced, hints) // no report is written for a replaced swarm, so its rows go in here
+        }
         writeCurrent(root, id)
         session.begin(id)
         emit(makeEvent({ type: 'swarm.started', swarm: id, src: 'mcp', data, now }))
         noteBudget(id)
-        return { text: `Swarm "${name}" started as ${id} (${topology}).${hintBlock(root, hints)}` }
+        return { text: `Swarm "${name}" started as ${id} (${topology}).${hintBlock(root, hints, id)}` }
       },
     },
     {
