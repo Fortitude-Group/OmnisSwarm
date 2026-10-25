@@ -22,6 +22,9 @@ export const REPORT_TOOL = 'omnis_report'
 /** The internal tool the mod calls to write a stuck agent's handoff notes. */
 export const HANDOFF_TOOL = 'omnis_handoff'
 
+/** Internal: the model hints table for /omnis hints (spec 2026-10-25 section 6). */
+export const HINTS_TOOL = 'omnis_hints'
+
 /** The internal tool the mod asks which files an agent's tasks let it edit. */
 export const FENCE_TOOL = 'omnis_fence'
 
@@ -45,7 +48,7 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
  * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan|gate_approve|handoff)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan|gate_approve|handoff|hints)$/
 
 /** A plugin name without an `@marketplace` suffix. Plugin names can't contain `@`, so the part before it is the name. */
 const bareName = (name: string): string => name.split('@', 1)[0] ?? ''
