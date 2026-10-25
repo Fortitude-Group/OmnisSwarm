@@ -1,8 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent } from '../../src/core/log.ts'
+import { projectKey } from '../../src/mcp/history-store.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { createHintsTools } from '../../src/mcp/tools/hints.ts'
 import { createReportTools } from '../../src/mcp/tools/report.ts'
@@ -20,6 +22,7 @@ function setup(hints?: typeof ON | { mode: 'off'; machineDir: null }) {
   const tool = (name: string, args: Record<string, unknown> = {}) => syncResult(tools.find(t => t.name === name)!.handler(args))
   return { root, tool }
 }
+const stored = (root: string, id: string) => createHash('sha256').update(`${projectKey(root)}\u0000${id}`).digest('hex').slice(0, 16)
 function pastRuns(root: string) {
   for (let i = 0; i < 10; i++) {
     const id = `old${i}`, agent = `a${i}`, model = i < 5 ? 'claude-sonnet-5-5' : 'claude-opus-5-5'
@@ -55,7 +58,7 @@ test('a written report records the run and carries a Hints section', () => {
   const pointer = tool('omnis_swarm_end', {}).text
   const path = pointer.match(/(\.omnis-swarm\/reports\/[^ ]+\.md)/)![1]!
   assert.match(readFileSync(join(root, path), 'utf8'), /\n## Hints\n\n- omnis-developer: Sonnet/)
-  assert.match(readFileSync(join(root, '.omnis-swarm', 'history.jsonl'), 'utf8'), /"id":"cur\/w"/)
+  assert.ok(readFileSync(join(root, '.omnis-swarm', 'history.jsonl'), 'utf8').includes(`"id":"${stored(root, 'cur/w')}"`))
 })
 
 test('omnis_hints answers the table, or says hints are off', () => {

@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { appendEvent } from '../../src/core/log.ts'
 import { rowLine, type HistoryRow } from '../../src/core/history.ts'
-import { ensureBackfill, hintBlock, hintsOptions, loadRows, projectKey, readRows, recordRun } from '../../src/mcp/history-store.ts'
+import { ensureBackfill, hintBlock, hintsOptions, loadRows, projectKey, readRows, recordRun, trimStore } from '../../src/mcp/history-store.ts'
 import { Session } from '../../src/mcp/session.ts'
 import { ev, tmpRoot } from '../helpers.ts'
 
@@ -19,12 +20,15 @@ function runSwarm(root: string, id: string, agent: string, model = 'claude-sonne
   appendEvent(root, ev('agent.finished', { outcome: 'answer' }, { swarm: id, agent, atSec: 60 }))
 }
 const on = (machineDir: string | null) => ({ mode: 'on' as const, machineDir })
+/** The stored id of agent `agent` in swarm `swarm`: opaque, so no swarm name leaves the project. */
+const stored = (root: string, swarm: string, agent: string) => createHash('sha256').update(`${projectKey(root)}\u0000${swarm}/${agent}`).digest('hex').slice(0, 16)
+const ids = (file: string) => lines(file).map(l => (JSON.parse(l) as HistoryRow).id).sort()
 
 test('hintsOptions: on by default, project and off honoured, the data folder only when on, absolute and expanded', () => {
   assert.deepEqual(hintsOptions({}), { mode: 'on', machineDir: null })
   assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'project', OMNIS_DATA_DIR: '/d' }).machineDir, null)
   assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'off' }).mode, 'off')
-  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'nonsense' }).mode, 'on')
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'nonsense' }).mode, 'project')
   assert.equal(hintsOptions({ OMNIS_DATA_DIR: '${CLAUDE_PLUGIN_DATA}' }).machineDir, null)
   assert.equal(hintsOptions({ OMNIS_DATA_DIR: 'relative/dir' }).machineDir, null)
   assert.notEqual(hintsOptions({ OMNIS_DATA_DIR: tmpRoot() }).machineDir, null)
@@ -73,7 +77,7 @@ test('backfill folds every old log once, the first time the store is missing', (
   runSwarm(root, 'alpha', 'dev-1')
   runSwarm(root, 'beta', 'dev-2', 'claude-opus-5-5')
   ensureBackfill(root)
-  assert.deepEqual(lines(store(root)).map(l => (JSON.parse(l) as HistoryRow).id).sort(), ['alpha/dev-1', 'beta/dev-2'])
+  assert.deepEqual(ids(store(root)), [stored(root, 'alpha', 'dev-1'), stored(root, 'beta', 'dev-2')].sort())
   runSwarm(root, 'gamma', 'dev-3')
   ensureBackfill(root)
   assert.equal(lines(store(root)).length, 2)
@@ -112,4 +116,95 @@ test('hintBlock is empty without enough evidence and lists hints when there is',
   assert.match(block, /^\n\nModel hints from past runs:\n- omnis-developer: Sonnet finished clean 5 of 5 /)
   assert.equal(hintBlock(root, { mode: 'off', machineDir: null }), '')
   assert.deepEqual(loadRows(root, { mode: 'off', machineDir: null }), { project: [], machine: [] })
+})
+
+test('hintsOptions fails closed: case and spaces ignored, blank or unexpanded means on, anything unknown means project', () => {
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'OFF' }).mode, 'off')
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: ' Project ' }).mode, 'project')
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: 'none' }).mode, 'project')
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: '  ' }).mode, 'on')
+  assert.equal(hintsOptions({ OMNIS_MODEL_HINTS: '${user_config.modelHints}' }).mode, 'on')
+})
+
+test('stored ids are opaque: 16 hex from the project key and the row, and no swarm name in either store', () => {
+  const root = tmpRoot()
+  const machine = tmpRoot()
+  runSwarm(root, 'payroll-secret', 'dev-1')
+  recordRun(root, new Session(root), 'payroll-secret', on(machine))
+  recordRun(root, new Session(root), 'payroll-secret', on(machine))
+  assert.deepEqual(ids(store(root)), [stored(root, 'payroll-secret', 'dev-1')])
+  assert.deepEqual(ids(join(machine, 'history.jsonl')), [stored(root, 'payroll-secret', 'dev-1')])
+  assert.equal(readFileSync(join(machine, 'history.jsonl'), 'utf8').includes('payroll'), false)
+})
+
+test('loadRows ignores project-store rows from another project, such as a history file cloned from elsewhere', () => {
+  const root = tmpRoot()
+  mkdirSync(join(root, '.omnis-swarm'))
+  const row = (project: string): HistoryRow => ({ v: 1, id: 'abc', role: 'r', model: 'claude-opus-5-5', clean: true, costUsd: 0, minutes: 0, at: '2026-10-25T10:00:00.000Z', project })
+  writeFileSync(store(root), rowLine(row('0123456789abcdef')) + rowLine(row(projectKey(root))))
+  assert.deepEqual(loadRows(root, on(null)).project.map(r => r.project), [projectKey(root)])
+})
+
+test('backfill folds only the newest 50 regular logs of 8 MB or less, and skips the swarm being started', () => {
+  const root = tmpRoot()
+  for (let i = 0; i < 53; i++) runSwarm(root, `s${i}`, 'dev')
+  const swarms = join(root, '.omnis-swarm', 'swarms')
+  for (let i = 0; i < 53; i++) utimesSync(join(swarms, `s${i}.jsonl`), 1_000_000 + i, 1_000_000 + i)
+  truncateSync(join(swarms, 's52.jsonl'), 8 * 1024 * 1024 + 1) // the newest, now too big
+  mkdirSync(join(swarms, 'dir.jsonl'))
+  // s52 is too big and s51 is the swarm being started, which leaves s0 to s50: the newest 50 are s1 to s50.
+  hintBlock(root, on(null), 's51')
+  const want = Array.from({ length: 50 }, (_, i) => stored(root, `s${i + 1}`, 'dev')).sort()
+  assert.deepEqual(ids(store(root)), want)
+})
+
+test('readRows refuses a folder and a file that is not regular', () => {
+  const root = tmpRoot()
+  mkdirSync(join(root, 'dir.jsonl'))
+  assert.deepEqual(readRows(join(root, 'dir.jsonl')), [])
+})
+
+test('readRows over 256 KB keeps the first line when the cut falls on a line start, and drops it when the cut is mid-line', () => {
+  const root = tmpRoot()
+  const row = (i: number, pad: number) => {
+    const line = JSON.stringify({ v: 1, id: `a${i}`, role: 'r', model: 'claude-opus-5-5', clean: true, costUsd: 0, minutes: 0, at: '2026-10-25T10:00:00.000Z', project: '0123456789abcdef' })
+    return `${line}${' '.repeat(pad - line.length - 1)}\n`
+  }
+  const file = join(root, 'h.jsonl')
+  // 300 lines of exactly 1 KB: the last 256 KB start exactly at line 44.
+  writeFileSync(file, Array.from({ length: 300 }, (_, i) => row(i, 1024)).join(''))
+  let rows = readRows(file)
+  assert.equal(rows.length, 256)
+  assert.equal(rows.at(-1)!.id, 'a44')
+  // The same with the last line 512 bytes longer: the cut now falls in the middle of line 44.
+  writeFileSync(file, Array.from({ length: 300 }, (_, i) => row(i, i === 299 ? 1536 : 1024)).join(''))
+  rows = readRows(file)
+  assert.equal(rows.length, 255)
+  assert.equal(rows.at(-1)!.id, 'a45')
+})
+
+test('trimStore rewrites a store over its limit with its newest rows, and leaves a small one alone', () => {
+  const root = tmpRoot()
+  const file = join(root, 'history.jsonl')
+  const row = (i: number): HistoryRow => ({ v: 1, id: `a${i}`, role: 'r', model: 'claude-opus-5-5', clean: true, costUsd: 0, minutes: 0, at: '2026-10-25T10:00:00.000Z', project: '0123456789abcdef' })
+  writeFileSync(file, Array.from({ length: 30 }, (_, i) => rowLine(row(i))).join(''))
+  trimStore(file, 1_000_000, 10)
+  assert.equal(lines(file).length, 30)
+  trimStore(file, 100, 10)
+  assert.deepEqual(lines(file).map(l => (JSON.parse(l) as HistoryRow).id), Array.from({ length: 10 }, (_, i) => `a${i + 20}`))
+  assert.deepEqual(readdirSync(root), ['history.jsonl'])
+})
+
+test('trimStore refuses a link', () => {
+  const root = tmpRoot()
+  const real = join(root, 'real.jsonl')
+  writeFileSync(real, 'x\n'.repeat(100))
+  const link = join(root, 'history.jsonl')
+  try {
+    symlinkSync(real, link)
+  } catch {
+    return // no symlink rights on this machine
+  }
+  trimStore(link, 10, 1)
+  assert.equal(readFileSync(real, 'utf8'), 'x\n'.repeat(100))
 })
