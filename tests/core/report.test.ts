@@ -167,3 +167,10 @@ test('Problems counts fenced edits per agent and escapes the name', () => {
   const two = reportMarkdown(gateSwarm(ev('fence.blocked', { path: 'x.ts', tasks: ['t1'], mode: 'block' }, { agent: 'a1', atSec: 5 }), ev('fence.blocked', { path: 'y.ts', tasks: ['t1'], mode: 'warn' }, { agent: 'a1', atSec: 90 })), at(120), 0)
   assert.match(two, /was fenced out of 2 edits\./)
 })
+
+test('reportMarkdown adds a Hints section only when it is given lines, escaped like the rest', () => {
+  const s = foldAll('s1', [ev('swarm.started', { name: 's1', topology: 'hierarchical', implicit: false }, { src: 'mcp' })])
+  assert.equal(reportMarkdown(s, at(60), 0).includes('## Hints'), false)
+  assert.match(reportMarkdown(s, at(60), 0, ["dev_x: Sonnet finished clean 5 of 5 (≈$0.10 avg) vs Opus 5 of 5 (≈$1.00). Try model: 'sonnet'."]),
+    /\n## Hints\n\n- dev\\_x: Sonnet finished clean 5 of 5 /)
+})

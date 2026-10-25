@@ -26,7 +26,7 @@ Or in one go:
 /plugin install omnis-swarm --marketplace Fortitude-Group/OmnisSwarm
 ```
 
-The version is pinned (0.5.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
+The version is pinned (0.6.0 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
 
 ```
 claude plugin update omnis-swarm@omnis-swarm
@@ -40,6 +40,7 @@ claude plugin update omnis-swarm@omnis-swarm
 - `/omnis export gif [swarm]` renders a swarm (the most recent, by default) to a looping GIF in `.omnis-swarm/exports/`, drawn in your saved style. It runs in the background and a toast gives you the path when it's written. If the server hasn't answered after 5 minutes, it gives up and says so.
 - `/omnis budget` shows the limits, the swarm's spend so far and whether new agents are allowed. `/omnis budget <usd>` sets the swarm budget, above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
 - `/omnis report` writes the run report now, without waiting for the swarm to go quiet.
+- `/omnis hints` shows which models past runs did well on: a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
 - `/omnis-swarm:watch` does the same as `/omnis pane`. It doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
 
 ## The budget guard
@@ -109,6 +110,26 @@ The run report lists each one under Problems: `- t3 was handed on from dev-2 (st
 ## The run report
 
 Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
+
+## Model hints
+
+Does that agent really need Opus? Most of us pick a model out of habit. So when the lead starts a swarm, OmnisSwarm tells it which roles have done fine on a cheaper model in past runs, and which haven't, and the lead can pass `model` on its Agent calls with some evidence behind it. No classifier, no guessing. It only uses what the recorder already logged.
+
+**When a hint appears.** Silence is the default. A role needs 5 finished runs on each of two models, and the models are sorted into Haiku, Sonnet and Opus by name (a gateway model with some other name is left out). Then it compares how often each one finished clean:
+
+- The cheaper model within 10 points of the dearer one: `omnis-developer: Sonnet finished clean 7 of 8 (≈$0.41 avg) vs Opus 9 of 10 (≈$1.80). Try model: 'sonnet'.`
+- The cheaper model 25 points or more below: `omnis-security-reviewer: Haiku finished clean 2 of 6 vs Sonnet 6 of 6. Keep it on Sonnet (across projects).`
+- Anywhere in between: nothing. Not enough to say.
+
+Every hint shows its sample size. At most 5 appear, biggest sample first. A role uses this project's runs when they clear the bar, else runs from all your projects, and the line says `(across projects)` when it does.
+
+**Clean** means the agent finished with an answer, never looked stuck, wasn't asked to wrap up by the time-box or the budget, and every task assigned to it ended done with its gate passed, none, or no gate.
+
+**Where you see them.** In the reply to `omnis_swarm_init`, under `Model hints from past runs:`. In `/omnis hints`, with the table behind them. And in the run report, in a Hints section. All three are left out when there's nothing to say.
+
+**What's kept, and where.** One row per finished subagent, written when the run report is: an opaque id, role, model, clean or not, cost to the cent, minutes, finish time and the first 16 characters of a hash of the project path. No prompts, no task text, no swarm names, no file paths, and not the path itself. A row is only written once the agent's tasks are closed (or the swarm has ended), so a slow review doesn't count against it. The rows go in `.omnis-swarm/history.jsonl`, and a copy in one `history.jsonl` in the plugin's data folder, which is how a role gets hints in a project it hasn't run in yet. The first time the project file is read and isn't there, your newest 50 logs in `.omnis-swarm/swarms/` are folded in once, so past runs count straight away. The machine file is never filled from other projects' logs; it grows as you run swarms and is cut back to its newest 2,000 rows once it passes 1 MB. A `history.jsonl` copied in from someone else's machine is ignored.
+
+**The weak spot.** A `general-purpose` agent covers wildly different jobs, so its numbers lump them together and its hints are shaky. Role-specific agents give much better evidence. Nothing here changes a model for you, or refuses anything. It's a suggestion.
 
 ## The verification gate
 
@@ -194,7 +215,7 @@ What it doesn't do: assign or spawn anything. OmnisSwarm says what's ready and m
 
 ## Settings
 
-Ten of them, all in `userConfig`:
+Eleven of them, all in `userConfig`:
 
 - `panel`: `command` (the default) opens the pane only when you ask, with `/omnis pane` or `/omnis-swarm:watch`. `auto` also opens it when a swarm starts. `off` never opens it.
 - `billing`: `auto` (the default) works it out: a subscription once Claude Code reports your 5-hour or 7-day usage window, pay-as-you-go otherwise. `subscription` turns the dollar limits off. `api` keeps every limit on.
@@ -206,6 +227,7 @@ Ten of them, all in `userConfig`:
 - `gateCommand`: the command the gate runs. Empty by default, which means it's detected from the project's files.
 - `gateMinutes`: the gate's time limit, 1 to 60 minutes. Default 10.
 - `scopeFence`: `block` (the default) refuses an edit outside the files a subagent's task owns. `warn` lets the edit go ahead and tells the lead. `off` turns the fence off.
+- `modelHints`: `on` (the default) shows which models past runs did well on, from this project and across projects. `project` uses this project's runs only and keeps nothing outside it. `off` keeps no history and shows no hints.
 
 Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omnis budget <usd>` changes the budget of the swarm that's running and leaves the setting alone.
 
@@ -231,7 +253,8 @@ Clawd is Anthropic's character. OmnisSwarm isn't affiliated with or endorsed by 
 
 - **A local Node MCP server**, which Claude Code starts and talks to over stdio.
 - **One child process: the gate command.** Only when a task is marked done, chosen as described under "The verification gate", in the project or one of its git worktrees. (On Windows, stopping a gate also runs `taskkill` on that gate's own process.) Nothing else is started.
-- **Files only under `<project>/.omnis-swarm/`:** the event logs, the shared memory, the current-swarm marker, the gate logs and the GIF exports. The one exception is your `.gitignore`. If `.omnis-swarm/` isn't listed there, the server adds it (and creates the file if you haven't got one). The pane's saved style and pin are kept in Claude Code's own mod state, not in your project.
+- **Files under `<project>/.omnis-swarm/`:** the event logs, the shared memory, the current-swarm marker, the gate logs, the model history and the GIF exports. In the project, the one exception is your `.gitignore`. If `.omnis-swarm/` isn't listed there, the server adds it (and creates the file if you haven't got one). The pane's saved style and pin are kept in Claude Code's own mod state, not in your project.
+- **One file outside the project.** With `modelHints` on, the outcome rows for model hints (see "Model hints") are also written to one `history.jsonl` in the plugin's data folder. Set `modelHints` to `project` or `off` and nothing goes there.
 - **Error text from failed tool calls.** When a call fails, the log keeps up to 160 characters of why, and nothing for calls that succeed. Secrets are blanked first: passwords in URLs, `password=` and `token=` style pairs, `Authorization` headers, known token prefixes (`ghp_`, `sk-`, `AKIA` and friends) and long random-looking runs. It stays in `.omnis-swarm/`, which is git-ignored, and replay and GIF export leave it out.
 - **No network calls.** There's no `fetch`, no `http`, `https`, `net`, `tls` or `dgram` import, and no WebSocket anywhere in `src/`.
 

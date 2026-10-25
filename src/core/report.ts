@@ -112,7 +112,7 @@ export function reportSummary(s: SwarmState, nowMs: number): { agents: number; m
   }
 }
 
-export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number): string {
+export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number, hints: readonly string[] = []): string {
   const sum = reportSummary(s, nowMs)
   const started = local(s.swarm.startedAt ?? nowMs, tzOffsetMin)
   const ended = s.swarm.endedAt === null ? 'still running' : `ended ${local(s.swarm.endedAt, tzOffsetMin)}`
@@ -129,7 +129,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
     const name = a.id === LEAD ? 'main' : a.name
     lines.push(`| ${md(name)} | ${md(a.role)} | ${outcome(a)} | ${minutes(runMs(a, s.swarm.endedAt ?? nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${filesEdited(s, a.id)} |`)
   }
-  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)], ['Gates', gates(s)]] as const) {
+  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)], ['Gates', gates(s)], ['Hints', hints.map(l => `- ${md(l)}`)]] as const) {
     if (body.length > 0) lines.push('', `## ${title}`, '', ...body)
   }
   return `${lines.join('\n')}\n`

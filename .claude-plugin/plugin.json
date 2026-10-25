@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
@@ -49,6 +49,13 @@
       "default": "block",
       "options": ["block", "warn", "off"]
     },
+    "modelHints": {
+      "type": "string",
+      "title": "Model hints",
+      "description": "on (the default): swarm starts show which models past runs did well on, from this project and across projects. project: this project’s runs only, nothing kept outside it. off: no history kept, no hints.",
+      "default": "on",
+      "options": ["on", "project", "off"]
+    },
     "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Above 0, at most 1000.", "default": 20 }
   },
   "mcpServers": {
@@ -59,7 +66,9 @@
         "OMNIS_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
         "OMNIS_VERIFY_GATE": "${user_config.verifyGate}",
         "OMNIS_GATE_COMMAND": "${user_config.gateCommand}",
-        "OMNIS_GATE_MINUTES": "${user_config.gateMinutes}"
+        "OMNIS_GATE_MINUTES": "${user_config.gateMinutes}",
+        "OMNIS_MODEL_HINTS": "${user_config.modelHints}",
+        "OMNIS_DATA_DIR": "${CLAUDE_PLUGIN_DATA}"
       },
       "timeout": 3900000
     }

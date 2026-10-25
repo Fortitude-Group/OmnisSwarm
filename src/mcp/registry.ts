@@ -6,6 +6,7 @@ import { createFeedTools } from './tools/feed.ts'
 import { createFenceTools } from './tools/fence.ts'
 import { createGatePlanTools } from './tools/gate-plan.ts'
 import { createHandoffTools } from './tools/handoff.ts'
+import { createHintsTools } from './tools/hints.ts'
 import { createRecordTools } from './tools/record.ts'
 import { createReportTools } from './tools/report.ts'
 import { createReplayTools } from './tools/replay.ts'
@@ -15,4 +16,4 @@ import { createReplayTools } from './tools/replay.ts'
  * installed, so when mods are off this internal tool is unguarded. Accepted: the log is a display
  * record, and the same user could edit .omnis-swarm directly.
  */
-export const toolFactories: ReadonlyArray<(ctx: ToolContext) => AnyToolDef[]> = [createTools, createRecordTools, createFeedTools, createReplayTools, createExportTools, createReportTools, createFenceTools, createGatePlanTools, createHandoffTools]
+export const toolFactories: ReadonlyArray<(ctx: ToolContext) => AnyToolDef[]> = [createTools, createRecordTools, createFeedTools, createReplayTools, createExportTools, createReportTools, createFenceTools, createGatePlanTools, createHandoffTools, createHintsTools]

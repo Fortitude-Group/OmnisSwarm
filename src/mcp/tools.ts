@@ -8,6 +8,7 @@ import { LEAD, MEMORY_KEY, type SwarmState, type TaskEntry } from '../core/fold.
 import { validPattern } from '../core/glob.ts'
 import { hasNewWork } from '../core/report.ts'
 import { cyclePath, newlyReady, readyTasks, strandedBy, waitsOn } from '../core/ready.ts'
+import { HINTS_OFF, hintBlock, recordRun, type HintsOptions } from './history-store.ts'
 import { MAX_VALUE_BYTES, MemoryLimitError, putMemory, readMemory } from './memory-store.ts'
 import { settingsFor } from './gate/detect.ts'
 import { PROGRESS_MS, gateForDone } from './gate/gate.ts'
@@ -26,7 +27,7 @@ import { InputError, optString, optStringList, optText, reqEnum, reqString, reqT
  * without `env` the gate is off, so a test (or a gate run of this repo's own tests) never picks the settings up.
  */
 export type GateOptions = { env?: Record<string, string | undefined>; limitMs?: number; progressMs?: number }
-export type ToolContext = { root: string; now?: () => Date; session: Session; gate?: GateOptions }
+export type ToolContext = { root: string; now?: () => Date; session: Session; gate?: GateOptions; hints?: HintsOptions }
 
 export const TASK_ID = /^t[0-9]{1,6}$/
 
@@ -114,6 +115,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
   const clock = ctx.now ?? (() => new Date())
   const session = ctx.session
   const gateOptions = ctx.gate ?? {}
+  const hints = ctx.hints ?? HINTS_OFF
 
   const emit = (event: SwarmEvent): void => {
     if (!appendEvent(root, event)) throw new Error('Could not write to the swarm log in .omnis-swarm/')
@@ -170,17 +172,20 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
           if (state.swarm.implicit) {
             emit(makeEvent({ type: 'swarm.started', swarm: existing, src: 'mcp', data, now }))
             noteBudget(existing)
-            return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.` }
+            return { text: `Swarm "${name}" (${topology}) now names the running session swarm ${existing}.${hintBlock(root, hints, existing)}` }
           }
           replaced = existing
         }
         const id = uniqueSwarmId(root, name)
-        if (replaced !== null) emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
+        if (replaced !== null) {
+          emit(makeEvent({ type: 'swarm.ended', swarm: replaced, src: 'mcp', data: { outcome: 'replaced' }, now }))
+          recordRun(root, session, replaced, hints) // no report is written for a replaced swarm, so its rows go in here
+        }
         writeCurrent(root, id)
         session.begin(id)
         emit(makeEvent({ type: 'swarm.started', swarm: id, src: 'mcp', data, now }))
         noteBudget(id)
-        return { text: `Swarm "${name}" started as ${id} (${topology}).` }
+        return { text: `Swarm "${name}" started as ${id} (${topology}).${hintBlock(root, hints, id)}` }
       },
     },
     {
@@ -204,7 +209,7 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         try {
           const s = session.state(id).state
           if (s.lastReport !== undefined && !hasNewWork(s)) return { text: `Swarm ${id} ended.` }
-          return { text: `Swarm ${id} ended. ${writeReport(root, session, id, clock())}` }
+          return { text: `Swarm ${id} ended. ${writeReport(root, session, id, clock(), hints)}` }
         } catch (err) {
           process.stderr.write(`omnis: report on omnis_swarm_end failed: ${err instanceof Error ? err.message : String(err)}\n`)
           return { text: `Swarm ${id} ended. The report could not be written (see the server log).` }
@@ -395,6 +400,8 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(dependsOn !== undefined && { dependsOn }) },
       }))
       const after = session.state(swarm).state
+      // A row held back while this task was open can go in now; no later report may come.
+      if (taskState === 'done' || taskState === 'failed') recordRun(root, session, swarm, hints)
       const extra: string[] = []
       if (before !== null) {
         const now = newlyReady(before, after.tasks)
