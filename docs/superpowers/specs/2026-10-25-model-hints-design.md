@@ -13,16 +13,16 @@ When the lead starts a swarm, tell it which roles have done fine on a cheaper mo
 | Field | Meaning |
 |---|---|
 | `v` | Row schema version, 1 |
-| `id` | `<swarm id>/<agent id>`, used to write each agent once |
-| `role` | The agent's role (subagent type), checked against `NAME`, clipped to 64 |
-| `model` | The model that answered (last `agent.usage` model), clipped to 64; agents with no usage are skipped |
+| `id` | Opaque: the first 16 hex of SHA-256 of the project key and `<swarm id>/<agent id>`, used to write each agent once. The swarm name never leaves the project |
+| `role` | The agent's role (subagent type), checked against `^[A-Za-z0-9._:-]{1,64}$`; the fold's `unknown` (no role given) is skipped |
+| `model` | The model that answered (last `agent.usage` model), clipped to 64 then checked the same way; agents with no usage are skipped |
 | `clean` | See below |
 | `costUsd` | Rounded to cents |
 | `minutes` | Active minutes, rounded |
 | `at` | Finish time, ISO |
 | `project` | First 16 hex of a SHA-256 of the project path; never the path |
 
-No prompts, descriptions, subjects or file paths are stored. The lead (main) and unfinished agents get no row.
+No prompts, descriptions, subjects, swarm names or file paths are stored. The lead (main) and unfinished agents get no row, and neither does an agent while a task assigned to it is still pending or active, unless the swarm has ended. (The quiet report fires 30 seconds after the last agent finishes, usually before the lead has closed its task; without the hold-back that row would be stored as not clean and never corrected.)
 
 **Clean** means all of: the agent finished with `answer`; it never looked stuck (`stuckBy` unset); no guard asked it to wrap up (`timeAct` and `costAct` null); and every task whose assignee is the agent ended `done` with its last gate result `passed`, `none` or no gate.
 
@@ -31,13 +31,13 @@ No prompts, descriptions, subjects or file paths are stored. The lead (main) and
 - Project: `.omnis-swarm/history.jsonl`.
 - Machine: one `history.jsonl` in the plugin's persistent data folder. The plan settles the folder (expected `${CLAUDE_PLUGIN_DATA}`, passed to the server as an env var like `OMNIS_PROJECT_DIR`); if no folder is available the machine store is off.
 
-Both use the same row format, the same symlink refusal as the event log, and are read newest-first, at most 500 rows each. A line that fails to parse or fails the field checks is skipped.
+Both use the same row format, refuse links and anything that isn't a regular file, and are read newest-first, at most 500 rows each from the file's last 256 KB. A line that fails to parse or fails the field checks is skipped. Project-store rows count only when their `project` key matches this folder's, so a `history.jsonl` committed from another machine can't steer the hints. When the machine store passes 1 MB it is rewritten with its newest 2,000 rows.
 
-**Backfill.** The first time the project store is read and does not exist, the server folds every `.omnis-swarm/swarms/*.jsonl` once and writes the rows, so past runs count at once. The machine store is never backfilled from other projects.
+**Backfill.** The first time the project store is read and does not exist, the server folds the newest 50 `.omnis-swarm/swarms/*.jsonl` logs (each a regular file of at most 8 MB, each folded on its own so one bad log costs only itself) and writes their rows, so past runs count at once. The swarm being started, named or reported is skipped; its rows go through the report path to both stores. The machine store is never backfilled from other projects.
 
 ## 4. When rows are written
 
-When the server writes a run report (`report.written`: swarm end or the quiet report), it appends rows for finished agents whose `id` is not already in the project store. The project write is part of the report step; the machine write is best effort, its failure swallowed, and it never blocks or fails the report.
+When the server writes a run report (`report.written`: swarm end or the quiet report), and when `omnis_swarm_init` replaces a running swarm, it appends rows for finished agents whose `id` is not already in the project store. The project write is part of the report step; the machine write is best effort, its failure swallowed, and it never blocks or fails the report.
 
 ## 5. The hint rule
 
@@ -45,7 +45,7 @@ When the server writes a run report (`report.written`: swarm end or the quiet re
 
 1. Tier each row by model id: contains `haiku` = 1, `sonnet` = 2, `opus` = 3; anything else (a gateway model, say) is left out of tiering.
 2. For each role, use project rows when at least two tiers each have 5 or more project rows for the role; otherwise use machine rows, and label the line "across projects". Fewer than that anywhere: no hint for the role.
-3. For each pair of tiers with at least 5 rows each, compare clean rates:
+3. For each pair of tiers with at least 5 rows each, compare clean rates (in whole numbers, by cross-multiplying, so the 10- and 25-point edges are exact):
    - **Cheaper:** the cheaper tier's clean rate is no more than 10 points below the dearer one's. Hint the cheapest tier that qualifies.
    - **Keep:** the cheaper tier's clean rate is 25 or more points below. Hint to keep the role on the dearer tier.
    - In between: no hint.
@@ -59,14 +59,14 @@ Example lines:
 ## 6. Delivery
 
 - **`omnis_swarm_init` reply:** a `Model hints from past runs:` block with the lines, after the existing reply text. Left out when there are none.
-- **`/omnis hints`:** prints the full table (role, tier, runs, clean, avg cost, avg minutes, source) for the user, plus the hint lines.
+- **`/omnis hints`:** prints the table (role, tier, runs, clean, avg cost, avg minutes, source; up to 40 rows) for the user, plus the hint lines.
 - **Run report:** a `## Hints` section with the same lines, left out when empty.
 
 Role and model text is escaped with the report's `md` escaper in the report and the table, and clipped and stripped of control characters in the init reply.
 
 ## 7. Setting
 
-`modelHints` userConfig: `on` (default), `project` (never reads or writes the machine store), `off` (no rows written, no hints shown). Passed through `${user_config.*}` env like the gate settings.
+`modelHints` userConfig: `on` (default), `project` (never reads or writes the machine store), `off` (no rows written, no hints shown). Passed through `${user_config.*}` env like the gate settings, read case-blind. Unset, blank or an unexpanded placeholder means `on`; any other value means `project`, so a mistyped privacy setting never writes outside the project. The machine folder comes from `${CLAUDE_PLUGIN_DATA}` and must be absolute.
 
 ## 8. Errors
 
