@@ -80,7 +80,8 @@ test('every task the agent held must end done with its gate passed, none or not 
   assert.equal(rowsFromState(base([gate('none'), done]), P)[0]!.clean, true)
   assert.equal(rowsFromState(base([gate('failed'), done]), P)[0]!.clean, false)
   assert.equal(rowsFromState(base([gate('skipped'), done]), P)[0]!.clean, false)
-  assert.equal(rowsFromState(base([]), P)[0]!.clean, false)
+  assert.deepEqual(rowsFromState(base([]), P), [])
+  assert.equal(rowsFromState(base([ev('swarm.ended', {}, { src: 'mcp', atSec: 8 })]), P)[0]!.clean, false)
 })
 
 test('isClean is exported and agrees with the row', () => {
@@ -104,4 +105,39 @@ test('parseRow refuses bad JSON, wrong version and bad fields, and drops extra f
     assert.equal(parseRow(JSON.stringify({ ...good, ...patch })), null, JSON.stringify(patch))
   }
   assert.deepEqual(parseRow(JSON.stringify({ ...good, prompt: 'secret' })), good)
+})
+
+test('an agent with a pending or active task waits for it to close, or for the swarm to end', () => {
+  const task = (state?: 'active' | 'done' | 'failed') => [
+    ev('task.created', { id: 't1', title: 'a', assignee: 'dev-1' }, { src: 'mcp', atSec: 1 }),
+    ...(state === undefined ? [] : [ev('task.updated', { id: 't1', state }, { src: 'mcp', atSec: 7 })]),
+  ]
+  const run = (extra: SwarmEvent[]) => swarm([started('dev-1', 'r'), usage('dev-1', 'claude-opus-5-5', 2), finished('dev-1', 'answer', 5), ...extra])
+  assert.deepEqual(rowsFromState(run(task()), P), [])
+  assert.deepEqual(rowsFromState(run(task('active')), P), [])
+  assert.equal(rowsFromState(run(task('done')), P)[0]!.clean, true)
+  assert.equal(rowsFromState(run(task('failed')), P)[0]!.clean, false)
+  const ended = run([...task('active'), ev('swarm.ended', {}, { src: 'mcp', atSec: 9 })])
+  assert.equal(rowsFromState(ended, P)[0]!.clean, false)
+})
+
+test('a task held by the agent id rather than its name holds the row back too', () => {
+  const s = swarm([
+    ev('agent.started', { name: 'dev', role: 'r', description: '', parent: 'lead' }, { agent: 'a1', atSec: 1 }),
+    usage('a1', 'claude-opus-5-5', 2), finished('a1', 'answer', 5),
+    ev('task.created', { id: 't1', title: 'a', assignee: 'a1' }, { src: 'mcp', atSec: 6 }),
+  ])
+  assert.deepEqual(rowsFromState(s, P), [])
+})
+
+test('an agent with no role gets no row', () => {
+  const s = swarm([usage('dev-1', 'claude-opus-5-5', 2), finished('dev-1', 'answer', 5)])
+  assert.equal(s.agents['dev-1']!.role, 'unknown')
+  assert.deepEqual(rowsFromState(s, P), [])
+})
+
+test('a model id over 64 characters is clipped to 64, not dropped', () => {
+  const long = `claude-opus-5-5-${'x'.repeat(60)}`
+  const s = swarm([started('dev-1', 'r'), usage('dev-1', long, 2), finished('dev-1', 'answer', 5)])
+  assert.equal(rowsFromState(s, P)[0]!.model, long.slice(0, 64))
 })
