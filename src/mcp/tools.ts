@@ -400,6 +400,8 @@ export function createTools(ctx: ToolContext): AnyToolDef[] {
         data: { id, state: taskState, ...(assignee !== undefined && { assignee }), ...(note !== undefined && { note }), ...(owns !== undefined && { owns }), ...(worktree !== undefined && { worktree }), ...(dependsOn !== undefined && { dependsOn }) },
       }))
       const after = session.state(swarm).state
+      // A row held back while this task was open can go in now; no later report may come.
+      if (taskState === 'done' || taskState === 'failed') recordRun(root, session, swarm, hints)
       const extra: string[] = []
       if (before !== null) {
         const now = newlyReady(before, after.tasks)

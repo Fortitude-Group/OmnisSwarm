@@ -98,3 +98,20 @@ test('omnis_swarm_init naming the session swarm leaves it out of the backfill, s
   tool('omnis_swarm_end', {})
   assert.ok(readFileSync(join(machine, 'history.jsonl'), 'utf8').includes(stored(root, `${swarm}/w`)))
 })
+
+test('closing a task records the row its open task held back, with no later report', async () => {
+  const root = tmpRoot()
+  const session = new Session(root)
+  const ctx = { root, session, now: () => NOW, hints: ON }
+  const tools = createTools(ctx)
+  const call = (name: string, args: Record<string, unknown>) => tools.find(t => t.name === name)!.handler(args)
+  syncResult(call('omnis_swarm_init', { name: 'cur', topology: 'hierarchical' }))
+  syncResult(call('omnis_task_create', { title: 'write it', assignee: 'w' }))
+  for (const e of finishedWriter('cur')) appendEvent(root, e)
+  const store = join(root, '.omnis-swarm', 'history.jsonl')
+  const has = (): boolean => readFileSync(store, 'utf8').includes(stored(root, 'cur/w'))
+  await call('omnis_task_update', { id: 't1', state: 'active' })
+  assert.equal(has(), false)
+  await call('omnis_task_update', { id: 't1', state: 'done' })
+  assert.equal(has(), true)
+})

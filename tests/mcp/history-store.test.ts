@@ -208,3 +208,14 @@ test('trimStore refuses a link', () => {
   trimStore(link, 10, 1)
   assert.equal(readFileSync(real, 'utf8'), 'x\n'.repeat(100))
 })
+
+test('projectKey is the same through a junction to the folder', () => {
+  const root = tmpRoot()
+  const link = join(tmpRoot(), 'via-link')
+  try {
+    symlinkSync(root, link, 'junction')
+  } catch {
+    return // this machine cannot make links
+  }
+  assert.equal(projectKey(link), projectKey(root))
+})

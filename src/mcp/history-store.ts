@@ -3,7 +3,7 @@
  * `history.jsonl` in the plugin's data folder. Best effort throughout: nothing here may fail a report, an init or a call.
  */
 import { createHash } from 'node:crypto'
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { isOneOf, isValidSwarmId } from '../core/events.ts'
 import { foldAll, type SwarmState } from '../core/fold.ts'
@@ -50,8 +50,14 @@ export function hintsOptions(env: Record<string, string | undefined>): HintsOpti
   return { mode, machineDir }
 }
 
+/** Hashes the real path, so a junction, a subst drive or another spelling of the same folder gives the same key. */
 export function projectKey(root: string): string {
-  const path = resolve(root)
+  let path = resolve(root)
+  try {
+    path = realpathSync.native(path)
+  } catch {
+    // A folder that can't be resolved keys on its spelling.
+  }
   return createHash('sha256').update(process.platform === 'win32' ? path.toLowerCase() : path).digest('hex').slice(0, 16)
 }
 
@@ -108,7 +114,11 @@ function appendRows(file: string, rows: readonly HistoryRow[]): void {
   }
 }
 
-/** Once the store passes `overBytes`, rewrites it with its newest `keep` rows through a temp file in the same folder. */
+/**
+ * Once the store passes `overBytes`, rewrites it with its newest `keep` rows through a temp file in the same folder.
+ * Best effort: a row another session appends between the read and the rename is lost. Accepted, as it only happens past
+ * the threshold and costs one row of evidence.
+ */
 export function trimStore(file: string, overBytes = TRIM_OVER, keep = TRIM_KEEP): void {
   const stat = lstatSync(file, { throwIfNoEntry: false })
   if (stat === undefined || !stat.isFile() || stat.size <= overBytes) return
