@@ -123,11 +123,11 @@ Does that agent really need Opus? Most of us pick a model out of habit. So when 
 
 Every hint shows its sample size. At most 5 appear, biggest sample first. A role uses this project's runs when they clear the bar, else runs from all your projects, and the line says `(across projects)` when it does.
 
-**Clean** means the agent finished with an answer, never looked stuck, wasn't asked to wrap up by the time-box or the budget, and every task assigned to it ended done with its gate passed (or no gate).
+**Clean** means the agent finished with an answer, never looked stuck, wasn't asked to wrap up by the time-box or the budget, and every task assigned to it ended done with its gate passed, none, or no gate.
 
 **Where you see them.** In the reply to `omnis_swarm_init`, under `Model hints from past runs:`. In `/omnis hints`, with the table behind them. And in the run report, in a Hints section. All three are left out when there's nothing to say.
 
-**What's kept, and where.** One row per finished subagent, written when the run report is: role, model, clean or not, cost to the cent, minutes, finish time and the first 16 characters of a hash of the project path. No prompts, no task text, no file paths, and not the path itself. The rows go in `.omnis-swarm/history.jsonl`, and a copy in one `history.jsonl` in the plugin's data folder, which is how a role gets hints in a project it hasn't run in yet. The first time the project file is read and isn't there, your old logs in `.omnis-swarm/swarms/` are folded in once, so past runs count straight away. The machine file is never filled from other projects' logs. It only grows as you run swarms.
+**What's kept, and where.** One row per finished subagent, written when the run report is: an opaque id, role, model, clean or not, cost to the cent, minutes, finish time and the first 16 characters of a hash of the project path. No prompts, no task text, no file paths, and not the path itself. The rows go in `.omnis-swarm/history.jsonl`, and a copy in one `history.jsonl` in the plugin's data folder, which is how a role gets hints in a project it hasn't run in yet. The first time the project file is read and isn't there, your old logs in `.omnis-swarm/swarms/` are folded in once, so past runs count straight away. The machine file is never filled from other projects' logs. It only grows as you run swarms.
 
 **The weak spot.** A `general-purpose` agent covers wildly different jobs, so its numbers lump them together and its hints are shaky. Role-specific agents give much better evidence. Nothing here changes a model for you, or refuses anything. It's a suggestion.
 
