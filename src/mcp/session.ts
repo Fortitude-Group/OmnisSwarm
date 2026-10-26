@@ -1,6 +1,7 @@
 /** Per-session swarm state: which swarm this server is working in, and its folded state held between calls. */
 import { existsSync } from 'node:fs'
-import { makeEvent } from '../core/events.ts'
+import { NAME, makeEvent, type EventData } from '../core/events.ts'
+import { LEAD, type AgentState, type SwarmState } from '../core/fold.ts'
 import { appendEvent, readCurrent, swarmLogPath, writeCurrent } from '../core/log.ts'
 import { SESSION_ID } from '../core/recording.ts'
 import { advance, loadState, type Loaded } from '../core/snapshot.ts'
@@ -8,6 +9,22 @@ import { announceSwarm, publishCurrent, recentSwarmIds, sessionKey, swarmOwner, 
 import { InputError } from './validate.ts'
 
 const stamp = (d: Date): string => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+
+export type AgentStart = EventData['agent.started']
+/** The most agent starts a session remembers; the oldest go first. */
+export const MAX_KNOWN_STARTS = 200
+/** SendMessage may add a ` [id]` tag after the name, as the fold's resolve strips. */
+const bareName = (to: string): string => to.replace(/\s+\[[^\]\s]+\]$/, '').trim()
+
+/** An agent's start as its folded state holds it, fit to write again. */
+function startOf(s: SwarmState, a: AgentState): AgentStart {
+  return {
+    name: s.byName[a.name] === a.id ? a.name : '',
+    role: a.role === 'unknown' ? '' : a.role,
+    description: a.description,
+    parent: NAME.test(a.parent) ? a.parent : LEAD,
+  }
+}
 
 export class Session {
   readonly root: string
@@ -30,6 +47,11 @@ export class Session {
   #ownerRead: string | null = null
   /** The session key for which the swarms folder was already searched for this session's own swarm. */
   #searched: string | null = null
+  /**
+   * Agent id to its start, for agents this session has seen start. The recorder announces an agent once per Claude
+   * session, so an agent resumed after its swarm ended reaches the next swarm unannounced; this is how it gets named.
+   */
+  readonly #known = new Map<string, AgentStart>()
 
   /** `load` is only replaced in tests, to count full loads. */
   constructor(root: string, load: (root: string, id: string) => Loaded = loadState) {
@@ -157,8 +179,57 @@ export class Session {
     }
   }
 
+  /** Remembers an agent's start, so a later swarm it is resumed in can be told who it is. */
+  noteStart(agent: string, start: AgentStart): void {
+    if (agent === LEAD) return
+    this.#known.delete(agent)
+    this.#known.set(agent, start)
+    for (const oldest of this.#known.keys()) {
+      if (this.#known.size <= MAX_KNOWN_STARTS) break
+      this.#known.delete(oldest)
+    }
+  }
+
+  /**
+   * The starts to write into `swarm` before an event from `agent` (and, for a message, to the agent named `to`): one
+   * for each that this session saw start but the swarm hasn't met.
+   */
+  startsToCarry(swarm: string, agent: string | undefined, to?: string): Array<{ agent: string; start: AgentStart }> {
+    const ids: string[] = []
+    if (agent !== undefined) ids.push(agent)
+    if (to !== undefined) {
+      const name = bareName(to)
+      const named = [...this.#known].findLast(([, s]) => s.name === name)
+      if (named !== undefined) ids.push(named[0])
+    }
+    const out: Array<{ agent: string; start: AgentStart }> = []
+    if (ids.every(id => !this.#known.has(id))) return out
+    const met = this.state(swarm).state.agents
+    for (const id of new Set(ids)) {
+      const start = this.#known.get(id)
+      const seen = Object.hasOwn(met, id) && !met[id]!.placeholder
+      if (start !== undefined && !seen) out.push({ agent: id, start })
+    }
+    return out
+  }
+
+  /** Learns the agents of swarm `id` (best effort), so they keep their names if resumed in the next one. */
+  #harvest(id: string): void {
+    try {
+      const s = this.state(id).state
+      for (const a of Object.values(s.agents)) {
+        if (a.id === LEAD || a.placeholder || !NAME.test(a.id) || this.#known.has(a.id)) continue
+        if (a.role === 'unknown' && a.name === a.id) continue // never announced here either: nothing to carry
+        this.noteStart(a.id, startOf(s, a))
+      }
+    } catch {
+      // A swarm that can't be read leaves resumed agents unnamed, nothing worse.
+    }
+  }
+
   /** Records that this session started swarm `id`. */
   begin(id: string): void {
+    if (this.#mine !== null && this.#mine !== id) this.#harvest(this.#mine)
     this.#mine = id
     this.#owned = true
     this.#ownerRead = id
@@ -166,6 +237,7 @@ export class Session {
 
   /** Forgets the current swarm without ending it. */
   letGo(): void {
+    if (this.#mine !== null) this.#harvest(this.#mine)
     this.#mine = null
     this.#owned = false
     this.#ownerRead = null

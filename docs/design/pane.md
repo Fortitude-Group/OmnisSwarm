@@ -179,7 +179,7 @@ spotlight. In greyscale the glyphs `▶ ◌ ✓ ✕ ?` and the trailing `!` are 
 | done | Fades linearly over `ghostMs` to `mix(desaturate(model, 0.7), CANVAS, 0.55)`, 6 steps. Ghost contrast 2.0-3.5:1: still visible, clearly out of play | `✓` (`STATUS.done`) | `TEXT.dim` | The fade, then still |
 | failed | `STATUS.failed`, stays | `✕` (`STATUS.failed`) | `STATUS.failed` | A red rim pulse (`errorPulseMs`) for the failed tool call, if one came first; then still. Red but still is how failed differs from a live error pulse |
 | stuck (3 failed tools in a row) | As its status | Status glyph, then ` !` after the name (`STATUS.warn`) | As its status | Amber rim breathes on the glow period: rim strength `q4(0.3 + 0.6 × glow)` |
-| placeholder (a name nobody had) | `TEXT.faint`, radius `GRAPH.minRadius`, no ring, no glow | `?` (`STATUS.waiting`) | `TEXT.dim`, name shown as `?name` in the feed | None |
+| placeholder (a name nobody had; it merges into the agent that later starts with that name, and stops being drawn once the log runs 5 minutes past the last message to it) | `TEXT.faint`, radius `GRAPH.minRadius`, no ring, no glow | `?` (`STATUS.waiting`) | `TEXT.dim`, name shown as `?name` in the feed | None |
 
 `q5(x)` and `q4(x)` mean `quantise(x, 5)` and `quantise(x, 4)`.
 

@@ -21,4 +21,4 @@ const tools = toolFactories.flatMap(factory => factory({ root, session, gate: { 
 // A gate's process tree must not outlive the server: killed on a shutdown signal and when stdin ends (the end of
 // stdin also aborts each running call, which kills its gate). A hard kill of the server can't be caught.
 installShutdown(process, code => process.exit(code))
-void runStdio(tools, { name: 'omnis-swarm', version: '0.6.0' }).then(killAllGates)
+void runStdio(tools, { name: 'omnis-swarm', version: '0.6.1' }).then(killAllGates)

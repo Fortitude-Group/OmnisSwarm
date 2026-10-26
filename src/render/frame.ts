@@ -165,10 +165,26 @@ function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Sized 
 }
 
 /**
+ * How far the swarm's log may run on past the last message to a placeholder (a name messaged that no agent has taken)
+ * before the placeholder stops being drawn. Measured in log time, not the clock, so a replay and a GIF draw the same.
+ */
+export const PLACEHOLDER_KEEP_MS = 5 * 60_000
+
+/** `state` without placeholders the log has run PLACEHOLDER_KEEP_MS past, nor their links. `state` itself is untouched. */
+export function withoutStalePlaceholders(state: SwarmState): SwarmState {
+  const stale = new Set(Object.values(state.agents).filter(a => a.placeholder && state.lastAt - a.lastActivity >= PLACEHOLDER_KEEP_MS).map(a => a.id))
+  if (stale.size === 0) return state
+  const agents = Object.fromEntries(Object.entries(state.agents).filter(([id]) => !stale.has(id)))
+  const links = Object.fromEntries(Object.entries(state.links).filter(([, l]) => !stale.has(l.from) && !stale.has(l.to)))
+  return { ...state, agents, links }
+}
+
+/**
  * The frame at `nowMs`. `capFps` is the budget cap from the last frame's render time (budgetFps); under it the motions
  * pane.md section 6 lists are drawn steady. With no cap, everything moves.
  */
-export function render(state: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}, capFps = Number.POSITIVE_INFINITY): Frame {
+export function render(given: SwarmState, view: View, nowMs: number, size: Size, notes: Notes = {}, capFps = Number.POSITIVE_INFINITY): Frame {
+  const state = withoutStalePlaceholders(given)
   const motion = motionFor(capFps)
   const clashes = fileClashes(state, nowMs)
   const totals = swarmTotals(state, nowMs, clashes)
