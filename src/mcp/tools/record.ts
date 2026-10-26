@@ -213,6 +213,16 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       }
       session.noteSession(sessionId)
       const swarm = session.swarmOrCreate(now)
+      if (type === 'agent.started' && agent !== undefined) {
+        session.noteStart(agent, data as EventData['agent.started'])
+      } else {
+        // An agent resumed after its swarm ended is announced once per session, so the new swarm gets its start again
+        // first: otherwise it shows by its id, and a message to its name makes a placeholder that never goes.
+        const to = type === 'message.sent' ? (data as EventData['message.sent']).to : undefined
+        for (const c of session.startsToCarry(swarm, agent, to)) {
+          appendEvent(root, makeEvent({ type: 'agent.started', swarm, src: 'recorder', agent: c.agent, data: c.start, now }))
+        }
+      }
       if (!appendEvent(root, { ...probe, swarm })) throw new Error('append failed')
       return { text: `ok ${swarm}` }
     },

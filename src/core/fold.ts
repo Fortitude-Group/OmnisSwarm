@@ -202,6 +202,37 @@ function resolve(state: SwarmState, rawName: string, at: number): string {
   return id
 }
 
+/**
+ * Messages sent to a name before its agent started (or before a resumed agent was announced again) move onto the
+ * agent, and the placeholder goes. A placeholder only ever receives: messages come from real senders.
+ */
+function adoptPlaceholder(state: SwarmState, id: string, a: AgentState): void {
+  const p = Object.hasOwn(state.agents, id) ? state.agents[id]! : undefined
+  if (p === undefined || !p.placeholder) return
+  a.messagesIn += p.messagesIn
+  for (const [key, l] of Object.entries(state.links)) {
+    if (l.from !== id && l.to !== id) continue
+    delete state.links[key]
+    const from = l.from === id ? a.id : l.from
+    const to = l.to === id ? a.id : l.to
+    const k = `${from}->${to}`
+    const into = Object.hasOwn(state.links, k) ? state.links[k]! : undefined
+    if (into === undefined) {
+      state.links[k] = { ...l, from, to }
+      continue
+    }
+    into.count += l.count
+    into.lastAt = Math.max(into.lastAt, l.lastAt)
+    into.recent = [...l.recent, ...into.recent]
+    trim(into.recent, MAX_RECENT)
+  }
+  for (const f of state.feed) {
+    if (f.agent === id) f.agent = a.id
+    if (f.to === id) f.to = a.id
+  }
+  delete state.agents[id]
+}
+
 /** An agent.started or a tool start from an agent that had finished begins another run. Late usage does not. */
 export function revive(a: AgentState, at: number): void {
   if (a.outcome === null && a.finishedAt === null) return
@@ -275,7 +306,10 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       if (a.parent === a.id) a.parent = a.id === LEAD ? '' : LEAD
       a.placeholder = false
       a.lastActivity = at
-      if (name !== '' && isSafeKey(name)) state.byName[name] = a.id
+      if (name !== '' && isSafeKey(name)) {
+        state.byName[name] = a.id
+        adoptPlaceholder(state, `?${name}`, a)
+      }
       feed(state, { at, kind: 'agent', agent: a.id, text: `${a.name} started` })
       break
     }
@@ -337,7 +371,11 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       from.messagesOut++
       from.lastActivity = at
       const target = Object.hasOwn(state.agents, to) ? state.agents[to] : undefined
-      if (target !== undefined) target.messagesIn++
+      if (target !== undefined) {
+        target.messagesIn++
+        // A placeholder does nothing itself; being written to is its only sign of life (the pane drops stale ones).
+        if (target.placeholder) target.lastActivity = at
+      }
       feed(state, { at, kind: 'message', agent: from.id, to, text: summary })
       break
     }
