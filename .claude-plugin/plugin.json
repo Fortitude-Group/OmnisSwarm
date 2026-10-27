@@ -7,7 +7,7 @@
   "keywords": ["swarm", "agents", "coordination", "pane"],
   "icon": "./assets/icon.png",
   "author": { "name": "Fortitude Omnis" },
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "types": "./types/index.d.ts",
   "userConfig": {
     "panel": {

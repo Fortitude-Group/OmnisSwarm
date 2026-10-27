@@ -1,0 +1,122 @@
+OmnisSwarm Use Licence
+
+Copyright (c) 2026 Fortitude Omnis. All rights reserved.
+
+This licence covers OmnisSwarm: the source code, scripts, manifests,
+documentation, images and other files in this repository (together, "the
+Software"), except the third-party material listed in THIRD-PARTY-NOTICES,
+which stays under its own licence.
+
+By installing or using the Software you accept this licence. If you don't
+accept it, don't install or use the Software.
+
+
+1. What you may do
+
+Fortitude Omnis grants you a free, worldwide, non-exclusive,
+non-transferable licence to:
+
+  a) install the Software from the official source (the
+     Fortitude-Group/OmnisSwarm repository, or a Claude Code plugin
+     marketplace Fortitude Omnis publishes it through);
+
+  b) use and run it, for personal or commercial work, on as many machines as
+     you like;
+
+  c) make the copies that installing, running, updating and backing up the
+     Software need, such as the copy Claude Code keeps in its plugin cache;
+
+  d) change its behaviour through the settings it offers (the plugin's
+     configuration options and its commands); and
+
+  e) read the source code, to understand it or review its security.
+
+
+2. What you may not do
+
+You may not, and may not help or allow anyone else to:
+
+  a) modify, adapt, translate or otherwise change the Software, or make a
+     derivative work of it, including a fork with changes, a patched copy, or
+     a work that incorporates any part of its source code;
+
+  b) copy, share, publish, distribute, sell, rent, lend or sublicense the
+     Software or any part of it, other than the copies section 1 allows. To
+     give someone the Software, point them at the official source;
+
+  c) offer the Software, or anything built from it, as a hosted or managed
+     service for others;
+
+  d) remove, hide or change any copyright notice, licence text or
+     attribution in the Software; or
+
+  e) use the names "OmnisSwarm" or "Fortitude Omnis", or their logos, to
+     suggest that Fortitude Omnis endorses you or anything you make.
+
+Section 2(a) doesn't stop you running the Software against your own
+projects. Your projects, and the files the Software writes into them (event
+logs, memory, reports, GIF exports and the like), aren't derivative works of
+the Software.
+
+
+3. What you make with it
+
+What the Software produces from your work is yours: run reports, logs,
+replays and GIF exports. Fortitude Omnis claims no rights in it.
+
+There's one exception. The "clawd" robot style draws a character based on
+Clawd, which belongs to Anthropic. This licence grants no rights in Clawd. The
+robot style is included for private use only, so don't publish material drawn
+in it unless Anthropic has given you permission. The default globe style
+belongs to Fortitude Omnis, and you may share what it draws freely.
+
+
+4. Third-party material
+
+The third-party material listed in THIRD-PARTY-NOTICES is licensed to you
+under its own terms, which this licence doesn't limit.
+
+
+5. Feedback
+
+If you send Fortitude Omnis suggestions, bug reports or proposed changes, it
+may use them however it likes, without owing you anything.
+
+
+6. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. It runs build and test
+commands, guards and limits on your behalf, and none of them is guaranteed to
+catch every problem, stop every agent or keep spending under any figure. Cost
+figures are estimates.
+
+
+7. Limitation of liability
+
+TO THE FULLEST EXTENT THE LAW ALLOWS, FORTITUDE OMNIS IS NOT LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT (INCLUDING
+NEGLIGENCE) OR OTHERWISE, ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR
+ITS USE. This includes loss of data, profit, usage allowance or money spent
+on model usage. Nothing in this licence limits liability that cannot be
+limited by law, such as liability for death or personal injury caused by
+negligence, or for fraud.
+
+
+8. Ending the licence
+
+This licence ends automatically if you break it. When it ends, you must stop
+using the Software and delete your copies. Sections 3 to 9 continue after it
+ends.
+
+Fortitude Omnis may offer later versions of the Software under different
+terms. Each version is covered by the licence that comes with it.
+
+
+9. Law
+
+This licence is governed by the law of England and Wales, and the courts of
+England and Wales have exclusive jurisdiction over any dispute about it.
+
+Questions about this licence: dev@fortitude-omnis.group

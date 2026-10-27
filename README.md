@@ -354,4 +354,10 @@ Clawd is Anthropic's character. OmnisSwarm isn't affiliated with or endorsed by 
 
 ## Licence
 
-Proprietary (`UNLICENSED`). The third-party material it includes, and that material's licence, are listed in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
+Free to use, not to change. The [LICENSE](LICENSE) has the full terms, but in short:
+
+- **You can** install it from this repo or our marketplace, and use it for personal or paid work on as many machines as you like. Read the source, configure it through its settings, keep backups.
+- **You can't** modify it, fork it with changes, copy bits of it into your own code, pass copies on, sell it or run it as a service for others. Want to give it to someone? Point them here.
+- **What it makes is yours.** Reports, logs, replays and GIFs from your runs belong to you. The one exception is anything drawn in the robot style, which is Anthropic's Clawd and for private use only (see [The robot style](#the-robot-style)).
+
+The third-party material it includes, and that material's licence, are listed in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
