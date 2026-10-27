@@ -4,16 +4,42 @@
 
 OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
 
+It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm/` in your project and makes no network calls at all.
+
+- [What it does](#what-it-does)
+- [What you need](#what-you-need) and [Install](#install)
+- [Quick start](#quick-start)
+- [Sharing it](#sharing-it) and [Updating](#updating)
+- [Commands](#commands) and [Tools the lead uses](#tools-the-lead-uses)
+- How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
+- [Settings](#settings), [Limits](#limits), [What it runs and what it sends](#what-it-runs-and-what-it-sends)
+
+## What it does
+
+- **A live pane.** Every agent is a globe (or a small pixel robot, if you'd rather), laid out by the swarm's topology. A message flies along the link as a comet, a working agent glows, a failed tool call pulses red and a finished agent fades to a grey ghost. Underneath there's a spotlight card for one agent (tokens, context, approximate cost, tool calls, errors), a timeline and a feed. Status never rests on colour alone, every state has its own glyph too.
+- **Recording with no setup.** Spawn an agent with the Agent tool and it's recorded. You don't have to start anything first: an unnamed session swarm starts by itself, and `omnis_swarm_init` just gives it a name and a topology.
+- **Coordination for the lead.** A task board with owners and dependencies, shared memory for notes agents pass each other, and a status summary. Eight tools, [listed below](#tools-the-lead-uses).
+- **A budget guard.** A time-box and a dollar budget per agent, plus a budget for the whole swarm. It warns first, then asks the agent to wrap up (or stops the lead starting new ones). On a subscription the dollar limits switch themselves off.
+- **A clash guard.** Two live agents can't edit the same file. The second one is told who has it.
+- **A scope fence.** Give a task the files it owns and its agent can't edit anything else.
+- **A verification gate.** A task can't be marked done while the build or tests fail. The gate is found from your project (`npm run check`, `npm test`, `dotnet test` and so on) and needs your permission rules to allow it.
+- **Stuck nudges and handoff notes.** An agent failing over and over, or going round in circles, gets nudged once. Stuck again? It's told to stop, and a note of what it tried, what failed and what it touched goes into memory for whoever picks the task up.
+- **Ready tasks.** When a task closes, the lead is told which tasks it unblocked, and which ones are now stranded behind a failure.
+- **Run reports.** Every run leaves a short markdown report: who ran, how long, roughly what it cost, files edited, what went wrong and the tasks.
+- **Model hints.** Did that reviewer really need Opus? Once there's enough history, a new swarm is told which roles finished just as cleanly on a cheaper model, and which didn't.
+- **Replay and GIFs.** Replay any recorded swarm in the pane at up to 60×, or render it to a looping GIF.
+
 ## What you need
 
 - **Claude Code 2.1.271 or later.** The plugin's settings use `userConfig` options, and older versions don't support them.
 - **Node on your PATH:** 22.18 or later on the 22 line, or 23.6 or later. Node 24 is the one to pick if you're installing fresh.
+- **Git signed in to GitHub** with read access to `Fortitude-Group/OmnisSwarm`. The repo is private, and Claude Code fetches the plugin with git.
 
 What does a too-old Node look like? The OmnisSwarm server doesn't start, and `/mcp` shows it as failed. The reason is one line in its error output, naming the Node it found. Upgrade Node, restart Claude Code, done.
 
 ## Install
 
-The repo is private, so you need read access to `Fortitude-Group/OmnisSwarm` on GitHub first.
+In Claude Code:
 
 ```
 /plugin marketplace add Fortitude-Group/OmnisSwarm
@@ -26,22 +52,90 @@ Or in one go:
 /plugin install omnis-swarm --marketplace Fortitude-Group/OmnisSwarm
 ```
 
-The version is pinned (0.6.1 right now) and goes up with each release. This picks a release up, but only once the version number has moved:
+It installs for your user, so every project on the machine gets it. Restart Claude Code (or run `/reload-plugins`) and check `/mcp`: `omnis-swarm` should say connected.
+
+## Quick start
+
+1. Open the pane: `/omnis pane`. It sits next to the chat until you close it with `/omnis pane close`. (Set `panel` to `auto` and it opens by itself whenever a swarm starts.)
+2. Give Claude something worth splitting up, and ask for agents:
+
+   > Start a swarm called "auth refactor" and split this into tasks: one agent on the token store, one on the middleware, one writing the tests. Each in its own worktree.
+
+3. Watch. The lead calls `omnis_swarm_init`, puts the tasks on the board with `omnis_task_create`, spawns the agents and moves tasks along with `omnis_task_update` as results come in. When it's done, `omnis_swarm_end` writes the run report.
+
+That's it. Even if Claude skips `omnis_swarm_init` and just spawns agents, they're still recorded and drawn.
+
+Want Claude to coordinate through OmnisSwarm every time, without being asked? Put something like this in your `CLAUDE.md`:
+
+```markdown
+When work splits into tasks for more than one agent, coordinate it through OmnisSwarm and run
+the agents with the Agent tool:
+
+1. `omnis_swarm_init` with a short `name`, a `topology` (`hierarchical` for a lead with workers)
+   and a one-line `goal`.
+2. `omnis_task_create` for each task, with its `assignee` and the files it `owns`.
+3. Spawn the independent agents in one message, each writing agent in its own git worktree.
+4. Keep the board true with `omnis_task_update` (active, done, failed).
+5. Use `omnis_memory_put` / `omnis_memory_get` for notes agents share, not whole files.
+6. `omnis_swarm_end` with a few words of `outcome` when it's done.
+
+When a guard refuses or nudges, take it as a real signal and adjust. Don't route around it.
+```
+
+## Sharing it
+
+The repo is private, so a friend or teammate has to be added as a collaborator on `Fortitude-Group/OmnisSwarm` with Read access first. Then they need the same three things you do (Claude Code 2.1.271+, Node 22.18+ or 23.6+, git signed in to GitHub as the invited account) and the two `/plugin` lines from [Install](#install).
+
+## Updating
+
+The version is pinned (0.6.1 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
 
 ```
-claude plugin update omnis-swarm@omnis-swarm
+/plugin update omnis-swarm
 ```
+
+Or from a terminal, `claude plugin update omnis-swarm@omnis-swarm`. Then restart Claude Code, or run `/reload-plugins`, so the new server and pane load.
 
 ## Commands
 
-- `/omnis pane` opens the live swarm pane, and `/omnis pane close` hides it. If the `panel` setting is `off`, it tells you so and opens nothing.
-- `/omnis pane style robot|globe` picks how agents are drawn: globes (the default) or small pixel robots. The choice is saved, and an open pane redraws straight away.
-- `/omnis replay [swarm] [speed]` replays a recorded swarm in the pane. Leave the swarm out and you get the most recent one. Speed is 1 to 60, and 10× if you don't say. `/omnis replay stop` goes back to live.
-- `/omnis export gif [swarm]` renders a swarm (the most recent, by default) to a looping GIF in `.omnis-swarm/exports/`, drawn in your saved style. It runs in the background and a toast gives you the path when it's written. If the server hasn't answered after 5 minutes, it gives up and says so.
-- `/omnis budget` shows the limits, the swarm's spend so far and whether new agents are allowed. `/omnis budget <usd>` sets the swarm budget, above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
-- `/omnis report` writes the run report now, without waiting for the swarm to go quiet.
-- `/omnis hints` shows which models past runs did well on: a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
-- `/omnis-swarm:watch` does the same as `/omnis pane`. It doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
+| Command | What it does |
+|---|---|
+| `/omnis pane` | Opens the live pane. `/omnis pane close` hides it. |
+| `/omnis pane style robot` or `globe` | How agents are drawn. Saved, and an open pane redraws straight away. |
+| `/omnis replay [swarm] [speed]` | Replays a recorded swarm in the pane. `/omnis replay stop` goes back to live. |
+| `/omnis export gif [swarm]` | Renders a swarm to a looping GIF in `.omnis-swarm/exports/`. |
+| `/omnis budget [usd]` | Shows the limits and spend so far, or sets the swarm budget. |
+| `/omnis report` | Writes the run report now. |
+| `/omnis hints` | Shows which models past runs did well on. |
+| `/omnis-swarm:watch` | Same as `/omnis pane`, and tells you why if there's no pane to open. |
+
+The small print:
+
+- `/omnis pane` only tells you so, and opens nothing, if the `panel` setting is `off`.
+- `/omnis pane style` picks globes (the default) or small pixel robots.
+- `/omnis replay`: leave the swarm out and you get the most recent one. Speed is 1 to 60, and 10× if you don't say. A swarm id is the name of its file in `.omnis-swarm/swarms/`, without the `.jsonl`.
+- `/omnis export gif` defaults to the most recent swarm, drawn in your saved style. It runs in the background and a toast gives you the path when it's written. If the server hasn't answered after 5 minutes, it gives up and says so. Careful though: once a swarm ends, the next agent starts a fresh one, and THAT becomes the most recent. Name the swarm you mean.
+- `/omnis budget <usd>` takes anything above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
+- `/omnis report` doesn't wait for the swarm to go quiet.
+- `/omnis hints` shows a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
+- `/omnis-swarm:watch` doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
+
+## Tools the lead uses
+
+These are the MCP tools Claude calls. You don't call them yourself, you ask Claude.
+
+| Tool | What it's for |
+|---|---|
+| `omnis_swarm_init` | Starts a named swarm with a `topology` (`hierarchical`, `mesh` or `star`), a `goal` and an optional `budget`. If agents are already running in an unnamed session swarm, it names that one instead. |
+| `omnis_swarm_end` | Ends the swarm with a short `outcome` and writes the run report. The log stays on disk. |
+| `omnis_swarm_status` | Agents with status, tokens and approximate cost, task counts, ready and waiting tasks, memory keys. |
+| `omnis_task_create` | Adds a task (`t1`, `t2`…) with an optional `assignee`, the files it `owns`, its `worktree` and what it `dependsOn`. |
+| `omnis_task_update` | Moves a task to `pending`, `active`, `done` or `failed`, reassigns it or adds a note. `done` runs the verification gate first. Also takes `handoff` and `skipGate`, lead only. |
+| `omnis_memory_put` | Stores a note (a design, a decision, an interface) under a key like `design/auth`. |
+| `omnis_memory_get` | Reads one back. |
+| `omnis_memory_list` | Lists the keys, with who wrote them and when. |
+
+You'll see more `omnis_*` tools in `/mcp` (`omnis_record`, `omnis_feed` and friends). They're the recorder's and the pane's own plumbing, and while the plugin's mod is loaded they refuse calls from the model.
 
 ## The budget guard
 
