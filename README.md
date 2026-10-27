@@ -4,6 +4,8 @@
 
 OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
 
+![A swarm replayed in the pane: the lead starts a tester and two readers, they finish and grey out, and a late agent joins](assets/demo.gif)
+
 It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm/` in your project and makes no network calls at all.
 
 - [What it does](#what-it-does)
