@@ -33,7 +33,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 
 - **Claude Code 2.1.271 or later.** The plugin's settings use `userConfig` options, and older versions don't support them.
 - **Node on your PATH:** 22.18 or later on the 22 line, or 23.6 or later. Node 24 is the one to pick if you're installing fresh.
-- **Git ** with read access to `Fortitude-Group/OmnisSwarm`. Claude Code fetches the plugin with git.
+- **Git on your PATH.** Claude Code fetches the plugin with git.
 
 What does a too-old Node look like? The OmnisSwarm server doesn't start, and `/mcp` shows it as failed. The reason is one line in its error output, naming the Node it found. Upgrade Node, restart Claude Code, done.
 
@@ -84,7 +84,7 @@ When a guard refuses or nudges, take it as a real signal and adjust. Don't route
 
 ## Sharing it
 
-The repo is private, so a friend or teammate has to be added as a collaborator on `Fortitude-Group/OmnisSwarm` with Read access first. Then they need the same three things you do (Claude Code 2.1.271+, Node 22.18+ or 23.6+, git signed in to GitHub as the invited account) and the two `/plugin` lines from [Install](#install).
+Just send them the link: https://github.com/Fortitude-Group/OmnisSwarm. The repo is public, so there's no access to sort out. They need the same three things you do (Claude Code 2.1.271+, Node 22.18+ or 23.6+, and git) and the two `/plugin` lines from [Install](#install). Pointing people here, rather than passing on a copy, is also what the [licence](LICENSE) asks.
 
 ## Updating
 
