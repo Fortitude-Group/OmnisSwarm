@@ -33,7 +33,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 
 - **Claude Code 2.1.271 or later.** The plugin's settings use `userConfig` options, and older versions don't support them.
 - **Node on your PATH:** 22.18 or later on the 22 line, or 23.6 or later. Node 24 is the one to pick if you're installing fresh.
-- **Git signed in to GitHub** with read access to `Fortitude-Group/OmnisSwarm`. The repo is private, and Claude Code fetches the plugin with git.
+- **Git ** with read access to `Fortitude-Group/OmnisSwarm`. Claude Code fetches the plugin with git.
 
 What does a too-old Node look like? The OmnisSwarm server doesn't start, and `/mcp` shows it as failed. The reason is one line in its error output, naming the Node it found. Upgrade Node, restart Claude Code, done.
 
