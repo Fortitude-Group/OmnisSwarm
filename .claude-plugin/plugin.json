@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
