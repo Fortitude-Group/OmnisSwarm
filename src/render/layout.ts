@@ -81,7 +81,29 @@ export function depthsOf(parents: Map<string, string | null>): Map<string, numbe
   return out
 }
 
-function treeLayout(state: SwarmState, agents: readonly AgentState[], box: Box): Record<string, Point> {
+/**
+ * The tree with every layer wider than `perRow` split into balanced rows, odd rows shifted half a step so links from
+ * above pass between the nodes. Rows are spaced evenly down the box, layer by layer.
+ */
+function wrappedLayout(layers: ReadonlyMap<number, readonly string[]>, perRow: number, box: Box): Record<string, Point> {
+  const rows: { ids: readonly string[]; per: number; shift: number }[] = []
+  for (const d of [...layers.keys()].sort((a, b) => a - b)) {
+    const ids = layers.get(d)!
+    const count = Math.ceil(ids.length / perRow)
+    const per = Math.ceil(ids.length / count)
+    for (let r = 0; r < count; r++) rows.push({ ids: ids.slice(r * per, (r + 1) * per), per, shift: count > 1 && r % 2 === 1 ? 0.5 : 0 })
+  }
+  const out: Record<string, Point> = {}
+  rows.forEach((row, r) => {
+    const y = rows.length === 1 ? (box.y0 + box.y1) / 2 : box.y0 + (r / (rows.length - 1)) * (box.y1 - box.y0)
+    row.ids.forEach((id, i) => {
+      out[id] = { x: box.x0 + ((i + 1 + row.shift) / (row.per + 1)) * (box.x1 - box.x0), y }
+    })
+  })
+  return out
+}
+
+function treeLayout(state: SwarmState, agents: readonly AgentState[], box: Box, minGap: number): Record<string, Point> {
   const parents = parentsOf(state)
   const depths = depthsOf(parents)
   const kids = new Map<string, string[]>()
@@ -111,6 +133,9 @@ function treeLayout(state: SwarmState, agents: readonly AgentState[], box: Box):
   for (const id of order) push(layers, depths.get(id) ?? 0, id)
   const maxDepth = Math.max(0, ...layers.keys())
   const out: Record<string, Point> = {}
+  // Nodes spread evenly sit (x1 - x0) / (count + 1) apart, so a row holds this many at `minGap` or more.
+  const perRow = minGap > 0 ? Math.max(1, Math.floor((box.x1 - box.x0) / minGap) - 1) : Number.POSITIVE_INFINITY
+  if ([...layers.values()].some(ids => ids.length > perRow)) return wrappedLayout(layers, perRow, box)
   for (const [d, ids] of layers) {
     ids.forEach((id, i) => {
       out[id] = {
@@ -139,16 +164,17 @@ function ringLayout(agents: readonly AgentState[], box: Box, out: Record<string,
 
 /**
  * Node centres in canvas pixels for a canvas `width` x `height` pixels. A pixel is one cell wide and half a cell tall,
- * so the canvas is held to the Raster limit of 512 columns by 2 x 256 rows.
+ * so the canvas is held to the Raster limit of 512 columns by 2 x 256 rows. In a tree, a layer that can't keep its
+ * nodes `minGap` px apart wraps onto more rows (0, the default, never wraps).
  */
-export function layoutNodes(state: SwarmState, topology: Topology, width: number, height: number): Record<string, Point> {
+export function layoutNodes(state: SwarmState, topology: Topology, width: number, height: number, minGap = 0): Record<string, Point> {
   const agents = orderAgents(state)
   if (agents.length === 0) return {}
   const finite = (n: number): number => (Number.isFinite(n) ? n : 0)
   const w = Math.min(RASTER_MAX.columns, finite(width))
   const h = Math.min(RASTER_MAX.rows * 2, finite(height))
   const box: Box = { x0: MARGIN.x, x1: Math.max(MARGIN.x, w - MARGIN.x), y0: MARGIN.top, y1: Math.max(MARGIN.top, h - MARGIN.bottom) }
-  if (topology === 'hierarchical') return treeLayout(state, agents, box)
+  if (topology === 'hierarchical') return treeLayout(state, agents, box, minGap)
   if (topology === 'star' && agents.length > 1 && agents[0]!.id === LEAD) {
     const out: Record<string, Point> = { [LEAD]: { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 } }
     return ringLayout(agents.slice(1), box, out)

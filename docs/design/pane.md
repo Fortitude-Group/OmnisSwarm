@@ -314,7 +314,9 @@ Legend for the sketches: `(A)` a node, `◆` the lead, `.` a structural edge (fa
 mixed 90% over the canvas, dash 2), `~` a message arc, `*` a comet head with `-` its trail, `x x x` a clash line.
 
 **Hierarchical: a tree.** Lead centred at the top, one layer per depth, layers evenly spaced down the graph, nodes
-in a layer spread evenly across it in start order. Structural edges go parent to child, straight.
+in a layer spread evenly across it in start order. Structural edges go parent to child, straight. A layer too wide to keep its nodes apart (a globe's 8 px, or the
+smallest robot's box plus 3 px) wraps onto balanced rows, every other row shifted half a step, and the rows are
+spaced evenly down the graph. A tree that fits keeps the one-row-per-layer layout.
 
 ```
                               ◆ lead ▶

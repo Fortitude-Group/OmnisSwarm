@@ -13,6 +13,7 @@ import { layoutNodes, nodesKey, orderAgents, structuralEdges, type Edge } from '
 import { planRegions } from './regions.ts'
 import { nextBlinkAt, robotCrowded } from './robot.ts'
 import { busiest, drawSpotlight } from './spotlight.ts'
+import { activeSkin } from './sprites.ts'
 import { drawTimeline } from './timeline.ts'
 import { CANVAS, CANVAS_RAISED, FPS, GRAPH, MOTION, PAIR_BUDGET, STATUS, TEXT, modelColor } from './tokens.ts'
 import { drawTree } from './tree.ts'
@@ -151,13 +152,19 @@ function crowded(positions: Readonly<Record<string, Point>>): boolean {
   return false
 }
 
-/** The layout for a canvas size, with its crowding verdict; both are computed once and kept with the shape. */
-function positionsFor(state: SwarmState, s: Shape, w: number, h: number): Sized {
-  const size = `${w}x${h}`
+/**
+ * How far apart a tree lays its nodes before it wraps a wide layer: a globe's MIN_GAP, or the smallest robot's box
+ * grown by a pixel each side, plus one for rounding the box to whole pixels.
+ */
+const wrapGap = (robots: boolean): number => (robots ? activeSkin().sprites.S.w + 3 : MIN_GAP)
+
+/** The layout for a canvas size and gap, with its crowding verdict; both are computed once and kept with the shape. */
+function positionsFor(state: SwarmState, s: Shape, w: number, h: number, gap: number): Sized {
+  const size = `${w}x${h}@${gap}`
   let entry = s.sized.get(size)
   if (entry === undefined) {
     if (s.sized.size >= 4) s.sized.clear()
-    const positions = layoutNodes(state, state.swarm.topology, w, h)
+    const positions = layoutNodes(state, state.swarm.topology, w, h, gap)
     entry = { positions, crowded: crowded(positions) }
     s.sized.set(size, entry)
   }
@@ -218,7 +225,7 @@ export function render(given: SwarmState, view: View, nowMs: number, size: Size,
     drawHeader(top, regions.header, state, totals, hn)
     if (regions.tree !== null) drawTree(top, regions.tree, state, stats)
     if (regions.graph !== null) {
-      const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2)
+      const target = positionsFor(state, cached, regions.graph.w, regions.graph.h * 2, wrapGap(robots))
       positions = tween(target.positions, motion.glide ? view.tween : null, nowMs)
       // Legibility guard: with two node centres closer than the graph can draw apart, show the tree instead. Robots
       // need their smallest boxes, grown by a pixel, to stay apart.
