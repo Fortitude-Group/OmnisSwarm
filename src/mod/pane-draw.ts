@@ -12,6 +12,7 @@ import { markDegraded, prunePulses } from './pane-model.ts'
 import { PANE_ID, periodFailed, startPulling, type PaneHooks } from './pane-pull.ts'
 import { hostOf, rt, type Host } from './pane-runtime.ts'
 import { replayClockMs, replayTotalMs } from './replay.ts'
+import { VERSION } from '../version.ts'
 
 /** The Svg source for a grid off the terminal, or null for the summary as text: no Svg on the surface, or one too big to send. */
 export const svgSource = (grid: Grid, alt: string, canDraw: boolean, max = SVG_SOURCE_MAX): string | null => (canDraw ? gridToSvg(grid, alt, max) : null)
@@ -47,7 +48,7 @@ export function frameAt(now: number): Frame | null {
   rt.spot = chooseSpotlight(rt.spot, pinned, state, pruned.pulses, now)
   const { degraded, degradedAgents, hiddenFinished } = pruned
   const replay = run === null ? null : { speed: run.speed, clockMs: replayClockMs(now), totalMs: replayTotalMs(), ended: run.ended }
-  const frame = render(state, viewOf(pinned), now, rt.size, { degraded: degraded === 'render-failed' ? null : degraded, degradedAgents, hiddenFinished, replay }, budgetFps(rt.renderAvgMs))
+  const frame = render(state, viewOf(pinned), now, rt.size, { degraded: degraded === 'render-failed' ? null : degraded, degradedAgents, hiddenFinished, replay, version: VERSION }, budgetFps(rt.renderAvgMs))
   if (rt.last !== null && frame.nodesKey !== rt.last.nodesKey) rt.tween = { from: rt.last.positions, at: now }
   return frame
 }

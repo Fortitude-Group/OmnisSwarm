@@ -6,6 +6,7 @@ import { hintsOptions } from './history-store.ts'
 import { runStdio } from './protocol.ts'
 import { toolFactories } from './registry.ts'
 import { Session } from './session.ts'
+import { VERSION } from '../version.ts'
 
 /** First non-empty candidate that isn't an unexpanded `${...}` placeholder. */
 const pick = (...candidates: Array<string | undefined>): string | undefined =>
@@ -21,4 +22,4 @@ const tools = toolFactories.flatMap(factory => factory({ root, session, gate: { 
 // A gate's process tree must not outlive the server: killed on a shutdown signal and when stdin ends (the end of
 // stdin also aborts each running call, which kills its gate). A hard kill of the server can't be caught.
 installShutdown(process, code => process.exit(code))
-void runStdio(tools, { name: 'omnis-swarm', version: '0.6.2' }).then(killAllGates)
+void runStdio(tools, { name: 'omnis-swarm', version: VERSION }).then(killAllGates)

@@ -29,7 +29,7 @@ const lagOf = (view: View): number => Math.max(0, Math.min(MAX_LAG_MS, Number.is
  * What the pane knows about the last read beyond the swarm state; both come from the pane model. `wordmark`: the GIF
  * draws `OmnisSwarm` at the end of header row 0 (pane.md 13.4); the pane never sets it.
  */
-export type Notes = { degraded?: 'too-large' | 'unreadable' | null; degradedAgents?: number; hiddenFinished?: number; replay?: ReplayNote | null; wordmark?: true }
+export type Notes = { degraded?: 'too-large' | 'unreadable' | null; degradedAgents?: number; hiddenFinished?: number; replay?: ReplayNote | null; wordmark?: true; version?: string }
 
 const chipColors = new Map<number, number>()
 /** The model colour scaled down (halving the interval 20 times) until its luminance is at most CHIP_LUMINANCE. */
@@ -215,7 +215,7 @@ export function render(given: SwarmState, view: View, nowMs: number, size: Size,
   if (notes.hiddenFinished !== undefined && notes.hiddenFinished > 0) noteParts.push([`+${notes.hiddenFinished} finished`, TEXT.dim])
   const short: Part | null = notes.degraded === 'too-large' ? ['⚠ too large', STATUS.warn] : notes.degraded === 'unreadable' ? ['⚠ waiting', STATUS.warn] : null
   const overBudget = real.reduce((n, a) => n + (dropsFor(a) > 0 ? 1 : 0), 0)
-  const hn: HeaderNotes = { notes: noteParts, short, budget: view.budget ?? null, overBudget, replay: notes.replay ?? null, wordmark: notes.wordmark === true }
+  const hn: HeaderNotes = { notes: noteParts, short, budget: view.budget ?? null, overBudget, replay: notes.replay ?? null, wordmark: notes.wordmark === true, ...(notes.version !== undefined && { version: notes.version }) }
 
   let positions: Record<string, Point> = {}
   const robots = view.style === 'robot'
