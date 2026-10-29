@@ -10,7 +10,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - [What you need](#what-you-need) and [Install](#install)
 - [Quick start](#quick-start)
 - [Sharing it](#sharing-it) and [Updating](#updating)
-- [Commands](#commands) and [Tools the lead uses](#tools-the-lead-uses)
+- [Commands](#commands), [the tool counts](#the-tool-counts) and [Tools the lead uses](#tools-the-lead-uses)
 - How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
 - [Settings](#settings), [Limits](#limits), [What it runs and what it sends](#what-it-runs-and-what-it-sends)
 
@@ -119,6 +119,22 @@ The small print:
 - `/omnis report` doesn't wait for the swarm to go quiet.
 - `/omnis hints` shows a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
 - `/omnis-swarm:watch` doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
+
+## The tool counts
+
+The spotlight card has a row like `tools r 2  e 0  b 0  s 0  w 0  a 1  o 0   errors 0`. Each letter is a kind of tool call, followed by how many the agent has made:
+
+| Letter | Kind | Tools counted |
+|---|---|---|
+| `r` | read | Read, NotebookRead |
+| `e` | edit | Edit, MultiEdit, Write, NotebookEdit |
+| `b` | shell | Bash, PowerShell, BashOutput, KillShell |
+| `s` | search | Glob, Grep, LS |
+| `w` | web | WebFetch, WebSearch |
+| `a` | agent | Agent, Task, SendMessage (starting or messaging other agents) |
+| `o` | other | anything else: the `omnis_*` tools, other MCP tools and so on |
+
+`errors` is how many calls failed, of any kind. Each letter's colour is the one the agent's rim flickers when it starts a call of that kind, so you can tell what it's doing without reading the card.
 
 ## Tools the lead uses
 
