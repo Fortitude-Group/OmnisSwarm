@@ -474,6 +474,8 @@ Above 512 columns or 256 rows per grid, each grid is held to the Raster limits a
   2. `+n finished` (finished agents left out of the graph) in `TEXT.dim`;
   3. the goal in `TEXT.dim`, only if all of it or at least 12 cells of it fit (clipped at its end with `…`), else
      left out.
+  At the far right, after all of them, the live pane puts the plugin's version, `v0.6.3`, in `TEXT.dim`. It shows only
+  when the notes still fit beside it; the goal is clipped to make room. GIFs and replays-to-GIF don't carry it.
   Notes are joined with ` · ` in `TEXT.faint`.
 - With a 1-row header (tree step) and on the summary line, the degraded note is drawn right-aligned on that row in
   `STATUS.warn` as `⚠ too large` or `⚠ waiting`, before the gaps marker; `+n finished` and the goal are left out.

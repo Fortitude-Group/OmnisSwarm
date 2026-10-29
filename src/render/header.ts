@@ -13,9 +13,10 @@ const MIN_GOAL = 12
 /**
  * What the pane has to say about the last read. `notes` sit right-aligned on row 1, in priority order and before the
  * goal; `short` is the one-word form for a one-row header and the summary line. `wordmark`: the GIF's `OmnisSwarm`
- * at the right end of row 0 (13.4); never set in the pane.
+ * at the right end of row 0 (13.4); never set in the pane. `version`: the plugin's, dim at the right end of row 1,
+ * after the notes (which win if both don't fit) and the goal (which is clipped to make room).
  */
-export type HeaderNotes = { notes: readonly Part[]; short: Part | null; budget?: ViewBudget | null; overBudget?: number; replay?: ReplayNote | null; wordmark?: boolean }
+export type HeaderNotes = { notes: readonly Part[]; short: Part | null; budget?: ViewBudget | null; overBudget?: number; replay?: ReplayNote | null; wordmark?: boolean; version?: string }
 const NO_NOTES: HeaderNotes = { notes: [], short: null }
 
 const cost = (t: SwarmTotals): string => `${fmtUsd(t.costUsd)}${t.costPartial ? '+' : ''}`
@@ -119,13 +120,21 @@ export function drawHeader(grid: Grid, area: Rect, state: SwarmState, totals: Sw
   }
   // The hint is dropped whole when the notes do not fit with it; the badge stays.
   const full = build(true)
-  const right1: Part[] = width(full) <= maxX - end - 3 ? full : build(false)
-  const avail = maxX - end - 3 - width(right1) - (right1.length > 0 ? width([SEP]) : 0)
+  const room = maxX - end - 3
+  const notesIn = (r: number): Part[] => (width(full) <= r ? full : build(false))
+  // The version goes last, after the notes and before the goal: it stays only if the notes still fit beside it.
+  const tag: Part[] = hn.version === undefined ? [] : [[`v${hn.version}`, TEXT.dim]]
+  const tagRoom = tag.length > 0 ? width(tag) + width([SEP]) : 0
+  let right1 = notesIn(room - tagRoom)
+  const keepTag = tag.length > 0 && width(right1) + (right1.length > 0 ? width([SEP]) : 0) + width(tag) <= room
+  if (!keepTag) right1 = notesIn(room)
+  const avail = room - width(right1) - (right1.length > 0 ? width([SEP]) : 0) - (keepTag ? tagRoom : 0)
   const goal = state.swarm.goal
   if (goal !== null && goal !== '' && ([...goal].length <= avail || avail >= MIN_GOAL)) {
     if (right1.length > 0) right1.push(SEP)
     right1.push([clipText(goal, avail), TEXT.dim])
   }
+  if (keepTag) right1.push(...(right1.length > 0 ? [SEP] : []), ...tag)
   if (right1.length > 0 && end + 3 < maxX) writeRight(grid, area.y + 1, right1, end + 3, maxX, bg)
 }
 
