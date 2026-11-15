@@ -1,5 +1,5 @@
 /** The run report (spec section 4.2): plain markdown from the folded state. Pure. */
-import { LEAD, limitText, type AgentState, type SwarmState } from './fold.ts'
+import { LEAD, holdText, limitText, type AgentState, type SwarmState } from './fold.ts'
 import { TASK_STATES } from './events.ts'
 import { strandedBy } from './ready.ts'
 import { fileClashes, totalTokens } from './stats.ts'
@@ -74,6 +74,14 @@ function routing(s: SwarmState): string[] {
   return lines
 }
 
+/** One line per ended spawn hold, oldest first. The role is the agent type as the Agent call named it. */
+function holds(s: SwarmState): string[] {
+  return (s.holds ?? []).map(h => {
+    const line = holdText({ ...h, role: md(h.role) })
+    return `- ${line.charAt(0).toUpperCase()}${line.slice(1)}.`
+  })
+}
+
 const GATE_WORDS: Record<string, string> = { passed: '✓', failed: '✕ failed', timeout: '✕ timed out', error: '✕ error', skipped: 'skipped', none: 'no gate' }
 
 /** One line per task that ran a gate: its last five results, oldest first. The fold keeps no seconds, so none are shown. */
@@ -129,7 +137,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
     const name = a.id === LEAD ? 'main' : a.name
     lines.push(`| ${md(name)} | ${md(a.role)} | ${outcome(a)} | ${minutes(runMs(a, s.swarm.endedAt ?? nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${filesEdited(s, a.id)} |`)
   }
-  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Tasks', tasks(s)], ['Gates', gates(s)], ['Hints', hints.map(l => `- ${md(l)}`)]] as const) {
+  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Cache holds', holds(s)], ['Tasks', tasks(s)], ['Gates', gates(s)], ['Hints', hints.map(l => `- ${md(l)}`)]] as const) {
     if (body.length > 0) lines.push('', `## ${title}`, '', ...body)
   }
   return `${lines.join('\n')}\n`

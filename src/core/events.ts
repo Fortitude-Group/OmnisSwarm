@@ -41,6 +41,9 @@ export type GateResult = (typeof GATE_RESULTS)[number]
 /** How an out-of-scope edit was handled: refused, or let through with a warning to the lead. */
 export const FENCE_MODES = ['block', 'warn'] as const
 export type FenceMode = (typeof FENCE_MODES)[number]
+/** Why a spawn hold ended: the first agent of the type started answering, the time ran out, or it stopped without answering. */
+export const HOLD_REASONS = ['answered', 'timeout', 'failed'] as const
+export type HoldReason = (typeof HOLD_REASONS)[number]
 
 export type EventData = {
   'swarm.started': { name: string; topology: Topology; goal?: string; implicit: boolean; session?: string }
@@ -72,6 +75,8 @@ export type EventData = {
   'gate.ran': { task: string; result: GateResult; ms: number; command?: string; exit?: number; log?: string; gap?: number; mode: GateMode }
   /** agent: the refused (or warned) agent. path: the recorder's subject for the call. tasks: the ids of the tasks whose files it owns. */
   'fence.blocked': { path: string; tasks: string[]; mode: FenceMode }
+  /** Swarm-level. role: the subagent type held. start: the first sibling was held (count 1, ms 0). end: count held, ms from the first held to the release, and why. */
+  'spawn.held': { role: string; phase: 'start' | 'end'; count: number; ms: number; why?: HoldReason }
   /** path: the report file, relative to the project. */
   'report.written': { path: string; agents: number; minutes: number; costUsd: number }
 }
@@ -81,7 +86,7 @@ export const EVENT_TYPES = [
   'swarm.started', 'swarm.ended', 'agent.started', 'agent.finished', 'agent.usage',
   'agent.tool', 'message.sent', 'memory.put', 'task.created', 'task.updated',
   'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked',
-  'clash.blocked', 'agent.stuck', 'report.written', 'gate.ran', 'fence.blocked', 'task.handoff',
+  'clash.blocked', 'agent.stuck', 'report.written', 'gate.ran', 'fence.blocked', 'task.handoff', 'spawn.held',
 ] as const satisfies readonly EventType[]
 
 export type SwarmEvent<K extends EventType = EventType> = {

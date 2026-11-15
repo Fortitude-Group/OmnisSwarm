@@ -9,6 +9,7 @@ import { registerPane } from './pane.ts'
 import { registerReadyRelay } from './ready-relay.ts'
 import { registerRecorder } from './recorder.ts'
 import { registerRunReport } from './run-report.ts'
+import { registerSpawnHold } from './spawn-hold.ts'
 import { registerStuckGuard } from './stuck-guard.ts'
 
 export const register: Register = (on, options) => {
@@ -20,6 +21,7 @@ export const register: Register = (on, options) => {
   registerFenceGuard(on, options)
   registerClashGuard(on, options)
   registerStuckGuard(on)
+  registerSpawnHold(on, options)
   registerPane(on, options)
   registerRunReport(on)
 }

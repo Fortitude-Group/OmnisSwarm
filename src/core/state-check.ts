@@ -1,8 +1,8 @@
 /** Checks that a parsed snapshot really has the shape of SwarmState, so a planted file cannot crash the fold or reach a terminal. */
-import { AGENT_OUTCOMES, GATE_RESULTS, HANDOFF_WHY, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
+import { AGENT_OUTCOMES, GATE_RESULTS, HANDOFF_WHY, HOLD_REASONS, STUCK_PATTERNS, TASK_STATES, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey } from './events.ts'
 import { ERRS_KEEP, TRAIL_KEEP } from './fold-agents.ts'
 import { GATE_HISTORY, MAX_DEPENDS, MAX_OWNS, MAX_OWN_LEN, MAX_WORKTREE } from './fold-tasks.ts'
-import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
+import { MAX_EDITS, MAX_FEED, MAX_FILES, MAX_HOLDS, MAX_RECENT, MAX_SAMPLES, type SwarmState } from './fold.ts'
 
 const MAX_SPEND = 200_000
 const MAX_KEY = 256
@@ -57,6 +57,10 @@ const editRec = (e: unknown): boolean => {
     str(e.agent, 130) && num(e.at) && (!Object.hasOwn(e, 'blocked') || e.blocked === true)
 }
 const lastReport = (x: unknown): boolean => exact(x, ['path', 'at']) && str(x.path, 120) && num(x.at)
+const holdRec = (x: unknown): boolean =>
+  exact(x, ['role', 'count', 'ms', 'why', 'at']) && str(x.role, 64) && num(x.count) && num(x.ms) && isOneOf(HOLD_REASONS, x.why) && num(x.at)
+/** Keys the state gains only once something happens. */
+const OPTIONAL_STATE_KEYS = ['lastReport', 'holds']
 const STATE_KEYS = ['swarm', 'session', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps', 'budget', 'guard']
 
 const AGENT_KEYS = [
@@ -126,7 +130,7 @@ const info = (x: unknown, id: string): boolean =>
   typeof x.implicit === 'boolean' && nnum(x.startedAt) && nnum(x.endedAt) && nstr(x.outcome, 200)
 
 export function isSwarmState(x: unknown, id: string): x is SwarmState {
-  return exact(x, isPlain(x) && Object.hasOwn(x, 'lastReport') ? [...STATE_KEYS, 'lastReport'] : STATE_KEYS) &&
+  return exact(x, isPlain(x) ? [...STATE_KEYS, ...OPTIONAL_STATE_KEYS.filter(k => Object.hasOwn(x, k))] : STATE_KEYS) &&
     info(x.swarm, id) &&
     session(x.session) &&
     record(x.agents, agent) &&
@@ -138,5 +142,6 @@ export function isSwarmState(x: unknown, id: string): x is SwarmState {
     record(x.edits, v => list(v, MAX_EDITS, editRec)) &&
     list(x.spend, MAX_SPEND, s => exact(s, ['at', 'usd']) && num(s.at) && num(s.usd)) &&
     num(x.events) && num(x.lastAt) && num(x.gaps) && budget(x.budget) && swarmGuard(x.guard) &&
-    (!Object.hasOwn(x, 'lastReport') || lastReport(x.lastReport))
+    (!Object.hasOwn(x, 'lastReport') || lastReport(x.lastReport)) &&
+    (!Object.hasOwn(x, 'holds') || list(x.holds, MAX_HOLDS, holdRec))
 }

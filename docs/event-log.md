@@ -63,9 +63,10 @@ same user could edit `.omnis-swarm` directly.
 | `agent.stuck` | recorder | `pattern` (`failing`|`repeating`), `count`, `subject` (≤80), `delivered` (bool), `reason?` (≤80). `agent` is required |
 | `gate.ran` | mcp | `task` (a task id), `result` (`passed`\|`failed`\|`timeout`\|`error`\|`none`\|`skipped`), `ms` (how long the gate ran), `mode` (`block`\|`warn`, the `verifyGate` setting at the time), `command?` (the command line, clipped), `exit?` (the exit code), `log?` (the output file, relative to the project), `gap?` (source files the assignee changed with no test file). No `agent`. The task keeps a count of runs and its last five results |
 | `fence.blocked` | recorder | `path` (≤80, the recorder's subject for the refused call), `tasks` (up to 20 task ids whose `owns` the agent is held to), `mode` (`block`\|`warn`). `agent` (the refused or warned agent) is required. Repeats for the same agent and path within 60 s are not recorded |
+| `spawn.held` | recorder | `role` (≤64, the subagent type), `phase` (`start`\|`end`), `count` (siblings held, 1 on a start), `ms` (from the first held to the release, 0 on a start), `why` (`answered`\|`timeout`\|`failed`, on an end only). No `agent`. The fold keeps the last 20 ends for the run report |
 | `report.written` | mcp | `path` (the report file, relative to the project), `agents` (subagents), `minutes`, `costUsd`. Written by `omnis_report` and `omnis_swarm_end` |
 
-`gate.ran` is written by the server when `omnis_task_update` closes a task. `fence.blocked` reaches the log through `omnis_record`, like `clash.blocked`.
+`gate.ran` is written by the server when `omnis_task_update` closes a task. `fence.blocked` and `spawn.held` reach the log through `omnis_record`, like `clash.blocked`.
 
 `omnis_record` answers `ok <swarm>`, naming the swarm the event landed in, so the mod's budget guard
 knows which swarm it is folding. `omnis_replay`, `omnis_export` and `omnis_report` are internal tools like

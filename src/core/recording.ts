@@ -2,7 +2,7 @@
 import type { EventData } from './events.ts'
 
 /** The only event types omnis_record accepts. The server writes the swarm, memory and task events itself. */
-export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked', 'clash.blocked', 'agent.stuck', 'fence.blocked'] as const
+export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked', 'clash.blocked', 'agent.stuck', 'fence.blocked', 'spawn.held'] as const
 export type RecorderType = (typeof RECORDER_TYPES)[number]
 
 export const RECORD_TOOL = 'omnis_record'
@@ -34,6 +34,9 @@ export const GATE_PLAN_TOOL = 'omnis_gate_plan'
 /** The internal tool the mod records its approval of a task's gate with; the gate runs only with one. */
 export const APPROVE_TOOL = 'omnis_gate_approve'
 
+/** The internal tool a held spawn waits on, so the wait isn't paid from its hook's budget. */
+export const WAIT_TOOL = 'omnis_wait'
+
 /** The server's key under mcpServers in plugin.json, as $.mcp.connect takes it. */
 export const SERVER_KEY = 'omnis-swarm'
 
@@ -48,7 +51,7 @@ export const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/
  * marketplace install may rename the plugin segment) or `mcp__omnis-swarm__omnis_record` (registered in .mcp.json).
  * Another plugin's own tool ending the same way is blocked too; that over-block is accepted.
  */
-export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan|gate_approve|handoff|hints)$/
+export const INTERNAL_TOOL = /^mcp__.+__omnis_(record|feed|replay|export|report|fence|gate_plan|gate_approve|handoff|hints|wait)$/
 
 /** A plugin name without an `@marketplace` suffix. Plugin names can't contain `@`, so the part before it is the name. */
 const bareName = (name: string): string => name.split('@', 1)[0] ?? ''
