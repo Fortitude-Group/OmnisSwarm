@@ -1,7 +1,7 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
-  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, HOLD_REASONS, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
+  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type HoldReason, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
 import { foldAgentTool } from './fold-agents.ts'
 import { foldTasks } from './fold-tasks.ts'
@@ -20,6 +20,7 @@ export const MAX_FILES = 200
 export const MAX_SAMPLES = 30
 export const MAX_RECENT = 5
 export const MAX_EDITS = 10
+export const MAX_HOLDS = 20
 const SPEND_KEEP_MS = 600_000
 /** A clash.blocked marks the refused agent's own edit entry when the recorder's start for it is this close. */
 const CLASH_MATCH_MS = 5_000
@@ -107,6 +108,8 @@ export type TaskEntry = {
   /** The latest handoff note's agent (its name, or id when unknown) and reason; absent until the first. */
   handedOn?: { from: string; why: HandoffWhy }
 }
+/** One ended spawn hold: how many agents of `role` waited, for how long, and why they were let go. */
+export type HoldRec = { role: string; count: number; ms: number; why: HoldReason; at: number }
 export type FeedItem = { at: number; kind: 'agent' | 'message' | 'memory' | 'task'; agent: string; text: string; to?: string }
 export type SwarmInfo = {
   id: string; name: string; topology: Topology; goal: string | null; implicit: boolean
@@ -139,6 +142,8 @@ export type SwarmState = {
   guard: { warn: number | null; block: number | null }
   /** The latest run report; absent until one is written. */
   lastReport?: { path: string; at: number }
+  /** The last MAX_HOLDS ended spawn holds, oldest first; absent until the first. */
+  holds?: HoldRec[]
 }
 
 export function emptyState(id: string): SwarmState {
@@ -251,6 +256,16 @@ const usdText = (usd: number): string => `≈$${usd.toFixed(2)}`
 /** A limit as set: 20 min, $10, $2.50. */
 export const limitText = (limit: GuardLimit, n: number): string =>
   limit === 'time' ? `${n} min` : `$${Number.isInteger(n) ? n : n.toFixed(2)}`
+
+const agentsText = (n: number, role: string): string => `${n} ${role} agent${n === 1 ? '' : 's'}`
+
+/** A spawn hold in words, for the feed and the run report (lower case: the report capitalises it). */
+export function holdText(h: Pick<HoldRec, 'role' | 'count' | 'ms' | 'why'>): string {
+  const held = `held ${agentsText(h.count, h.role)} ${Math.round(h.ms / 1000)} s`
+  if (h.why === 'answered') return `${held} for the first to answer`
+  if (h.why === 'timeout') return `${held}, let go at the 4 min limit`
+  return `${held}, let go when the first stopped without answering`
+}
 
 export function feed(state: SwarmState, item: FeedItem): void {
   state.feed.push(item)
@@ -477,6 +492,22 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       const a = agentOf(state, who, at)
       a.stuckBy = { on: true, p: d.pattern, s: text(d.subject, 80), n: (a.stuckBy?.n ?? 0) + 1 }
       feed(state, { at, kind: 'agent', agent: a.id, text: `${a.name} looks stuck (${d.pattern}), asked to step back${d.delivered === true ? '' : ' (not delivered)'}` })
+      break
+    }
+    case 'spawn.held': {
+      const d = e.data
+      const role = text(d.role, 64)
+      if (role === '') break
+      if (d.phase === 'start') {
+        feed(state, { at, kind: 'agent', agent: LEAD, text: `holding ${role} agents until the first one answers` })
+        break
+      }
+      if (d.phase !== 'end' || !isOneOf(HOLD_REASONS, d.why)) break
+      const h: HoldRec = { role, count: Math.max(1, Math.round(num(d.count))), ms: Math.round(num(d.ms)), why: d.why, at }
+      const holds = (state.holds ??= [])
+      holds.push(h)
+      trim(holds, MAX_HOLDS)
+      feed(state, { at, kind: 'agent', agent: LEAD, text: holdText(h) })
       break
     }
     case 'report.written': {

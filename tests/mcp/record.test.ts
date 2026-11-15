@@ -311,6 +311,27 @@ test('clash.blocked and agent.stuck are recorded with an agent, and refused with
   for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, ...b }), InputError, JSON.stringify(b))
 })
 
+test('spawn.held is recorded about the swarm, a start without why and an end with one, and refused otherwise', () => {
+  const { call, events } = setup()
+  call({ sessionId: SID, ts: TS, type: 'spawn.held', data: { role: 'Explore', phase: 'start', count: 1, ms: 0 } })
+  call({ sessionId: SID, ts: TS, type: 'spawn.held', data: { role: 'Explore', phase: 'end', count: 3, ms: 41_000, why: 'answered' } })
+  assert.deepEqual(events(SWARM).slice(-2).map(e => [e.type, e.agent, e.data]), [
+    ['spawn.held', undefined, { role: 'Explore', phase: 'start', count: 1, ms: 0 }],
+    ['spawn.held', undefined, { role: 'Explore', phase: 'end', count: 3, ms: 41_000, why: 'answered' }],
+  ])
+  const bad = [
+    { agent: 'a1', data: { role: 'Explore', phase: 'start', count: 1, ms: 0 } },
+    { data: { role: '', phase: 'start', count: 1, ms: 0 } },
+    { data: { role: 'Explore', phase: 'later', count: 1, ms: 0 } },
+    { data: { role: 'Explore', phase: 'start', count: 1, ms: 0, why: 'answered' } },
+    { data: { role: 'Explore', phase: 'end', count: 1, ms: 0 } },
+    { data: { role: 'Explore', phase: 'end', count: 1, ms: 0, why: 'bored' } },
+    { data: { role: 'Explore', phase: 'end', count: -1, ms: 0, why: 'timeout' } },
+    { data: { role: 'Explore', phase: 'end', count: 1, ms: 3_600_001, why: 'timeout' } },
+  ]
+  for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, type: 'spawn.held', ...b }), InputError, JSON.stringify(b))
+})
+
 test('fence.blocked is recorded with an agent, a path, task ids and a mode, and refused otherwise', () => {
   const { call, events } = setup()
   call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' } })

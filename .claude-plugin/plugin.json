@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
@@ -55,6 +55,13 @@
       "description": "on (the default): swarm starts show which models past runs did well on, from this project and across projects. project: this project’s runs only, nothing kept outside it. off: no history kept, no hints.",
       "default": "on",
       "options": ["on", "project", "off"]
+    },
+    "cacheHold": {
+      "type": "string",
+      "title": "Spawn hold",
+      "description": "on (the default): when several agents of one type start together, the first goes and the rest wait until it starts answering (4 minutes at most), so they read its prompt cache. off: they all start at once.",
+      "default": "on",
+      "options": ["on", "off"]
     },
     "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Above 0, at most 1000.", "default": 20 }
   },

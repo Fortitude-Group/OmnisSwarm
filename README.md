@@ -23,6 +23,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - **A clash guard.** Two live agents can't edit the same file. The second one is told who has it.
 - **A scope fence.** Give a task the files it owns and its agent can't edit anything else.
 - **A verification gate.** A task can't be marked done while the build or tests fail. The gate is found from your project (`npm run check`, `npm test`, `dotnet test` and so on) and needs your permission rules to allow it.
+- **A spawn hold.** Start several agents of one type together and the first goes alone. The rest wait until it starts answering (4 minutes at most), then read the cache it wrote instead of each writing their own.
 - **Stuck nudges and handoff notes.** An agent failing over and over, or going round in circles, gets nudged once. Stuck again? It's told to stop, and a note of what it tried, what failed and what it touched goes into memory for whoever picks the task up.
 - **Ready tasks.** When a task closes, the lead is told which tasks it unblocked, and which ones are now stranded behind a failure.
 - **Run reports.** Every run leaves a short markdown report: who ran, how long, roughly what it cost, files edited, what went wrong and the tasks.
@@ -88,7 +89,7 @@ Just send them the link: https://github.com/Fortitude-Group/OmnisSwarm. The repo
 
 ## Updating
 
-The version is pinned (0.6.3 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
+The version is pinned (0.7.0 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
 
 ```
 /plugin update omnis-swarm
@@ -217,6 +218,35 @@ The reply gains `Handoff note saved as handoff/t3.` It's refused with `t3 has no
 
 The run report lists each one under Problems: `- t3 was handed on from dev-2 (stuck).`
 
+## The spawn hold
+
+Start five Explore agents in one message and each one writes its own copy of the prompt cache. Anthropic's prompt caching docs say why: a cache entry can only be read once the first response that wrote it has started, so agents that start at the same moment can't read each other's. The cache prefix runs tools, then system prompt, then messages, and an agent type's definition is its system prompt. Agents of different types share the tools and nothing more.
+
+What that looked like in our logs:
+
+| A subagent's first call, when it started | Read the cache |
+|---|---|
+| Together with its siblings | 45 of 184 |
+| After one of the same type had answered | 11 of 11 |
+| After one of a different type only | 2 of 7 |
+
+All 5 misses in the last row were custom agents started after a general-purpose one. They read 0 tokens from the cache and wrote about 59K, against about 30K for one that started warm. And subagents only get the 5-minute cache.
+
+So when several agents of one type (and model) start together, the first goes straight away and the rest wait until it starts answering. Then they go, and read what it wrote. Different types never wait on each other. The wait happens in the Agent tool's spawn, so the lead's message of Agent calls comes back once the held ones have started, usually a few seconds after the first one.
+
+When they're let go:
+
+- **The first one starts answering.** The normal case. The feed says `held 3 Explore agents 41 s for the first to answer`.
+- **4 minutes pass.** So they still start inside the 5-minute window: `held 3 Explore agents 240 s, let go at the 4 min limit`.
+- **The first one stops without answering** (it failed or was cancelled): `held 2 Explore agents 12 s, let go when the first stopped without answering`.
+- **The first one's spawn is refused.** The next one in the queue takes its place and goes.
+
+Once one of a type has answered, more of that type start straight away for the next 5 minutes. Forks, resumed agents and teammates are never held. The run report lists every hold under Cache holds.
+
+How does it wait? A Claude Code hook gets 10 seconds of its own time, and a sleep counts against it, but a call to an MCP server doesn't. So a held spawn waits in one-second calls to the plugin's own server (`omnis_wait`, internal). If the server isn't there, it waits on its own budget for up to 7 seconds and then lets the agent go. Whatever goes wrong, the agent starts.
+
+What it doesn't do: check that a held agent then reads the cache. The report says what was held, not what it saved, though the token counts on an agent's spotlight card show its reads. `cacheHold: off` turns it off.
+
 ## The run report
 
 Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
@@ -325,7 +355,7 @@ What it doesn't do: assign or spawn anything. OmnisSwarm says what's ready and m
 
 ## Settings
 
-Eleven of them, all in `userConfig`:
+Twelve of them, all in `userConfig`:
 
 - `panel`: `command` (the default) opens the pane only when you ask, with `/omnis pane` or `/omnis-swarm:watch`. `auto` also opens it when a swarm starts. `off` never opens it.
 - `billing`: `auto` (the default) works it out: a subscription once Claude Code reports your 5-hour or 7-day usage window, pay-as-you-go otherwise. `subscription` turns the dollar limits off. `api` keeps every limit on.
@@ -337,6 +367,7 @@ Eleven of them, all in `userConfig`:
 - `gateCommand`: the command the gate runs. Empty by default, which means it's detected from the project's files.
 - `gateMinutes`: the gate's time limit, 1 to 60 minutes. Default 10.
 - `scopeFence`: `block` (the default) refuses an edit outside the files a subagent's task owns. `warn` lets the edit go ahead and tells the lead. `off` turns the fence off.
+- `cacheHold`: `on` (the default) holds agents of one type that start together until the first one answers, 4 minutes at most. `off` starts them all at once.
 - `modelHints`: `on` (the default) shows which models past runs did well on, from this project and across projects. `project` uses this project's runs only and keeps nothing outside it. `off` keeps no history and shows no hints.
 
 Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omnis budget <usd>` changes the budget of the swarm that's running and leaves the setting alone.

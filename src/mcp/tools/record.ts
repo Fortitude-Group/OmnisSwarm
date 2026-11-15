@@ -4,7 +4,7 @@
  * unguarded, so this checks everything itself (spec section 6). It builds each event's data
  * afresh from known fields, so nothing else the caller sends reaches the log.
  */
-import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, FENCE_MODES, GUARD_LIMITS, GUARD_MAX, LIMITS, NAME, STUCK_PATTERNS, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
+import { AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, FENCE_MODES, GUARD_LIMITS, HOLD_REASONS, GUARD_MAX, LIMITS, NAME, STUCK_PATTERNS, TOOL_KINDS, makeEvent, serialise, type EventData } from '../../core/events.ts'
 import { appendEvent } from '../../core/log.ts'
 import { RECORDER_TYPES, RECORD_TOOL, SESSION_ID, type RecorderType } from '../../core/recording.ts'
 import type { Args, ToolDef } from '../protocol.ts'
@@ -21,6 +21,9 @@ const MAX_USAGE = 1e9
 const AHEAD_MS = 5 * 60_000
 const BEHIND_MS = 24 * 3_600_000
 const MAX_FENCE_TASKS = 20
+/** The most siblings one hold counts, and the longest it lasts (the mod lets go at 4 minutes). */
+const MAX_HELD = 1000
+const MAX_HELD_MS = 3_600_000
 /** The longest error text an agent.tool end keeps. */
 export const MAX_ERROR = 160
 const FAILED = 'Could not record the event in .omnis-swarm/ (see the server log).'
@@ -157,6 +160,13 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     }
     case 'guard.blocked':
       return { value: measure(d, 'value', 0), threshold: measure(d, 'threshold', 1e-9) }
+    case 'spawn.held': {
+      const phase = oneOf(d, 'phase', ['start', 'end'] as const)
+      const held = { role: text(d, 'role', 64, true), phase, count: count(d, 'count', MAX_HELD), ms: count(d, 'ms', MAX_HELD_MS) }
+      if (phase === 'end') return { ...held, why: oneOf(d, 'why', HOLD_REASONS) }
+      if (d.why !== undefined) throw new InputError('data.why is only allowed on an end')
+      return held
+    }
     case 'session.measure': {
       const usd = d.costUsd
       if (usd !== undefined && (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0 || usd > MAX_USD)) {
@@ -199,7 +209,7 @@ export function createRecordTools(ctx: ToolContext): ToolDef[] {
       const dropped = args.dropped === undefined ? 0 : count(args, 'dropped')
       const data = dataFor(type, args.data)
       const agentLevel = type === 'guard.nudged' || type === 'clash.blocked' || type === 'fence.blocked' || type === 'agent.stuck' || (type === 'guard.warned' && (data as EventData['guard.warned']).limit !== 'swarmCost')
-      const swarmLevel = type === 'budget.set' || type === 'guard.blocked' || (type === 'guard.warned' && !agentLevel)
+      const swarmLevel = type === 'budget.set' || type === 'guard.blocked' || type === 'spawn.held' || (type === 'guard.warned' && !agentLevel)
       if (agentLevel && agent === undefined) throw new InputError(type === 'clash.blocked' || type === 'fence.blocked' || type === 'agent.stuck' ? `${type} needs agent` : `${type} for an agent limit needs agent`)
       if (swarmLevel && agent !== undefined) throw new InputError(`${type} is about the swarm and takes no agent`)
       if (dropped > 0) Object.assign(data, { dropped })
