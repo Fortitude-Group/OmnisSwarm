@@ -11,7 +11,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - [Quick start](#quick-start)
 - [Sharing it](#sharing-it) and [Updating](#updating)
 - [Commands](#commands), [the tool counts](#the-tool-counts) and [Tools the lead uses](#tools-the-lead-uses)
-- How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
+- How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [spawn hold](#the-spawn-hold) (and [what it saves](#what-the-spawn-hold-saves)), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
 - [Settings](#settings), [Limits](#limits), [What it runs and what it sends](#what-it-runs-and-what-it-sends)
 
 ## What it does
@@ -23,7 +23,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - **A clash guard.** Two live agents can't edit the same file. The second one is told who has it.
 - **A scope fence.** Give a task the files it owns and its agent can't edit anything else.
 - **A verification gate.** A task can't be marked done while the build or tests fail. The gate is found from your project (`npm run check`, `npm test`, `dotnet test` and so on) and needs your permission rules to allow it.
-- **A spawn hold.** Start several agents of one type together and the first goes alone. The rest wait until it starts answering (4 minutes at most), then read the cache it wrote instead of each writing their own.
+- **A spawn hold.** Start several agents of one type together and the first goes alone. The rest wait until it starts answering (4 minutes at most), then read the cache it wrote instead of each writing their own. That roughly halves what each held agent's first call costs ([the sums are below](#what-the-spawn-hold-saves)).
 - **Stuck nudges and handoff notes.** An agent failing over and over, or going round in circles, gets nudged once. Stuck again? It's told to stop, and a note of what it tried, what failed and what it touched goes into memory for whoever picks the task up.
 - **Ready tasks.** When a task closes, the lead is told which tasks it unblocked, and which ones are now stranded behind a failure.
 - **Run reports.** Every run leaves a short markdown report: who ran, how long, roughly what it cost, files edited, what went wrong and the tasks.
@@ -246,6 +246,27 @@ Once one of a type has answered, more of that type start straight away for the n
 How does it wait? A Claude Code hook gets 10 seconds of its own time, and a sleep counts against it, but a call to an MCP server doesn't. So a held spawn waits in one-second calls to the plugin's own server (`omnis_wait`, internal). If the server isn't there, it waits on its own budget for up to 7 seconds and then lets the agent go. Whatever goes wrong, the agent starts.
 
 What it doesn't do: check that a held agent then reads the cache. The report says what was held, not what it saved, though the token counts on an agent's spotlight card show its reads. `cacheHold: off` turns it off.
+
+### What the spawn hold saves
+
+Why bother making agents wait? Money. Writing to the cache costs MORE than plain input (1.25 times the input price for the 5-minute cache), and reading from it costs almost nothing (a twentieth of the input price on Opus 5.5 and Sonnet 5.5). So an agent that starts cold and writes everything itself pays top whack, and one that starts warm pays the write on its own part only.
+
+Take the numbers from our logs above. A cold first call writes about 59K tokens. A warm one writes about 30K and reads the other 29K or so from the cache. At Anthropic's list prices (November 2026):
+
+| Model | Cold first call | Warm first call | Saved per held agent |
+|---|---|---|---|
+| Opus 5.5 ($4 per million input) | $0.30 | $0.16 | about $0.14 |
+| Sonnet 5.5 ($2 per million input) | $0.15 | $0.08 | about $0.07 |
+| Haiku 5.5 ($0.10 per million input) | $0.007 | $0.004 | under half a cent |
+
+Start five Opus agents in one message and four of them are held, so that's about 55 cents saved on one message. Doesn't sound like much? A lead fanning out like that 20 times in a day's work is about $11 a day, for waiting a few seconds each time. On Haiku it's pocket change, to be fair.
+
+A few honest caveats:
+
+- **It's the first call only.** After that every agent reads its own cache whether it was held or not. The saving is in not paying for the same system prompt and tools five times over.
+- **The figures are worked out, not metered.** They're the 59K and 30K from our logs times the list price. Your agents' prompts will be bigger or smaller, and the saving scales with them.
+- **On a subscription there's no bill to shrink.** The tokens still come out of your usage limits, but we haven't measured what holding does to those.
+- **What you pay instead is time.** The lead's message of Agent calls comes back once the held agents have started, which is the first agent's time to its first token plus a second or so.
 
 ## The run report
 
