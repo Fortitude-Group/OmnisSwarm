@@ -1,5 +1,6 @@
 # OmnisSwarm
 
+**Measured on our own swarms, 4 runs, 15 to 18 Nov 2026:** every held agent read 19K to 33K tokens from the cache on its first call (7 of 7). The agent that went first read 0 every time. For general-purpose agents that cut the first call's cache write from 60K to 27K. The [spawn hold](#the-spawn-hold) does it, and [what it saves](#what-the-spawn-hold-saves) has the sums.
 
 ![A swarm replayed in the pane: the lead starts a tester and two readers, they finish and grey out, and a late agent joins](assets/demo.gif)
 OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
