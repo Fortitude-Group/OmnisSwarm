@@ -112,7 +112,7 @@ What changed in each release is in the [changelog](docs/CHANGELOG.md).
 | `/omnis budget [usd]` | Shows the limits and spend so far, or sets the swarm budget. |
 | `/omnis report` | Writes the run report now. |
 | `/omnis hints` | Shows which models past runs did well on. |
-| `/omnis models` | Shows the model default rules and what they've done this swarm. Also turns them on or off and edits them. |
+| `/omnis models` | Shows the model default rules and what they've done this session. Also turns them on or off and edits them. |
 | `/omnis-swarm:watch` | Same as `/omnis pane`, and tells you why if there's no pane to open. |
 
 The small print:
@@ -124,7 +124,7 @@ The small print:
 - `/omnis budget <usd>` takes anything above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
 - `/omnis report` doesn't wait for the swarm to go quiet.
 - `/omnis hints` shows a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
-- `/omnis models` shows whether model defaults are on, the rules numbered in the order they're tried, any rule that didn't parse, and how many agents this swarm has had a model filled in. `/omnis models on` and `off` switch it, `/omnis models add <rule>` adds a rule, `/omnis models remove <n>` takes out rule `n`, and `/omnis models reset` puts the default rules back. Each one saves the setting and applies straight away.
+- `/omnis models` shows whether model defaults are on, the rules numbered in the order they're tried, any rule that didn't parse, and how many agents have had a model filled in this session. `/omnis models on` and `off` switch it (turning it on in a session that started with it off applies from the next session), `/omnis models add <rule>` adds a rule as rule 1, `/omnis models remove <n>` takes out rule `n`, and `/omnis models reset` puts the default rules back. Each one saves the setting and applies straight away.
 - `/omnis-swarm:watch` doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
 
 ## The tool counts
@@ -324,15 +324,15 @@ Why not just `build`? We tried it against the 44. Words starting with "build" (a
 
 It isn't a refusal, so it works the same on a subscription as on an API key.
 
-**Seeing what it did.** The pane's feed gets a line for each one, like `put Explore agent on sonnet (Explore = sonnet)`. The run report has a Model defaults section, one line per type, model and rule, with how many agents each covered. And `/omnis models` shows the rules and how many agents this swarm has had a model filled in. The recorder also logs the model every response comes back on, so the log says whether an agent really moved.
+**Seeing what it did.** The pane's feed gets a line for each one, like `put Explore agent on sonnet (Explore = sonnet)`. The run report has a Model defaults section, one line per type, model and rule, with how many agents each covered. And `/omnis models` shows the rules and how many agents have had a model filled in since the session started. The recorder also logs the model every response comes back on, so the log says whether an agent really moved.
 
-**Turning it off.** `/omnis models off`, or set `modelDefaults` to `off` in `/config`. For one call, have the lead pass `model` and it's left alone. For one type, add a `<type> = none` rule above the one that would match it (`/omnis models` numbers them, so you can see where it landed).
+**Turning it off.** `/omnis models off`, or set `modelDefaults` to `off` in `/config`. For one call, have the lead pass `model` and it's left alone. For one type, `/omnis models add <type> = none`: a rule you add goes first, so it wins.
 
 What it doesn't do, yet:
 
 - **It can't see every agent.** Agents defined with `--agents` or in managed settings aren't read. If one of those shares a name with a built-in or a file it can read, it's judged by that one instead.
 - **It only knows the description.** That's a few words the lead chose. The rules catch mechanical chores. A general-purpose agent whose description is a title ("Build film mode core") stays on the lead's model unless a rule names it. With 37 of the 44 being general-purpose, that's where most of the Opus still goes.
-- **We haven't measured it on real runs yet.** [[RUN: agents given a model by the defaults, and how many of those finished clean, from the first real runs on 0.8.0]]
+- **It's had one real run, not a week of them.** A headless session on 0.8.0 (23 Nov 2026), lead on Opus, seven Agent calls in one message, six of which started (claude-code-guide isn't there in a headless session). Both Explore agents and the general-purpose one described "Check the tests" had Sonnet filled in, and every one of their responses came back from Sonnet, going by Claude Code's session logs. The general-purpose agent no rule matched, the Plan agent and the one that passed `model: opus` all answered on Opus. That proves the mechanism. What it saves, and whether Sonnet does as well on that work, needs real days of use. Check your own with `node scripts/subagent-models.mjs --from <date>`.
 
 ## The run report
 

@@ -16,7 +16,9 @@ The fix: when an Agent call names no model, OmnisSwarm now fills one in from a f
 
 We left `build` out of the default words on purpose. Against those 44 calls it would have moved 13 agents, 7 of them general-purpose ones titled things like "Build film mode core", which were feature work, not running the build. The narrower words move 6, all Explore.
 
-The caveats. Agents defined with `--agents` or in managed settings aren't read, so one that shares a name with a built-in or an agent file is judged by that one. The rules only see the call's description, so a general-purpose agent with a title for a description stays on the lead's model. And we haven't measured it on real runs yet: [[RUN: agents given a model by the defaults, and how many of those finished clean, from the first real runs on 0.8.0]]
+The caveats. Agents defined with `--agents` or in managed settings aren't read, so one that shares a name with a built-in or an agent file is judged by that one. The rules only see the call's description, so a general-purpose agent with a title for a description stays on the lead's model. With 37 of the 44 being general-purpose, that's where most of the Opus still goes.
+
+Did it work? One real run so far, on 23 Nov: a headless Claude Code session on 0.8.0, the lead on Opus, seven Agent calls in one message. Six started (claude-code-guide doesn't exist in a headless session, so that one never ran). Three had a model filled in, both Explore agents and a general-purpose one described "Check the tests", and all three answered on Sonnet, every response, going by Claude Code's own session logs. The other three answered on Opus, as they should: a general-purpose agent no rule matched, a Plan agent, and one that passed `model: opus`. The second Explore agent was held 147 ms for the first one to answer, so the spawn hold grouped them on Sonnet. It was six tiny tasks, so it shows the thing works. It says nothing yet about savings or quality, and we won't pretend it does.
 
 ## 0.7.0
 
