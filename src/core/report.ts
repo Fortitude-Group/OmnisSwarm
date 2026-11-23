@@ -1,5 +1,5 @@
 /** The run report (spec section 4.2): plain markdown from the folded state. Pure. */
-import { LEAD, holdText, limitText, type AgentState, type SwarmState } from './fold.ts'
+import { LEAD, holdText, limitText, type AgentState, type DefaultRec, type SwarmState } from './fold.ts'
 import { TASK_STATES } from './events.ts'
 import { strandedBy } from './ready.ts'
 import { fileClashes, totalTokens } from './stats.ts'
@@ -82,6 +82,18 @@ function holds(s: SwarmState): string[] {
   })
 }
 
+/** One line per role, model and rule, in the order first seen, with how many agents it put on that model. */
+function defaults(s: SwarmState): string[] {
+  const groups = new Map<string, { d: DefaultRec; n: number }>()
+  for (const d of s.defaults ?? []) {
+    const key = JSON.stringify([d.role, d.model, d.rule])
+    const g = groups.get(key)
+    if (g === undefined) groups.set(key, { d, n: 1 })
+    else g.n++
+  }
+  return [...groups.values()].map(({ d, n }) => `- ${n} ${md(d.role)} agent${n === 1 ? '' : 's'} put on ${d.model} by "${md(d.rule)}".`)
+}
+
 const GATE_WORDS: Record<string, string> = { passed: '✓', failed: '✕ failed', timeout: '✕ timed out', error: '✕ error', skipped: 'skipped', none: 'no gate' }
 
 /** One line per task that ran a gate: its last five results, oldest first. The fold keeps no seconds, so none are shown. */
@@ -137,7 +149,7 @@ export function reportMarkdown(s: SwarmState, nowMs: number, tzOffsetMin: number
     const name = a.id === LEAD ? 'main' : a.name
     lines.push(`| ${md(name)} | ${md(a.role)} | ${outcome(a)} | ${minutes(runMs(a, s.swarm.endedAt ?? nowMs))} min | ${cost} | ${int(totalTokens(a.tokens))} | ${filesEdited(s, a.id)} |`)
   }
-  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Cache holds', holds(s)], ['Tasks', tasks(s)], ['Gates', gates(s)], ['Hints', hints.map(l => `- ${md(l)}`)]] as const) {
+  for (const [title, body] of [['Problems', problems(s)], ['Routing', routing(s)], ['Cache holds', holds(s)], ['Model defaults', defaults(s)], ['Tasks', tasks(s)], ['Gates', gates(s)], ['Hints', hints.map(l => `- ${md(l)}`)]] as const) {
     if (body.length > 0) lines.push('', `## ${title}`, '', ...body)
   }
   return `${lines.join('\n')}\n`
