@@ -1,7 +1,7 @@
 /** Folds log events into SwarmState. Deterministic and free of I/O. `fold` mutates for speed. */
 import {
-  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, HOLD_REASONS, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
-  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type HoldReason, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
+  AGENT_OUTCOMES, BUDGET_KEYS, BUDGET_MAX, CLASH_MODES, GUARD_LIMITS, GUARD_MAX, HOLD_REASONS, MODEL_ALIASES, STUCK_PATTERNS, TOOL_KINDS, TOPOLOGIES, isOneOf, isSafeKey,
+  type AgentOutcome, type BudgetKey, type GateResult, type GuardLimit, type HandoffWhy, type HoldReason, type ModelAlias, type StuckPattern, type SwarmEvent, type TaskState, type ToolKind, type Topology,
 } from './events.ts'
 import { foldAgentTool } from './fold-agents.ts'
 import { foldTasks } from './fold-tasks.ts'
@@ -21,6 +21,7 @@ export const MAX_SAMPLES = 30
 export const MAX_RECENT = 5
 export const MAX_EDITS = 10
 export const MAX_HOLDS = 20
+export const MAX_DEFAULTS = 200
 const SPEND_KEEP_MS = 600_000
 /** A clash.blocked marks the refused agent's own edit entry when the recorder's start for it is this close. */
 const CLASH_MATCH_MS = 5_000
@@ -110,6 +111,8 @@ export type TaskEntry = {
 }
 /** One ended spawn hold: how many agents of `role` waited, for how long, and why they were let go. */
 export type HoldRec = { role: string; count: number; ms: number; why: HoldReason; at: number }
+/** One agent put on a model by the model defaults: its type, the alias, the rule that matched, and the agent id. */
+export type DefaultRec = { role: string; model: ModelAlias; rule: string; agent: string; at: number }
 export type FeedItem = { at: number; kind: 'agent' | 'message' | 'memory' | 'task'; agent: string; text: string; to?: string }
 export type SwarmInfo = {
   id: string; name: string; topology: Topology; goal: string | null; implicit: boolean
@@ -144,6 +147,8 @@ export type SwarmState = {
   lastReport?: { path: string; at: number }
   /** The last MAX_HOLDS ended spawn holds, oldest first; absent until the first. */
   holds?: HoldRec[]
+  /** The last MAX_DEFAULTS model defaults, oldest first; absent until the first. */
+  defaults?: DefaultRec[]
 }
 
 export function emptyState(id: string): SwarmState {
@@ -266,6 +271,9 @@ export function holdText(h: Pick<HoldRec, 'role' | 'count' | 'ms' | 'why'>): str
   if (h.why === 'timeout') return `${held}, let go at the 4 min limit`
   return `${held}, let go when the first stopped without answering`
 }
+
+/** A model default in words, for the feed. */
+export const defaultText = (d: Pick<DefaultRec, 'role' | 'model' | 'rule'>): string => `put ${d.role} agent on ${d.model} (${d.rule})`
 
 export function feed(state: SwarmState, item: FeedItem): void {
   state.feed.push(item)
@@ -508,6 +516,18 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
       holds.push(h)
       trim(holds, MAX_HOLDS)
       feed(state, { at, kind: 'agent', agent: LEAD, text: holdText(h) })
+      break
+    }
+    case 'model.defaulted': {
+      const d = e.data
+      const role = text(d.role, 64)
+      const rule = text(d.rule, 120)
+      if (role === '' || rule === '' || !isOneOf(MODEL_ALIASES, d.model) || e.agent === undefined || !isSafeKey(e.agent)) break
+      const rec: DefaultRec = { role, model: d.model, rule, agent: e.agent, at }
+      const defaults = (state.defaults ??= [])
+      defaults.push(rec)
+      trim(defaults, MAX_DEFAULTS)
+      feed(state, { at, kind: 'agent', agent: LEAD, text: defaultText(rec) })
       break
     }
     case 'report.written': {
