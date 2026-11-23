@@ -12,7 +12,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - [Quick start](#quick-start)
 - [Sharing it](#sharing-it) and [Updating](#updating)
 - [Commands](#commands), [the tool counts](#the-tool-counts) and [Tools the lead uses](#tools-the-lead-uses)
-- How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [spawn hold](#the-spawn-hold) (and [what it saves](#what-the-spawn-hold-saves)), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
+- How each part works: [budget guard](#the-budget-guard), [clash guard](#the-clash-guard), [stuck nudges](#stuck-nudges), [handoff notes](#handing-on-a-stuck-task), [spawn hold](#the-spawn-hold) (and [what it saves](#what-the-spawn-hold-saves)), [model defaults](#model-defaults), [run report](#the-run-report), [model hints](#model-hints), [verification gate](#the-verification-gate), [scope fence](#the-scope-fence), [ready tasks](#ready-tasks)
 - [Settings](#settings), [Limits](#limits), [What it runs and what it sends](#what-it-runs-and-what-it-sends)
 
 ## What it does
@@ -25,6 +25,7 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - **A scope fence.** Give a task the files it owns and its agent can't edit anything else.
 - **A verification gate.** A task can't be marked done while the build or tests fail. The gate is found from your project (`npm run check`, `npm test`, `dotnet test` and so on) and needs your permission rules to allow it.
 - **A spawn hold.** Start several agents of one type together and the first goes alone. The rest wait until it starts answering (4 minutes at most), then read the cache it wrote instead of each writing their own. That roughly halves what each held agent's first call costs ([the sums are below](#what-the-spawn-hold-saves)).
+- **Model defaults.** The lead starts an agent and names no model? It runs on the lead's model, which is usually Opus. So OmnisSwarm fills one in from a few rules (Explore agents and tests, lints and commits go to Sonnet), only ever a cheaper one, and never over a model someone actually chose. [How it decides](#model-defaults).
 - **Stuck nudges and handoff notes.** An agent failing over and over, or going round in circles, gets nudged once. Stuck again? It's told to stop, and a note of what it tried, what failed and what it touched goes into memory for whoever picks the task up.
 - **Ready tasks.** When a task closes, the lead is told which tasks it unblocked, and which ones are now stranded behind a failure.
 - **Run reports.** Every run leaves a short markdown report: who ran, how long, roughly what it cost, files edited, what went wrong and the tasks.
@@ -90,13 +91,15 @@ Just send them the link: https://github.com/Fortitude-Group/OmnisSwarm. The repo
 
 ## Updating
 
-The version is pinned (0.7.0 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
+The version is pinned (0.8.0 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
 
 ```
 /plugin update omnis-swarm
 ```
 
 Or from a terminal, `claude plugin update omnis-swarm@omnis-swarm`. Then restart Claude Code, or run `/reload-plugins`, so the new server and pane load.
+
+What changed in each release is in the [changelog](docs/CHANGELOG.md).
 
 ## Commands
 
@@ -109,6 +112,7 @@ Or from a terminal, `claude plugin update omnis-swarm@omnis-swarm`. Then restart
 | `/omnis budget [usd]` | Shows the limits and spend so far, or sets the swarm budget. |
 | `/omnis report` | Writes the run report now. |
 | `/omnis hints` | Shows which models past runs did well on. |
+| `/omnis models` | Shows the model default rules and what they've done this session. Also turns them on or off and edits them. |
 | `/omnis-swarm:watch` | Same as `/omnis pane`, and tells you why if there's no pane to open. |
 
 The small print:
@@ -120,6 +124,7 @@ The small print:
 - `/omnis budget <usd>` takes anything above 0 and at most 1000 (`30`, `$30` and `2.50` all work). With no swarm running, it applies to the next one.
 - `/omnis report` doesn't wait for the swarm to go quiet.
 - `/omnis hints` shows a table of role, model, runs, clean runs, average cost and minutes, then the hint lines. With `modelHints` off it says so.
+- `/omnis models` shows whether model defaults are on, the rules numbered in the order they're tried, any rule that didn't parse, and how many agents have had a model filled in this session. `/omnis models on` and `off` switch it (turning it on in a session that started with it off applies from the next session), `/omnis models add <rule>` adds a rule as rule 1, `/omnis models remove <n>` takes out rule `n`, and `/omnis models reset` puts the default rules back. Each one saves the setting and applies straight away.
 - `/omnis-swarm:watch` doubles as a fallback: if mods aren't running in your session, Claude tells you there's no pane to open and that policy settings such as `disableAllHooks`, `allowManagedHooksOnly` or `allowManagedModsOnly` turn them off.
 
 ## The tool counts
@@ -269,9 +274,69 @@ A few honest caveats:
 - **On a subscription there's no bill to shrink.** The tokens still come out of your usage limits, but we haven't measured what holding does to those.
 - **What you pay instead is time.** The lead's message of Agent calls comes back once the held agents have started, which is the first agent's time to its first token plus a second or so.
 
+## Model defaults
+
+A confession first. Our own `CLAUDE.md` tells the lead to pass a cheaper model for builds, tests and commits. So we counted what it actually did, in our Claude Code logs from 13 to 20 Nov 2026, with `scripts/subagent-models.mjs`. That script reads the model each subagent's own responses were answered by, so it's what ran, not what was asked for.
+
+- **55 Agent calls.** 9 passed `model: sonnet`, and those 9 answered on Sonnet, 256 requests between them. 2 passed `opus`.
+- **44 passed no model at all.** 43 of those answered on Opus, the main session's model. The one on Haiku was claude-code-guide, whose built-in definition already sets Haiku.
+- **The 44 by type:** general-purpose 37, Explore 6, claude-code-guide 1.
+
+So the lead followed the rule 9 times in 55, about one call in six. A written rule is a request. This turns it into a control: when an Agent call names no model, OmnisSwarm fills one in from a short list of rules, and only ever a cheaper one.
+
+**How it decides.** When the lead starts an agent and names no model, it goes down this list and stops at the first thing that says leave it alone:
+
+1. `CLAUDE_CODE_SUBAGENT_MODEL` or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set. You've chosen, so it leaves it.
+2. It looks for the first rule that matches the agent's type and the call's description. No match, or the match says `none`? It leaves it.
+3. It reads the agent type's own definition. If that sets a `model` (any value, `inherit` included), or the type can't be found at all, it leaves it. It looks in the project's `.claude/agents/` (walking up from the working directory, subfolders too), then `agents/` in your Claude Code config folder, then for a `<plugin>:<name>` type that plugin's `agents/` folder. It knows the built-ins as well: claude-code-guide and web-fetch are on Haiku and statusline-setup on Sonnet, so they're left alone, while general-purpose, Explore, Plan and `claude` follow the lead.
+4. The rule's model isn't cheaper than the lead's. The order is Haiku, Sonnet, Opus, then Fable and Mythos, and a model it doesn't recognise counts as not cheaper. A default never makes an agent dearer.
+5. Otherwise the agent starts on the rule's model.
+
+If anything goes wrong on the way (a file that won't read, a setting that won't parse), the call goes ahead exactly as the lead made it. And the default is filled in before the [spawn hold](#the-spawn-hold) looks at the call, so the hold groups agents on the model they'll really answer on.
+
+**The rules.** They live in the `modelDefaultRules` setting, split by `;` or new lines. Each one is `<type> = <model>` or `<type> ~ <words> = <model>`:
+
+- `<type>` is an agent type as the Agent call names it, ignoring case, or `*` for any type.
+- `<words>` is a comma-separated list of words or phrases. The rule matches when the call's description contains one of them as whole words, ignoring case.
+- `<model>` is `haiku`, `sonnet`, `opus`, `fable`, or `none`, which means leave it alone and stop looking.
+
+The first rule that matches wins. At most 20 rules, 30 words each. A rule that doesn't parse is skipped, and `/omnis models` shows you which. The defaults:
+
+```
+Plan = none
+* ~ review, security, audit = none
+Explore = sonnet
+* ~ test, tests, testing, commit, commits, lint, linting, format, formatting, typecheck, run the build, build and test = sonnet
+```
+
+Order matters. An Explore agent described as a security review hits the second rule before it gets anywhere near the third, so it stays on the lead's model.
+
+Why not just `build`? We tried it against the 44. Words starting with "build" (and test, commit, lint, format) would have moved 13 of them, and 7 of those were general-purpose agents titled things like "Build chapter verse1" and "Build film mode core". Those were creative and feature work, not running the build. The narrower words move 6, all Explore. And there's no `claude-code-guide = haiku` rule because its definition already sets Haiku, so step 3 leaves it alone anyway.
+
+**What's never touched:**
+
+- an Agent call that passes `model`, whatever it passes
+- an agent whose own definition sets `model`, `inherit` included
+- anything at all while `CLAUDE_CODE_SUBAGENT_MODEL` or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set
+- Plan agents, and anything whose description says review, security or audit (that's the default rules, so you can change it)
+- forks, resumed agents, teammates and workflow agents
+- any agent whose rule's model isn't cheaper than the lead's
+
+It isn't a refusal, so it works the same on a subscription as on an API key.
+
+**Seeing what it did.** The pane's feed gets a line for each one, like `put Explore agent on sonnet (Explore = sonnet)`. The run report has a Model defaults section, one line per type, model and rule, with how many agents each covered. And `/omnis models` shows the rules and how many agents have had a model filled in since the session started. The recorder also logs the model every response comes back on, so the log says whether an agent really moved.
+
+**Turning it off.** `/omnis models off`, or set `modelDefaults` to `off` in `/config`. For one call, have the lead pass `model` and it's left alone. For one type, `/omnis models add <type> = none`: a rule you add goes first, so it wins.
+
+What it doesn't do, yet:
+
+- **It can't see every agent.** Agents defined with `--agents` or in managed settings aren't read. If one of those shares a name with a built-in or a file it can read, it's judged by that one instead.
+- **It only knows the description.** That's a few words the lead chose. The rules catch mechanical chores. A general-purpose agent whose description is a title ("Build film mode core") stays on the lead's model unless a rule names it. With 37 of the 44 being general-purpose, that's where most of the Opus still goes.
+- **It's had one real run, not a week of them.** A headless session on 0.8.0 (23 Nov 2026), lead on Opus, seven Agent calls in one message, six of which started (claude-code-guide isn't there in a headless session). Both Explore agents and the general-purpose one described "Check the tests" had Sonnet filled in, and every one of their responses came back from Sonnet, going by Claude Code's session logs. The general-purpose agent no rule matched, the Plan agent and the one that passed `model: opus` all answered on Opus. That proves the mechanism. What it saves, and whether Sonnet does as well on that work, needs real days of use. Check your own with `node scripts/subagent-models.mjs --from <date>`.
+
 ## The run report
 
-Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
+Every run leaves a short markdown report in `.omnis-swarm/reports/<swarm>-<yyyymmdd>-<hhmm>.md`. It covers who ran, the outcome, time, approximate cost, tokens, files edited, problems (budget guard, clashes, stuck nudges, failures), cache holds, model defaults, routing savings if OmnisRouter answered, and tasks. It's written when a run goes quiet (30 seconds after the last subagent finishes), when `omnis_swarm_end` is called, and on `/omnis report`. The lead gets a one-line pointer, not the report.
 
 ## Model hints
 
@@ -377,7 +442,7 @@ What it doesn't do: assign or spawn anything. OmnisSwarm says what's ready and m
 
 ## Settings
 
-Twelve of them, all in `userConfig`:
+Fourteen of them, all in `userConfig`:
 
 - `panel`: `command` (the default) opens the pane only when you ask, with `/omnis pane` or `/omnis-swarm:watch`. `auto` also opens it when a swarm starts. `off` never opens it.
 - `billing`: `auto` (the default) works it out: a subscription once Claude Code reports your 5-hour or 7-day usage window, pay-as-you-go otherwise. `subscription` turns the dollar limits off. `api` keeps every limit on.
@@ -390,6 +455,8 @@ Twelve of them, all in `userConfig`:
 - `gateMinutes`: the gate's time limit, 1 to 60 minutes. Default 10.
 - `scopeFence`: `block` (the default) refuses an edit outside the files a subagent's task owns. `warn` lets the edit go ahead and tells the lead. `off` turns the fence off.
 - `cacheHold`: `on` (the default) holds agents of one type that start together until the first one answers, 4 minutes at most. `off` starts them all at once.
+- `modelDefaults`: `on` (the default) gives a subagent a model from `modelDefaultRules` when the lead names none, the rule's model is cheaper than the lead's and the agent's own definition sets none. `off` leaves every subagent on the model it would have got anyway.
+- `modelDefaultRules`: the rules, split by `;` or new lines, each `<type> = <model>` or `<type> ~ <words> = <model>`. The first match wins. The default is the four rules under [Model defaults](#model-defaults). `/omnis models` shows and edits them.
 - `modelHints`: `on` (the default) shows which models past runs did well on, from this project and across projects. `project` uses this project's runs only and keeps nothing outside it. `off` keeps no history and shows no hints.
 
 Change them in `/config`, or under `/plugin` → OmnisSwarm → configure. `/omnis budget <usd>` changes the budget of the swarm that's running and leaves the setting alone.

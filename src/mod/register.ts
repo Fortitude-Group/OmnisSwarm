@@ -5,6 +5,7 @@ import { registerClashGuard } from './clash-guard.ts'
 import { registerFenceGuard } from './fence-guard.ts'
 import { registerGateGuard } from './gate-guard.ts'
 import { registerGuard } from './guard.ts'
+import { registerModelDefault } from './model-default.ts'
 import { registerPane } from './pane.ts'
 import { registerReadyRelay } from './ready-relay.ts'
 import { registerRecorder } from './recorder.ts'
@@ -21,6 +22,8 @@ export const register: Register = (on, options) => {
   registerFenceGuard(on, options)
   registerClashGuard(on, options)
   registerStuckGuard(on)
+  // First outermost: the hold beneath groups on the model this fills in.
+  registerModelDefault(on, options)
   registerSpawnHold(on, options)
   registerPane(on, options)
   registerRunReport(on)

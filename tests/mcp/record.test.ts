@@ -332,6 +332,23 @@ test('spawn.held is recorded about the swarm, a start without why and an end wit
   for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, type: 'spawn.held', ...b }), InputError, JSON.stringify(b))
 })
 
+test('model.defaulted is recorded with an agent, keeps resolved, drops unknown keys, and is refused otherwise', () => {
+  const { call, events } = setup()
+  call({ sessionId: SID, ts: TS, type: 'model.defaulted', agent: 'a2', data: { role: 'Explore', model: 'sonnet', rule: 'Explore = sonnet' } })
+  call({ sessionId: SID, ts: TS, type: 'model.defaulted', agent: 'a3', data: { role: 'Plan', model: 'opus', rule: 'Plan = opus', resolved: 'claude-opus-4-8', extra: 'dropped' } })
+  assert.deepEqual(events(SWARM).slice(-2).map(e => [e.type, e.agent, e.data]), [
+    ['model.defaulted', 'a2', { role: 'Explore', model: 'sonnet', rule: 'Explore = sonnet' }],
+    ['model.defaulted', 'a3', { role: 'Plan', model: 'opus', rule: 'Plan = opus', resolved: 'claude-opus-4-8' }],
+  ])
+  const bad = [
+    { data: { role: 'Explore', model: 'sonnet', rule: 'Explore = sonnet' } },
+    { agent: 'a2', data: { role: 'Explore', model: 'gpt', rule: 'Explore = gpt' } },
+    { agent: 'a2', data: { role: '', model: 'sonnet', rule: 'x' } },
+    { agent: 'a2', data: { role: 'Explore', model: 'sonnet', rule: '' } },
+  ]
+  for (const b of bad) assert.throws(() => call({ sessionId: SID, ts: TS, type: 'model.defaulted', ...b }), InputError, JSON.stringify(b))
+})
+
 test('fence.blocked is recorded with an agent, a path, task ids and a mode, and refused otherwise', () => {
   const { call, events } = setup()
   call({ sessionId: SID, ts: TS, type: 'fence.blocked', agent: 'a2', data: { path: 'src/x.ts', tasks: ['t1', 't12'], mode: 'warn' } })

@@ -1,6 +1,6 @@
 {
   "name": "omnis-swarm",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Swarm coordination for Claude Code: topology, shared memory and a task board, all recorded to an event log that a live, read-only pane draws.",
   "displayName": "OmnisSwarm",
   "repository": "https://github.com/Fortitude-Group/OmnisSwarm",
@@ -62,6 +62,19 @@
       "description": "on (the default): when several agents of one type start together, the first goes and the rest wait until it starts answering (4 minutes at most), so they read its prompt cache. off: they all start at once.",
       "default": "on",
       "options": ["on", "off"]
+    },
+    "modelDefaults": {
+      "type": "string",
+      "title": "Model defaults",
+      "description": "on (the default): a subagent the lead names no model for gets one from the model default rules, when that's cheaper than the lead's and the agent's own file sets none. off: subagents get the model the lead names, else the usual one.",
+      "default": "on",
+      "options": ["on", "off"]
+    },
+    "modelDefaultRules": {
+      "type": "string",
+      "title": "Model default rules",
+      "description": "Rules split by ; each <type> = <model> or <type> ~ <words> = <model>. type is an agent type or *, words a comma list matched in the Agent call's description, model haiku, sonnet, opus, fable or none. The first match wins. /omnis models shows and edits them.",
+      "default": "Plan = none; * ~ review, security, audit = none; Explore = sonnet; * ~ test, tests, testing, commit, commits, lint, linting, format, formatting, typecheck, run the build, build and test = sonnet"
     },
     "budgetSwarmUsd": { "type": "number", "title": "Swarm budget (USD)", "description": "Past this, the lead can't start new agents until you raise it with /omnis budget <usd>; it warns at half. Above 0, at most 1000.", "default": 20 }
   },
