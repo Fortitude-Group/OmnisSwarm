@@ -141,10 +141,9 @@ test('a project agent file with its own model is left alone, one with none is fi
   await spawn($, 'writer', 'Run the tests').p
   await clock.settle()
   expect(seen.started).toEqual(['a1:dev:-', 'a2:writer:sonnet'])
-  // The default rule is 127 characters; the event carries 120, so its words are cut and its model kept.
+  // The default rule is 127 characters and the event carries up to 200, so it's recorded whole.
   const rule = String(defaults(seen)[0]!.data.rule)
-  expect(rule).toBe('* ~ test, tests, testing, commit, commits, lint, linting, format, formatting, typecheck, run the build, build… = sonnet')
-  expect(Array.from(rule).length <= 120).toBe(true)
+  expect(rule).toBe('* ~ test, tests, testing, commit, commits, lint, linting, format, formatting, typecheck, run the build, build and test = sonnet')
 })
 
 test('a user agent file with model: inherit is left alone, one with none is filled', KIT, async ($, on) => {

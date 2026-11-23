@@ -89,7 +89,7 @@ touched, so that's the per-call way out.
 
 `model.defaulted`, recorder, agent-level (`agent` the started agent's id): `{ role, model, rule, resolved? }`. `role`
 the type (≤64), `model` the alias (`haiku`|`sonnet`|`opus`|`fable`), `rule` the matching rule as `/omnis models`
-prints it (≤120), `resolved` the model core answered (≤64).
+prints it (≤200), `resolved` the model core answered (≤64).
 
 The fold keeps the last 200 as `state.defaults` and adds a feed line: `put Explore agent on sonnet (Explore = sonnet)`.
 The run report gets a `Model defaults` section, one line per type, model and rule, with the count.

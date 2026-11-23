@@ -521,7 +521,7 @@ export function fold(state: SwarmState, e: SwarmEvent): SwarmState {
     case 'model.defaulted': {
       const d = e.data
       const role = text(d.role, 64)
-      const rule = text(d.rule, 120)
+      const rule = text(d.rule, 200)
       if (role === '' || rule === '' || !isOneOf(MODEL_ALIASES, d.model) || e.agent === undefined || !isSafeKey(e.agent)) break
       const rec: DefaultRec = { role, model: d.model, rule, agent: e.agent, at }
       const defaults = (state.defaults ??= [])

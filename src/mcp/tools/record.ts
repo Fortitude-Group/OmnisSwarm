@@ -169,7 +169,7 @@ function dataFor(type: RecorderType, d: Args): EventData[RecorderType] {
     }
     case 'model.defaulted': {
       const resolved = d.resolved === undefined ? undefined : text(d, 'resolved', 64, true)
-      return { role: text(d, 'role', 64, true), model: oneOf(d, 'model', MODEL_ALIASES), rule: text(d, 'rule', 120, true), ...(resolved !== undefined && { resolved }) }
+      return { role: text(d, 'role', 64, true), model: oneOf(d, 'model', MODEL_ALIASES), rule: text(d, 'rule', 200, true), ...(resolved !== undefined && { resolved }) }
     }
     case 'session.measure': {
       const usd = d.costUsd

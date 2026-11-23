@@ -91,7 +91,7 @@ Just send them the link: https://github.com/Fortitude-Group/OmnisSwarm. The repo
 
 ## Updating
 
-The version is pinned (0.7.0 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
+The version is pinned (0.8.0 right now) and goes up with each release. Claude Code only picks a release up once that number has moved:
 
 ```
 /plugin update omnis-swarm

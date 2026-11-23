@@ -11,7 +11,7 @@ import { clearAgentDefs, ownModelOf } from './agent-defs.ts'
 import { record } from './recorder.ts'
 
 const ROLE_MAX = 64
-const RULE_MAX = 120
+const RULE_MAX = 200
 const RESOLVED_MAX = 64
 
 export type ModelDefaultsView = {

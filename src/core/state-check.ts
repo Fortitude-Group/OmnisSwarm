@@ -60,7 +60,7 @@ const lastReport = (x: unknown): boolean => exact(x, ['path', 'at']) && str(x.pa
 const holdRec = (x: unknown): boolean =>
   exact(x, ['role', 'count', 'ms', 'why', 'at']) && str(x.role, 64) && num(x.count) && num(x.ms) && isOneOf(HOLD_REASONS, x.why) && num(x.at)
 const defaultRec = (x: unknown): boolean =>
-  exact(x, ['role', 'model', 'rule', 'agent', 'at']) && str(x.role, 64) && isOneOf(MODEL_ALIASES, x.model) && str(x.rule, 120) && str(x.agent, 128) && num(x.at)
+  exact(x, ['role', 'model', 'rule', 'agent', 'at']) && str(x.role, 64) && isOneOf(MODEL_ALIASES, x.model) && str(x.rule, 200) && str(x.agent, 128) && num(x.at)
 /** Keys the state gains only once something happens. */
 const OPTIONAL_STATE_KEYS = ['lastReport', 'holds', 'defaults']
 const STATE_KEYS = ['swarm', 'session', 'agents', 'byName', 'links', 'memory', 'tasks', 'feed', 'edits', 'spend', 'events', 'lastAt', 'gaps', 'budget', 'guard']
