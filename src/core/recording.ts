@@ -2,7 +2,7 @@
 import type { EventData } from './events.ts'
 
 /** The only event types omnis_record accepts. The server writes the swarm, memory and task events itself. */
-export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked', 'clash.blocked', 'agent.stuck', 'fence.blocked', 'spawn.held'] as const
+export const RECORDER_TYPES = ['agent.started', 'agent.finished', 'agent.usage', 'agent.tool', 'message.sent', 'session.measure', 'budget.set', 'guard.warned', 'guard.nudged', 'guard.blocked', 'clash.blocked', 'agent.stuck', 'fence.blocked', 'spawn.held', 'model.defaulted'] as const
 export type RecorderType = (typeof RECORDER_TYPES)[number]
 
 export const RECORD_TOOL = 'omnis_record'
