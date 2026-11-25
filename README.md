@@ -1,13 +1,14 @@
-# OmnisSwarm
+# OmnisSwarm: a Claude Code plugin for multi-agent subagent swarms
 
 **Measured on our own swarms, 4 runs, 15 to 18 Nov 2026:** every held agent read 19K to 33K tokens from the cache on its first call (7 of 7). The agent that went first read 0 every time. For general-purpose agents that cut the first call's cache write from 60K to 27K. The [spawn hold](#the-spawn-hold) does it, and [what it saves](#what-the-spawn-hold-saves) has the sums.
 
 ![A swarm replayed in the pane: the lead starts a tester and two readers, they finish and grey out, and a late agent joins](assets/demo.gif)
-OmnisSwarm gives a Claude Code lead and its agents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
+OmnisSwarm is a Claude Code plugin for multi-agent work. When a lead spawns subagents, it gives the lead and its subagents what a swarm actually needs: a topology, shared memory and a task board. Everything they do goes into an event log in your project, and a live, read-only pane draws that log as it grows. So you watch the swarm work instead of guessing what it's up to.
 
-It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm/` in your project and makes no network calls at all.
+It runs locally, keeps everything under `.omnis-swarm/` in your project and makes no network calls at all.
 
 - [What it does](#what-it-does)
+- [Running Claude Code subagents in parallel without file clashes](#running-claude-code-subagents-in-parallel-without-file-clashes), [multi-agent orchestration with a task board](#claude-code-multi-agent-orchestration-with-a-task-board) and [subagents on their own vs with OmnisSwarm](#subagents-on-their-own-vs-subagents-with-omnisswarm)
 - [What you need](#what-you-need) and [Install](#install)
 - [Quick start](#quick-start)
 - [Sharing it](#sharing-it) and [Updating](#updating)
@@ -31,6 +32,44 @@ It's a Claude Code plugin. It runs locally, keeps everything under `.omnis-swarm
 - **Run reports.** Every run leaves a short markdown report: who ran, how long, roughly what it cost, files edited, what went wrong and the tasks.
 - **Model hints.** Did that reviewer really need Opus? Once there's enough history, a new swarm is told which roles finished just as cleanly on a cheaper model, and which didn't.
 - **Replay and GIFs.** Replay any recorded swarm in the pane at up to 60×, or render it to a looping GIF.
+
+## Running Claude Code subagents in parallel without file clashes
+
+Claude Code's Agent tool already spawns subagents, and you can run a pile of them at once. The trouble starts when two of them edit the same file, or one marks its job done on a broken build and nobody notices. Here's a lead and three subagents, and what OmnisSwarm does at each step:
+
+1. You ask: "Split the auth refactor three ways: token store, middleware, tests. Each in its own git worktree." The lead calls `omnis_swarm_init` (a name, a `hierarchical` topology, a one-line goal).
+2. It calls `omnis_task_create` three times (`t1`, `t2`, `t3`). Each gets an `assignee`, the files it `owns` (`src/tokens/**`, `src/middleware/**`, `tests/**`) and its `worktree`. `t3` `dependsOn` the other two, since there's nothing to test yet.
+3. It spawns the three with the Agent tool in one message. The [spawn hold](#the-spawn-hold) lets the first one go alone and holds the rest until it's answering, so they read its cache instead of each writing their own. The [scope fence](#the-scope-fence) stops each agent editing outside what its task owns, and the [clash guard](#the-clash-guard) refuses an edit to a file another live agent holds.
+4. The token agent writes its interface to `omnis_memory_put` under `design/tokens`. The middleware agent reads it with `omnis_memory_get`. Notes, not whole files.
+5. The agents finish and the lead calls `omnis_task_update` with `done`. The [verification gate](#the-verification-gate) runs your build or tests first. If they fail, the task stays open.
+6. Closing `t1` and `t2` tells the lead `t3` is [ready](#ready-tasks). `omnis_swarm_end` writes the [run report](#the-run-report).
+
+The whole thing is on screen in the pane while it happens. Worktrees are the Agent tool's job. OmnisSwarm records them and checks edits against them, it doesn't create them.
+
+## Claude Code multi-agent orchestration with a task board
+
+Multi-agent orchestration in Claude Code usually means a lead agent keeping the plan in its own context and hoping it doesn't forget. OmnisSwarm moves the plan out of the lead's head and into a task board that lives in the event log under `.omnis-swarm/`.
+
+Each task has an owner, the files it owns, a worktree and its dependencies. `omnis_swarm_status` shows what's pending, active, done or failed, which tasks are ready and which are stranded behind a failure. When a task closes, the lead is told what it unblocked. When an agent gets stuck, it's nudged once, then told to stop, and a handoff note of what it tried and touched goes into shared memory for whoever takes the task next.
+
+That's a multi-agent workflow you can read back afterwards: the board, the memory keys and the report all survive the session. Nothing is sent anywhere, it's all local files.
+
+## Subagents on their own vs subagents with OmnisSwarm
+
+Skills, subagents and plugins get lumped together, so to be clear: OmnisSwarm doesn't replace subagents. It sits around them. The Agent tool still does the spawning.
+
+| | Plain Claude Code subagents | With OmnisSwarm |
+|---|---|---|
+| Spawn agents, run them in parallel, in worktrees | Yes | Yes (same Agent tool) |
+| Shared plan | Whatever the lead remembers | Task board with owners, dependencies and ready tasks |
+| Shared notes | Pass text through the lead | `omnis_memory_put` / `get` / `list` |
+| Two agents editing one file | Nothing stops it | Clash guard refuses the second edit |
+| Staying in scope | Trust the prompt | Scope fence on files a task owns |
+| "Done" | The agent says so | Verification gate runs your build or tests |
+| Cost control | Watch your usage | Time and dollar limits per agent and per swarm, model defaults, model hints |
+| Seeing what happened | Scroll the transcript | Live pane, replay, GIF, run report |
+
+If you only ever spawn one subagent at a time, you don't need any of it. It earns its keep when you want an agent swarm in Claude Code, a lot of agents at once, and you'd like to know who touched what.
 
 ## What you need
 
